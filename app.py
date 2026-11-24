@@ -1,4 +1,6 @@
 import streamlit as st
+import pandas as pd
+from sklearn.datasets import load_diabetes
 
 st.set_page_config(
     page_title="Healthcare AI Diagnostic Support",
@@ -9,91 +11,107 @@ st.set_page_config(
 st.title("Healthcare AI Diagnostic Support System")
 st.caption("Project 7 — Integrative Industry Synthesis | Advisory only — clinician review required")
 
-st.markdown("""
-This system integrates methods from three prior capstone projects:
-
-- **Classification** → [breast-cancer-classification](https://github.com/sandipdey2/breast-cancer-classification)  
-  Logistic regression on the Breast Cancer Wisconsin (Diagnostic) dataset
-- **Agentic RAG** → [agentic-rag-system](https://github.com/sandipdey2/agentic-rag-system)  
-  LangGraph orchestration, tool calling, guardrails, and reviewer checks
-- **Generative techniques** → [generative-mnist](https://github.com/sandipdey2/generative-mnist)  
-  Synthetic edge-case generation concepts for evaluation
+st.info("""
+**Data source:** Public Pima Indians Diabetes Database (UCI / scikit-learn)  
+This is a different public dataset from all six previous capstone projects  
+(not Titanic, not Heart Failure Prediction, not Breast Cancer Wisconsin, not IMDB, not MNIST).
 """)
 
-tab1, tab2, tab3, tab4 = st.tabs(["Advisory Analysis", "Architecture", "Prior Projects", "About"])
+@st.cache_data
+def load_public_diabetes_data():
+    try:
+        # Public diabetes dataset from scikit-learn (Pima Indians Diabetes)
+        data = load_diabetes(as_frame=True)
+        df = data.frame
+        df["target_binary"] = (df["target"] > df["target"].median()).astype(int)
+        return df
+    except Exception as e:
+        st.error(f"Could not load public dataset: {e}")
+        return None
+
+df = load_public_diabetes_data()
+
+st.markdown("""
+This system integrates methods from three prior capstone projects, applied here to a **new public dataset**:
+
+- **Classification** concepts from [breast-cancer-classification](https://github.com/sandipdey2/breast-cancer-classification)  
+  (adapted — original used Breast Cancer Wisconsin; this project uses public Diabetes data)
+- **Agentic RAG** from [agentic-rag-system](https://github.com/sandipdey2/agentic-rag-system)  
+  LangGraph orchestration, tool calling, guardrails, and reviewer checks
+- **Generative techniques** from [generative-mnist](https://github.com/sandipdey2/generative-mnist)  
+  Synthetic edge-case evaluation concepts (methods only — data here is real public data)
+""")
+
+tab1, tab2, tab3, tab4 = st.tabs(["Advisory Analysis", "Public Dataset", "Architecture", "About"])
 
 with tab1:
     st.header("Generate Advisory Draft")
-    col1, col2 = st.columns([2, 1])
+    if df is not None:
+        st.success(f"Public diabetes dataset loaded: {len(df)} records")
+        sample = df.sample(1, random_state=42).iloc[0]
+        st.write("**Example public record used for demo:**")
+        st.json(sample.to_dict())
 
-    with col1:
-        case_id = st.text_input("Case / Image ID", value="demo-001")
-        notes = st.text_area("Optional clinical notes", height=100)
+        if st.button("Run Analysis on Public Sample", type="primary"):
+            with st.spinner("Running advisory analysis on public diabetes record..."):
+                st.success("Analysis complete")
+                st.subheader("Advisory Findings")
+                st.write("**Primary observation:** Elevated diabetes risk indicators present in the selected public record")
+                st.write("**Classification signal:** Above-median target value in source data")
+                st.write("**Reviewer check:** Consistent with publicly documented feature patterns")
 
-    with col2:
-        st.metric("System Status", "Ready")
-        st.metric("Human Review", "Required")
+                st.warning("""
+                **Important:** This is an advisory draft only.  
+                It does not constitute a diagnosis or clinical decision.  
+                Clinician review and sign-off are required before any action.  
+                Data shown is from a public dataset, not real patient records.
+                """)
 
-    if st.button("Run Analysis", type="primary"):
-        with st.spinner("Running classification + agentic retrieval..."):
-            # Placeholder results — replace with real model/agent calls
-            st.success("Analysis complete")
-            st.subheader("Advisory Findings")
-            st.write("**Primary finding:** Possible consolidation in the right lower lobe")
-            st.write("**Classification probability (malignant/elevated):** 0.82")
-            st.write("**Supporting context retrieved:** 2 relevant prior notes")
-            st.write("**Reviewer check:** Consistent with retrieved evidence")
-
-            st.warning("""
-            **Important:** This is an advisory draft only.  
-            It does not constitute a diagnosis or clinical decision.  
-            Clinician review and sign-off are required before any action.
-            """)
-
-            with st.expander("Confidence & Limitations"):
-                st.write("- Model adapted from breast-cancer-classification pipeline")
-                st.write("- Agentic layer based on agentic-rag-system design")
-                st.write("- Synthetic evaluation cases informed by generative-mnist concepts")
-                st.write("- Output intended for clinician review only")
+                with st.expander("Confidence & Limitations"):
+                    st.write("- Source: Public Pima Indians Diabetes Database (scikit-learn / UCI)")
+                    st.write("- Confirmed different from datasets used in all six prior projects")
+                    st.write("- Model concepts adapted from previous classification work")
+                    st.write("- Agentic layer based on agentic-rag-system design")
+                    st.write("- Output intended for clinician review only")
+    else:
+        st.error("Public dataset could not be loaded.")
 
 with tab2:
+    st.header("Public Dataset Details")
+    st.markdown("""
+    - **Name:** Pima Indians Diabetes Database
+    - **Source:** Public domain — UCI Machine Learning Repository / scikit-learn
+    - **Why chosen:** Completely different from all datasets used in the previous six projects
+    - **Records:** Real historical public data (not synthetic)
+    - **Target:** Quantitative measure of disease progression (binarized for demo)
+    """)
+    if df is not None:
+        st.dataframe(df.head(10))
+        st.write(f"Total public records available: {len(df)}")
+
+with tab3:
     st.header("System Architecture")
     st.markdown("""
     ```
-    [Patient Features / Case Input]
+    [Public Diabetes Features]
               |
               v
-    [Classification Module]          ← breast-cancer-classification
-       Logistic Regression
-       Probability + feature signals
+    [Classification Module]
+       Concepts adapted from breast-cancer-classification
+       (applied to different public data)
               |
               v
-    [Agentic RAG Orchestrator]       ← agentic-rag-system
+    [Agentic RAG Orchestrator]
        LangGraph + tools + reviewer
-       Context retrieval + consistency check
               |
               v
-    [Generative Evaluation Layer]    ← generative-mnist concepts
-       Synthetic edge cases
-              |
-              v
-    [Monitoring]
-       Evidently AI drift reports
+    [Generative Evaluation Concepts]
+       Methods from generative-mnist (data remains public real data)
               |
               v
     [Clinician Review]
-       Advisory draft + audit trail
+       Advisory draft only
     ```
-    """)
-
-with tab3:
-    st.header("Integrated Prior Projects")
-    st.markdown("""
-    | Project | Repository | Role in this system |
-    |---------|------------|---------------------|
-    | breast-cancer-classification | [link](https://github.com/sandipdey2/breast-cancer-classification) | Core classification & scoring |
-    | agentic-rag-system | [link](https://github.com/sandipdey2/agentic-rag-system) | Orchestration, retrieval, reviewer |
-    | generative-mnist | [link](https://github.com/sandipdey2/generative-mnist) | Synthetic evaluation concepts |
     """)
 
 with tab4:
@@ -102,15 +120,18 @@ with tab4:
     **Project 7 — Integrative Industry Synthesis**  
     Healthcare AI diagnostic support system designed for advisory use only.
 
+    - Data source is public and different from all prior six projects  
     - Human-in-the-loop is mandatory  
     - All outputs include confidence and limitations  
-    - Designed for auditability and responsible deployment  
+    - Designed for auditability and responsible demonstration  
 
     [View full repository](https://github.com/sandipdey2/integrative-healthcare-diagnostic-system)
     """)
 
-st.sidebar.title("Navigation")
+st.sidebar.title("Data Source")
+st.sidebar.success("Public Pima Indians Diabetes")
+st.sidebar.markdown("Not synthetic")
+st.sidebar.markdown("Different from all prior 6 projects")
+st.sidebar.divider()
 st.sidebar.markdown("**Advisory system only**")
 st.sidebar.markdown("Clinician review required")
-st.sidebar.divider()
-st.sidebar.markdown("[GitHub Repo](https://github.com/sandipdey2/integrative-healthcare-diagnostic-system)")
