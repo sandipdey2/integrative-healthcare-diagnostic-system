@@ -1,0 +1,15 @@
+.git
+.github
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.ipynb_checkpoints
+.DS_Store
+.env
+.streamlit/secrets.toml
+notebooks
+docs/module_summary.pdf
+docs/screenshots
+tests
+artifacts
