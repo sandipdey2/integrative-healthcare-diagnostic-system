@@ -5,7 +5,7 @@ Sandip Dey · Repo: `sandipdey2/integrative-healthcare-diagnostic-system` (branc
 
 ## 60-second elevator pitch
 
-> Type 2 diabetes often goes undetected in primary care, and clinicians have very little time to interpret routine measurements. I built a LangGraph multi-agent system that turns eight routine measurements into an **advisory draft for a clinician**. It provides a risk probability and band, the exact factors driving it, cited guideline snippets, a robustness check for borderline cases and a full audit trace. It integrates four of my earlier projects: Welch t-tests from my Statistical Analysis project, the logistic-regression pipeline from Breast Cancer Classification, a GAN from Generative MNIST and the guarded LangGraph RAG pattern from Agentic RAG. A safety guard blocks unsafe requests, a reviewer checks every draft and can send it back at most twice, and Evidently AI monitors both the input data and the agents' outputs. On 154 held-out patients, the system reaches ROC-AUC 0.813 and recall 0.70, every released draft is cited and carries a disclaimer, and Evidently catches a simulated glucose-sensor drift. The system never diagnoses. It is a transparent, tested assistant that leaves the decision with the clinician.
+> Type 2 diabetes often goes undetected in primary care, and clinicians have very little time to interpret routine measurements. I built a LangGraph multi-agent system that turns eight routine measurements into an **advisory draft for a clinician**. It provides a risk probability and band, the exact factors driving it, cited guideline snippets, a robustness check for borderline cases and a full audit trace. It integrates four of my earlier projects: Welch t-tests from Project 2 (Statistical Analysis), the logistic-regression pipeline from Project 3 (Breast Cancer Classification), a GAN from Project 5 (Generative MNIST) and the guarded LangGraph RAG pattern from Project 6 (Agentic RAG). The agents call these tools through a real MCP server, and a FastAPI service exposes the workflow. A safety guard blocks unsafe requests, a reviewer checks every draft and can send it back at most twice, and Evidently AI monitors both the input data and the agents' outputs. On 154 held-out patients, the system reaches ROC-AUC 0.813 and recall 0.70, every released draft is cited and carries a disclaimer, and Evidently catches a simulated glucose-sensor drift. The system never diagnoses. It is a transparent, tested assistant that leaves the decision with the clinician.
 
 ## A. Problem and scope
 
@@ -30,13 +30,16 @@ It provides explicit nodes, conditional edges, typed shared state with reducers 
 The routing logic is simple and safety-relevant: risk, then evidence, then uncertainty only when needed, then the writer. Rules make every path deterministic and unit-testable (20 offline agent tests), cost nothing and work offline. LLM routing would add latency, cost and non-determinism without a clear benefit here. The tradeoff is less flexibility for unanticipated requests.
 
 **7. Is this really multi-agent if the supervisor is rules?**
-Yes. In the sense LangGraph uses, it has separate specialist nodes with their own tools and responsibilities, a router and a critic that can reject work. I am careful not to overclaim: the agents are nodes in one process sharing one state. They are not autonomous services, and the LLM only writes text.
+Yes. In the sense LangGraph uses, it has separate specialist nodes with their own tools and responsibilities, a router and a critic that can reject work. I am careful not to overclaim: the agents are nodes in one process sharing one state, and the LLM only writes text. Only the tools run as a separate service, behind an MCP server.
 
 **8. Why cap the reviewer loop, and why at 2?**
 Without a cap, a misbehaving LLM could loop forever or until the recursion limit. `MAX_REVISIONS = 2` means the writer runs at most three times. After that, `finalize` releases the deterministic template, which always passes review, and sets `escalated=True` for human review. I tested this with an always-unsafe stand-in LLM: three attempts, three rejections, template released and case escalated.
 
 **9. Are the tools served over MCP?**
-No. They are LangChain `StructuredTool`s called in-process: `risk_score`, `explain_contributions`, `rag_search`, `population_context` and `synthetic_neighbors`. There is no MCP server, gateway or message bus. MCP would only make sense if the tools had to be shared across separate services.
+Yes. `mcp_server/server.py` uses the official `mcp` Python SDK (FastMCP) to serve `risk_score`, `explain_contributions`, `rag_search`, `population_context` and `synthetic_neighbors`, over stdio or streamable HTTP. The agents load them with `langchain-mcp-adapters` (`MultiServerMCPClient`) and keep one session open. By default the server is spawned as a stdio subprocess; `IHDS_MCP_URL` switches to HTTP, which is what the Docker image uses. Each trace records the transport (`risk_agent: [tools via mcp-stdio] ...`), and every tool-call entry names the agent, tool and transport. If the server cannot start, an in-process fallback runs and is labelled `inprocess-fallback`; `IHDS_TOOLS=mcp` disables it. Tests start the real server and check that MCP and in-process results are identical. The MCP server has no authentication, so it should only run on localhost or a private network.
+
+**9b. Is there an API?**
+Yes. `api/main.py` is a FastAPI service with pydantic schemas: `POST /assess` returns the draft, review, trace, tool log and transport; `GET /health` reports the MCP transport and tool names; `GET /monitoring/summary` returns the Evidently summaries. When `IHDS_API_URL` is set, the Streamlit app calls the API; otherwise it runs the graph itself.
 
 **10. Does the system have memory?**
 It keeps only per-request state. The trace and tool log are accumulated within one run and shown in the UI. There is no long-term or cross-session memory, which is intentional because I do not want to store patient inputs.
@@ -48,10 +51,12 @@ Only in `writer_agent`. It uses gpt-4o-mini through `langchain-openai` (temperat
 
 **12. Which prior projects did you integrate, and how?**
 
-- **statistical-analysis-project**: Welch t-tests in `ihds/stats_analysis.py`, exposed through the `population_context` tool.
-- **breast-cancer-classification**: StandardScaler + LogisticRegression (max_iter=1000, random_state=42) and the same metric set in `ihds/model.py`, exposed through `risk_score` and `explain_contributions`.
-- **generative-mnist**: the MLP GAN design (LeakyReLU 0.2, BCE, Adam 2e-4) re-implemented in NumPy for tabular data in `ihds/gan.py`, exposed through `synthetic_neighbors`.
-- **agentic-rag-system**: the LangGraph StateGraph, input guard, TF-IDF RAG, reviewer with grounding score and trace logging in `ihds/agents.py` and `ihds/workflow.py`.
+- **Project 2 — statistical-analysis-project** (https://github.com/sandipdey2/statistical-analysis-project): Welch t-tests in `ihds/stats_analysis.py`, exposed through the `population_context` tool.
+- **Project 3 — breast-cancer-classification** (https://github.com/sandipdey2/breast-cancer-classification): StandardScaler + LogisticRegression (max_iter=1000, random_state=42) and the same metric set in `ihds/model.py`, exposed through `risk_score` and `explain_contributions`.
+- **Project 5 — generative-mnist** (https://github.com/sandipdey2/generative-mnist): the MLP GAN design (LeakyReLU 0.2, BCE, Adam 2e-4) re-implemented in NumPy for tabular data in `ihds/gan.py`, exposed through `synthetic_neighbors`.
+- **Project 6 — agentic-rag-system** (https://github.com/sandipdey2/agentic-rag-system): the LangGraph StateGraph, input guard, TF-IDF RAG, reviewer with grounding score and trace logging in `ihds/agents.py` and `ihds/workflow.py`.
+
+Project 1 (ai-programming-foundations-project) and Project 4 (imdb-sentiment-rnn) are not reused in this code, so I do not claim them.
 
 **13. Isn't this just four projects stitched together?**
 No. Each prior method is a tool with a defined clinical role inside one graph, and they depend on each other. The risk output decides whether the GAN-based uncertainty check runs, the evidence agent queries population statistics for the top risk driver, and the reviewer checks that the writer cites what the evidence agent retrieved. New work includes the dataset, the supervisor/specialist design, the uncertainty agent, the capped revision loop with escalation and Evidently monitoring of agent outputs.
@@ -91,7 +96,7 @@ I ran all 154 test records through the graph: 151 were released and 3 were block
 They are used only for stress tests and the uncertainty neighbourhood, never for training. Evidently found that 5 of 8 synthetic features drifted from real data (Pregnancies, SkinThickness, Insulin, DPF and Age), because the GAN does not reproduce the median-imputation spikes. Glucose, BloodPressure and BMI did not drift.
 
 **24. How did you test the system?**
-There are 47 pytest tests: 43 offline tests (passing on Python 3.11, 3.12 and 3.14) and 4 live `vocareum` tests that call gpt-4o-mini and are skipped without a key; all 47 pass with the key. They cover data and statistics, the model, GAN gradients, the guard, retrieval and reviewer, graph structure against the documented diagram, routing, every agent node, the loop cap, LLM fallback, Evidently reports, the end-to-end pipeline and the Streamlit app through `AppTest`. The Docker image builds and passes its healthcheck. The details are in `TESTING.md`.
+There are 56 pytest tests: 52 offline tests (passing on Python 3.11, 3.12 and 3.14) and 4 live `vocareum` tests that call gpt-4o-mini and are skipped without a key; all 56 pass with the key. They cover data and statistics, the model, GAN gradients, the guard, retrieval and reviewer, graph structure against the documented diagram, routing, every agent node, the loop cap, LLM fallback, Evidently reports, the end-to-end pipeline, the Streamlit app through `AppTest`, a real MCP server over stdio and HTTP, the graph running through MCP, and the FastAPI endpoints. The Docker image builds and passes its healthcheck. The details are in `TESTING.md`.
 
 ## F. Safety, ethics and deployment
 
@@ -110,7 +115,7 @@ It is rule-based. It checks ranges and required fields, and uses regex patterns 
 It would need external and subgroup validation, an intent classifier instead of keyword rules, live drift alerts with owners, clinical governance of the knowledge base, authentication and audit logging, privacy compliance and a regulatory assessment under FDA clinical-decision-support guidance.
 
 **28. How is it deployed?**
-The Streamlit app (`app.py`) can be deployed to Streamlit Community Cloud from `main` (Python 3.14 on Cloud; pins install from wheels on 3.11–3.14), with optional `OPENAI_API_KEY` and `OPENAI_API_BASE` secrets. For Azure, a `python:3.11-slim` Docker image on port 8501 is deployed with `deploy/azure/deploy_aca.sh` (`az acr build` + `az containerapp create`). With `WITH_OPENAI=1` the script stores the key as a Container Apps secret and sets `OPENAI_API_BASE` as an environment variable. An ACI alternative and a cleanup script are included. Evidently reports are generated during the image build.
+The Streamlit app (`app.py`) can be deployed to Streamlit Community Cloud from `main` (Python 3.14 on Cloud; pins install from wheels on 3.11–3.14), with optional `OPENAI_API_KEY` and `OPENAI_API_BASE` secrets. For Azure, a `python:3.11-slim` Docker image is deployed. It runs `scripts/start_all.sh`, which starts the MCP HTTP server, then the API on port 8000, then Streamlit on port 8501. The image is deployed with `deploy/azure/deploy_aca.sh` (`az acr build` + `az containerapp create`). With `WITH_OPENAI=1` the script stores the key as a Container Apps secret and sets `OPENAI_API_BASE` as an environment variable. An ACI alternative and a cleanup script are included. Evidently reports are generated during the image build.
 
 ## G. Failure cases, limitations and next steps
 

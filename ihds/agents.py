@@ -39,7 +39,6 @@ from typing import Annotated, Any, Optional, TypedDict
 import numpy as np
 import pandas as pd
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.tools import StructuredTool
 from langgraph.graph import END, START, StateGraph
 
 from . import model as risk_model
@@ -74,53 +73,6 @@ class AgentState(TypedDict, total=False):
     tool_calls: Annotated[list, operator.add]
 
 
-def _log(tool: StructuredTool, args: dict, result: Any) -> dict:
-    return {"tool": tool.name, "args": {k: (v if isinstance(v, (str, int, float)) else "...") for k, v in args.items()},
-            "result_preview": str(result)[:120], "time": datetime.now(timezone.utc).isoformat(timespec="seconds")}
-
-
-def _call(tool: StructuredTool, **args):
-    result = tool.invoke(args)
-    return result, _log(tool, args, result)
-
-
-def build_tools(pipe, kb: wf.KnowledgeBase, welch: pd.DataFrame, synthetic_pool: pd.DataFrame) -> dict:
-    """LangChain tools wrapping the project's ML / statistics / generative components."""
-    imputer, scaler = pipe.named_steps["impute"], pipe.named_steps["scale"]
-    pool_z = scaler.transform(synthetic_pool[FEATURES].to_numpy())
-    pool_p = pipe.predict_proba(synthetic_pool[FEATURES])[:, 1]
-
-    def risk_score(record: dict) -> float:
-        """Probability of diabetes from the logistic-regression pipeline."""
-        return round(float(risk_model.predict_proba(pipe, record)[0]), 4)
-
-    def explain_contributions(record: dict) -> list:
-        """Per-feature log-odds contributions, largest first."""
-        return [c.__dict__ for c in risk_model.contributions(pipe, record)]
-
-    def rag_search(query: str, k: int = 3) -> list:
-        """Retrieve clinical knowledge snippets (TF-IDF cosine similarity)."""
-        return kb.search(query, k)
-
-    def population_context(feature: str) -> dict:
-        """Welch t-test comparison of a feature between diabetic and non-diabetic patients."""
-        row = welch[welch["feature"] == feature].iloc[0]
-        return {"feature": feature, "mean_no_diabetes": float(row["mean_no_diabetes"]),
-                "mean_diabetes": float(row["mean_diabetes"]), "p_value": float(row["p_value"]),
-                "cohens_d": float(row["cohens_d"])}
-
-    def synthetic_neighbors(record: dict, k: int = 25) -> dict:
-        """Model probabilities over the k nearest GAN-generated rows to this patient (robustness check)."""
-        z = scaler.transform(imputer.transform(pd.DataFrame([record])[FEATURES]))[0]
-        idx = np.argsort(((pool_z - z) ** 2).sum(axis=1))[:k]
-        p = pool_p[idx]
-        return {"k": int(k), "mean": round(float(p.mean()), 3), "min": round(float(p.min()), 3),
-                "max": round(float(p.max()), 3), "share_above_0_5": round(float((p >= 0.5).mean()), 3)}
-
-    fns = [risk_score, explain_contributions, rag_search, population_context, synthetic_neighbors]
-    return {f.__name__: StructuredTool.from_function(f) for f in fns}
-
-
 def llm_base_url() -> str | None:
     """OpenAI-compatible endpoint, e.g. Vocareum's https://openai.vocareum.com/v1 (None = api.openai.com)."""
     return os.environ.get("OPENAI_BASE_URL") or os.environ.get("OPENAI_API_BASE") or None
@@ -143,9 +95,15 @@ class _C:  # light object so template_draft/llm prompt can use .feature/.value/.
         self.__dict__.update(d)
 
 
-def make_nodes(pipe, kb, welch, synthetic_pool, llm=None) -> dict:
-    """Agent node functions (each takes the shared state and returns a partial update)."""
-    tools = build_tools(pipe, kb, welch, synthetic_pool)
+def make_nodes(tools, llm=None) -> dict:
+    """Agent node functions (each takes the shared state and returns a partial update).
+
+    `tools` is a backend from ihds/tool_backends.py (MCP by default); `tools.call(name, **args)` returns
+    (result, log entry) and `tools.transport` names the route ("mcp-stdio", "mcp-http", "inprocess...").
+    """
+    def _call(agent, name, **args):
+        result, log = tools.call(name, **args)
+        return result, {"agent": agent, **log}
 
     # ---------------------------------------------------------------- nodes
     def safety_guard(state: AgentState):
@@ -172,28 +130,30 @@ def make_nodes(pipe, kb, welch, synthetic_pool, llm=None) -> dict:
             nxt = "writer_agent"
         return {"next": nxt, "trace": [f"supervisor: -> {nxt}"]}
 
-    def _clean_record(state):
-        return {f: (float("nan") if state["record"].get(f) is None else float(state["record"][f])) for f in FEATURES}
+    def _clean_record(state):  # JSON-friendly: missing values stay None (imputed by the tools)
+        return {f: (None if state["record"].get(f) is None else float(state["record"][f])) for f in FEATURES}
 
     def risk_agent(state: AgentState):
         rec = _clean_record(state)
-        p, l1 = _call(tools["risk_score"], record=rec)
-        contribs, l2 = _call(tools["explain_contributions"], record=rec)
+        r1, l1 = _call("risk_agent", "risk_score", record=rec)
+        r2, l2 = _call("risk_agent", "explain_contributions", record=rec)
+        p, contribs = r1["probability"], r2["contributions"]
         band = wf.risk_band(p)
         return {"probability": p, "band": band, "borderline": BORDERLINE[0] <= p < BORDERLINE[1],
                 "contributions": contribs, "tool_calls": [l1, l2],
-                "trace": [f"risk_agent: p={p:.3f} band={band}; top driver={contribs[0]['feature']}"]}
+                "trace": [f"risk_agent: [tools via {tools.transport}] p={p:.3f} band={band}; top driver={contribs[0]['feature']}"]}
 
     def evidence_agent(state: AgentState):
         top = [_C(c) for c in state["contributions"]]
         query = wf.build_query(top, state.get("question", ""))
-        ev, l1 = _call(tools["rag_search"], query=query, k=3)
-        pop, l2 = _call(tools["population_context"], feature=top[0].feature)
+        r1, l1 = _call("evidence_agent", "rag_search", query=query, k=3)
+        ev = r1["evidence"]
+        pop, l2 = _call("evidence_agent", "population_context", feature=top[0].feature)
         return {"evidence": ev, "population": [pop], "tool_calls": [l1, l2],
                 "trace": [f"evidence_agent: {[e['id'] for e in ev]}; population context for {top[0].feature}"]}
 
     def uncertainty_agent(state: AgentState):
-        u, l1 = _call(tools["synthetic_neighbors"], record=_clean_record(state), k=25)
+        u, l1 = _call("uncertainty_agent", "synthetic_neighbors", record=_clean_record(state), k=25)
         return {"uncertainty": u, "tool_calls": [l1],
                 "trace": [f"uncertainty_agent: neighbour p range {u['min']}-{u['max']}"]}
 
@@ -277,8 +237,8 @@ def route_after_review(state: AgentState):
     return "writer_agent" if state["revisions"] <= MAX_REVISIONS else "finalize"
 
 
-def build_graph(pipe, kb, welch, synthetic_pool, llm=None):
-    nodes = make_nodes(pipe, kb, welch, synthetic_pool, llm)
+def build_graph(tools, llm=None):
+    nodes = make_nodes(tools, llm)
     g = StateGraph(AgentState)
     for name, fn in nodes.items():
         g.add_node(name, fn)
@@ -293,7 +253,9 @@ def build_graph(pipe, kb, welch, synthetic_pool, llm=None):
     g.add_edge("writer_agent", "reviewer")
     g.add_conditional_edges("reviewer", route_after_review, {"writer_agent": "writer_agent", "finalize": "finalize"})
     g.add_edge("finalize", END)
-    return g.compile()
+    compiled = g.compile()
+    compiled.ihds_transport = tools.transport  # reported in AdvisoryResult.transport
+    return compiled
 
 
 def _with_extra(draft: str, extra: list) -> str:
@@ -326,6 +288,7 @@ class AdvisoryResult:
     imputed: list = field(default_factory=list)
     trace: list = field(default_factory=list)
     tool_calls: list = field(default_factory=list)
+    transport: str = ""
 
 
 def run(graph, record: dict, question: str = "") -> AdvisoryResult:
@@ -340,4 +303,5 @@ def run(graph, record: dict, question: str = "") -> AdvisoryResult:
         review=s.get("review", {}), revisions=s.get("revisions", 0), escalated=bool(s.get("escalated")),
         guard_reasons=s.get("guard_reasons", []), imputed=s.get("imputed", []),
         trace=s["trace"], tool_calls=s["tool_calls"],
+        transport=(s["tool_calls"][0].get("transport", "") if s["tool_calls"] else getattr(graph, "ihds_transport", "")),
     )

@@ -17,18 +17,18 @@ The system is new work, but each core component deliberately reuses a method I d
 
 | Prior project | Method reused | Location in this repo | Agent tool |
 |---|---|---|---|
-| statistical-analysis-project | Group descriptive statistics and Welch t-tests | `ihds/stats_analysis.py` | `population_context` |
-| breast-cancer-classification | Stratified split, StandardScaler, LogisticRegression (max_iter=1000, random_state=42), same metric set | `ihds/data.py`, `ihds/model.py` | `risk_score`, `explain_contributions` |
-| generative-mnist | MLP generator/discriminator GAN (LeakyReLU 0.2, BCE, Adam 2e-4, β = 0.5/0.999), re-implemented in NumPy for tabular data | `ihds/gan.py` | `synthetic_neighbors` |
-| agentic-rag-system | LangGraph StateGraph with typed state, input guard, TF-IDF retrieval over a CSV knowledge base, reviewer with grounding score, trace logging | `ihds/agents.py`, `ihds/workflow.py`, `data/clinical_knowledge.csv` | `rag_search` |
+| Project 2 — [statistical-analysis-project](https://github.com/sandipdey2/statistical-analysis-project) | Group descriptive statistics and Welch t-tests | `ihds/stats_analysis.py` | `population_context` |
+| Project 3 — [breast-cancer-classification](https://github.com/sandipdey2/breast-cancer-classification) | Stratified split, StandardScaler, LogisticRegression (max_iter=1000, random_state=42), same metric set | `ihds/data.py`, `ihds/model.py` | `risk_score`, `explain_contributions` |
+| Project 5 — [generative-mnist](https://github.com/sandipdey2/generative-mnist) | MLP generator/discriminator GAN (LeakyReLU 0.2, BCE, Adam 2e-4, β = 0.5/0.999), re-implemented in NumPy for tabular data | `ihds/gan.py` | `synthetic_neighbors` |
+| Project 6 — [agentic-rag-system](https://github.com/sandipdey2/agentic-rag-system) | LangGraph StateGraph with typed state, input guard, TF-IDF retrieval over a CSV knowledge base, reviewer with grounding score, trace logging | `ihds/agents.py`, `ihds/workflow.py`, `data/clinical_knowledge.csv` | `rag_search` |
 
-My Statistical Analysis project taught me to test group differences before modelling rather than assume them. Here, Welch t-tests confirm that all eight features separate diabetic from non-diabetic patients (p < 1e-5); glucose has the largest effect (142.3 vs 110.6 mg/dL, d = 1.16). The evidence agent quotes these population statistics for the patient's top risk driver.
+My Statistical Analysis project (Project 2) taught me to test group differences before modelling rather than assume them. Here, Welch t-tests confirm that all eight features separate diabetic from non-diabetic patients (p < 1e-5); glucose has the largest effect (142.3 vs 110.6 mg/dL, d = 1.16). The evidence agent quotes these population statistics for the patient's top risk driver.
 
-My Breast Cancer Classification project showed that a scaled logistic regression is a strong, auditable baseline for medical tabular data. I kept that pipeline and metric set, and added `class_weight="balanced"` and median imputation for the impossible zeros.
+My Breast Cancer Classification project (Project 3) showed that a scaled logistic regression is a strong, auditable baseline for medical tabular data. I kept that pipeline and metric set, and added `class_weight="balanced"` and median imputation for the impossible zeros.
 
-My Generative MNIST project gave me a working understanding of adversarial training. I re-implemented the same architecture in NumPy for tabular rows and use the generated profiles only as a stress-test population and a neighbourhood for uncertainty checks.
+My Generative MNIST project (Project 5) gave me a working understanding of adversarial training. I re-implemented the same architecture in NumPy for tabular rows and use the generated profiles only as a stress-test population and a neighbourhood for uncertainty checks.
 
-My Agentic RAG project supplied the orchestration pattern: a typed LangGraph state, an input guard, retrieval with citations and a reviewer that scores grounding before an answer is released.
+My Agentic RAG project (Project 6) supplied the orchestration pattern: a typed LangGraph state, an input guard, retrieval with citations and a reviewer that scores grounding before an answer is released.
 
 Together, these cover five AI domains: statistical analysis, machine learning, deep generative modelling, generative AI (an optional LLM writer) and agentic systems, each with a specific clinical job.
 
@@ -36,7 +36,7 @@ Together, these cover five AI domains: statistical analysis, machine learning, d
 
 Figure 1 (below) is exported from the compiled graph by `scripts/export_graph.py`, and a unit test fails if it and the code diverge—a direct response to earlier feedback that my diagrams overstated the code.
 
-At start-up, `ihds/pipeline.py` loads and cleans the data, runs the statistics, trains the model and the GAN, and wraps them as LangChain `StructuredTool`s called in-process. Each request then flows through the graph with one shared typed state (`AgentState`) containing append-only `trace` and `tool_calls` lists:
+At start-up, `ihds/pipeline.py` loads and cleans the data, runs the statistics, trains the model and the GAN. The five tools run in a separate MCP server (`mcp_server/server.py`, official `mcp` SDK), which the agents reach through `langchain-mcp-adapters` over stdio or HTTP; a FastAPI service exposes the workflow as `POST /assess`. Each request then flows through the graph with one shared typed state (`AgentState`) containing append-only `trace` and `tool_calls` lists:
 
 1. `safety_guard` normalises zeros, checks ranges and required fields, and blocks prompt-injection and dosing or diagnosis questions, sending them to `refuse`.
 2. A rule-based `supervisor` routes in hub-and-spoke fashion: `risk_agent` (probability, band, per-feature log-odds contributions), then `evidence_agent` (top-3 TF-IDF knowledge snippets plus population statistics), then `uncertainty_agent` only when 0.40 ≤ p < 0.60 (probability spread across the 25 nearest GAN profiles). Each specialist returns to the supervisor.
@@ -45,27 +45,27 @@ At start-up, `ihds/pipeline.py` loads and cleans the data, runs the statistics, 
 
 ![LangGraph agent graph exported from the compiled code (docs/architecture.png). Solid arrows are fixed edges; dotted arrows are conditional.](architecture.png)
 
-**Key decisions and tradeoffs.** Logistic regression was chosen over more flexible models because its log-odds contributions are exact, which makes the explanations faithful rather than approximate (Amann et al., 2020). The cost is a ceiling on accuracy (test ROC-AUC 0.813). Class balancing trades precision for recall because, in screening, a missed case usually costs more than an extra confirmatory test. The supervisor uses rules rather than an LLM, so routing is deterministic and every path can be tested; the cost is less flexibility for unanticipated requests. The LLM only writes text and is optional, so the system runs offline, at no cost and reproducibly. The NumPy GAN keeps the container small but reproduces some features poorly.
+**Key decisions and tradeoffs.** Logistic regression was chosen over more flexible models because its log-odds contributions are exact, which makes the explanations faithful rather than approximate (Amann et al., 2020). The cost is a ceiling on accuracy (test ROC-AUC 0.813). Class balancing trades precision for recall because, in screening, a missed case usually costs more than an extra confirmatory test. The supervisor uses rules rather than an LLM, so routing is deterministic and every path can be tested; the cost is less flexibility for unanticipated requests. The LLM only writes text and is optional, so the system also runs offline and reproducibly.
 
-**Honest scope.** All agents run in one Python process. Tools are in-process LangChain tools; there is no MCP server, gateway or message bus, and there is no memory beyond the single request. The gpt-4o-mini writer was verified live through Vocareum's OpenAI-compatible endpoint (results below); without a key the template writer is used, and the scenario results above it come from template runs. The system has no EHR integration or authentication and does not store patient inputs.
+**Honest scope.** The agent graph runs in one process; only the tools are remote, over MCP. An in-process fallback is used, and labelled in the trace, only if the MCP server cannot start. There is no message bus and no memory beyond the single request. The gpt-4o-mini writer was verified live through Vocareum's OpenAI-compatible endpoint (results below); without a key the template writer is used, and the scenario results above it come from template runs. The API and MCP server have no authentication, and nothing stores patient inputs.
 
 ## Ethical Considerations and Responsible AI
 
-**Bias and generalisability.** The model learned from one population of Pima women. Diabetes prevalence, body composition and glucose distributions differ by ancestry, sex and age, so the probabilities are not validated for men, other ethnic groups or younger patients. The data card and the app's limitations tab state this explicitly. Before real use, the model would need external validation and subgroup performance audits.
+**Bias and generalisability.** The model learned from one population of Pima women. Diabetes prevalence, body composition and glucose distributions differ by ancestry, sex and age, so the probabilities are not validated for men, other ethnic groups or younger patients. The data card and the app state this explicitly.
 
 **Automation bias and accountability.** Clinicians may over-trust a confident number. My evaluation includes a diabetic patient scored at p = 0.077, which shows why the output is framed as an advisory draft: it reports a band and drivers rather than a verdict, includes a mandatory disclaimer that the reviewer verifies, and leaves the decision with the clinician. This matches the FDA (2022) expectation that clinicians can independently review the basis of non-device decision support.
 
-**Transparency.** Each output shows the exact feature contributions, cites retrieved evidence by identifier and includes the agent trace and tool log. This supports the multidisciplinary view that explainability in healthcare is a clinical, legal and ethical requirement as well as a technical one (Amann et al., 2020).
+**Transparency.** Each output shows the exact feature contributions, cites retrieved evidence by identifier and includes the agent trace and tool log. Explainability in healthcare is a clinical, legal and ethical requirement, not only a technical one (Amann et al., 2020).
 
-**Misuse.** Users could ask the tool for dosing or diagnosis. The safety guard blocks these requests, the reviewer rejects banned phrases such as "you have diabetes", and the LLM's output cannot be released unless it passes the reviewer.
+**Misuse.** The safety guard blocks dosing and diagnosis requests, and the reviewer rejects banned phrases such as "you have diabetes" before any LLM text is released.
 
-**Responsible deployment safeguards.** Real-world use would require external and subgroup validation, an intent classifier to replace the keyword guard, live Evidently drift monitoring with alert thresholds and named owners, clinical governance sign-off on the knowledge base, authentication and audit logging that meet privacy requirements, and a regulatory assessment of whether the tool falls under device rules. Monitoring is part of the design because deployed models accumulate hidden maintenance and data-dependency risks (Sculley et al., 2015).
+**Responsible deployment safeguards.** Real-world use would require external and subgroup validation, an intent classifier instead of the keyword guard, Evidently alerts with named owners, clinical sign-off on the knowledge base, authentication with audit logging, and a regulatory device assessment. Monitoring is part of the design because deployed models accumulate hidden maintenance and data-dependency risks (Sculley et al., 2015).
 
 ## Evaluation and Reflection
 
-Template-mode results are reproducible with `python -m ihds.pipeline` (seed 42). All 47 automated tests pass, including four live Vocareum tests.
+Template-mode results are reproducible with `python -m ihds.pipeline` (seed 42). All 56 automated tests pass, including real MCP and API tests and four live Vocareum tests.
 
-**Model.** On the held-out test set (n = 154), the model reached accuracy 0.734, precision 0.603, recall 0.704, F1 0.650 and ROC-AUC 0.813. Training ROC-AUC was 0.851, a small gap that suggests limited overfitting. Glucose (odds ratio 3.27 per SD) and BMI (2.03) dominate, which is clinically plausible.
+**Model.** On the held-out test set (n = 154), the model reached accuracy 0.734, precision 0.603, recall 0.704, F1 0.650 and ROC-AUC 0.813. Training ROC-AUC was 0.851 (limited overfitting). Glucose (odds ratio 3.27 per SD) and BMI (2.03) dominate, which is clinically plausible.
 
 **Workflow scenarios.** Of 154 test records, 151 were released and 3 were correctly blocked for missing BMI. The reviewer approved all 151 drafts (mean grounding 0.551). Risk bands were ordered as intended: observed diabetes rates were 9.5% in the low band, 47.2% in the moderate band and 59.6% in the high band. All 27 borderline cases were routed to the uncertainty agent. With an always-unsafe stand-in LLM, the revision cap held: three writer attempts were made, the template was released and the case was escalated.
 
@@ -84,11 +84,11 @@ Template-mode results are reproducible with `python -m ihds.pipeline` (seed 42).
 
 **Strengths and limitations.** The design is strongest where components check each other: the reviewer constrains the writer, Evidently monitors inputs and outputs, and the GAN probes robustness. Its limitations are a single small dataset, a 14-row hand-written knowledge base, a brittle keyword guard, and LLM drafts that are fluent but less grounded than the template.
 
-**Performance, complexity and responsible use.** A gradient-boosted model or an LLM-routed supervisor might improve accuracy or flexibility, but each would weaken auditability and testability. I deliberately chose transparency and safe failure over marginal performance gains.
+**Performance versus responsible use.** A gradient-boosted model or an LLM-routed supervisor might add accuracy or flexibility but would weaken auditability; I chose transparency and safe failure.
 
 ## Professional Relevance
 
-This project reflects the work of an applied AI engineer in a regulated industry. It required framing a clinical problem with its constraints, choosing interpretable models deliberately, orchestrating specialised agents with explicit safety checks, monitoring data and model outputs for drift, and documenting honestly what the system does and does not do. The repository includes tested code (47 tests, four live against gpt-4o-mini), pinned requirements, Docker, Streamlit and Azure deployment instructions, Evidently reports and a graph diagram tested against the code. Responding to reviewer feedback by making the architecture match the code also strengthened a habit that matters in industry: claims must be verifiable from the system itself.
+This project reflects the work of an applied AI engineer in a regulated industry. It required framing a clinical problem with its constraints, choosing interpretable models deliberately, orchestrating specialised agents with explicit safety checks, monitoring data and model outputs for drift, and documenting honestly what the system does and does not do. The repository includes tested code (56 tests), an MCP tool server, a REST API, Docker, Streamlit and Azure deployment, Evidently reports and a graph diagram tested against the code. Making the architecture match the code reinforced an industry habit: claims must be verifiable from the system itself.
 
 ## References
 

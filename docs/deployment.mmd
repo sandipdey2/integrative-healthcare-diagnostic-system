@@ -1,0 +1,28 @@
+flowchart LR
+  UI["Streamlit app.py<br/>:8501"]
+  subgraph API["FastAPI api/main.py :8000"]
+    R0["GET /health"]
+    R1["GET /monitoring/summary"]
+    R2["GET /schema/features"]
+    R3["POST /assess"]
+  end
+  subgraph G["LangGraph StateGraph (ihds/agents.py)"]
+    evidence_agent["evidence_agent"]
+    risk_agent["risk_agent"]
+    uncertainty_agent["uncertainty_agent"]
+  end
+  subgraph MCP["MCP server mcp_server/server.py (mcp-stdio here; streamable HTTP :8765 in Docker)"]
+    T_explain_contributions["explain_contributions"]
+    T_population_context["population_context"]
+    T_rag_search["rag_search"]
+    T_risk_score["risk_score"]
+    T_synthetic_neighbors["synthetic_neighbors"]
+  end
+  UI -- "IHDS_API_URL (optional)" --> API
+  UI -. "otherwise in-process" .-> G
+  API --> G
+  evidence_agent -- MCP --> T_population_context
+  evidence_agent -- MCP --> T_rag_search
+  risk_agent -- MCP --> T_explain_contributions
+  risk_agent -- MCP --> T_risk_score
+  uncertainty_agent -- MCP --> T_synthetic_neighbors

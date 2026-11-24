@@ -10,23 +10,28 @@ on Python 3.11, 3.12 and 3.14 (Streamlit Community Cloud ignores the 3.11 settin
 
 | Python | wheels-only install | offline pytest | live `vocareum` | headless Streamlit |
 |---|---|---|---|---|
-| 3.14.10 | ✅ (uv and pip) | 43 passed, 4 skipped | 4 passed (full suite 47/47 with key) | health `ok`, HTTP 200 |
-| 3.12 | ✅ | 43 passed, 4 skipped | — | — |
-| 3.11 (also Docker `python:3.11-slim`) | ✅ | 43 passed, 4 skipped | 4 passed | container healthy |
+| 3.14.10 | ✅ (uv and pip) | 52 passed, 4 skipped | 4 passed (full suite 56/56 with key) | health `ok`; UI run shows "agent tools via mcp-stdio" |
+| 3.12 | ✅ | 52 passed, 4 skipped | — | — |
+| 3.11 (also Docker `python:3.11-slim`) | ✅ | 52 passed, 4 skipped | 4 passed (full suite 56/56 with key) | container healthy (MCP HTTP + API + Streamlit) |
 
 Pins: streamlit 1.67.0, evidently 0.7.23, pandas 2.3.3, numpy 2.3.5, pillow 11.3.0, scikit-learn 1.7.2,
-scipy 1.16.3, pyarrow 26.0.1, openai 3.58.0, langgraph 1.2.24, langchain-core 1.8.4, langchain-openai 1.8.5.
+scipy 1.16.3, pyarrow 26.0.1, openai 3.58.0, langgraph 1.2.24, langchain-core 1.8.4, langchain-openai 1.8.5,
+mcp 1.30.0, langchain-mcp-adapters 0.3.1, fastapi 0.165.0, uvicorn 0.54.0, httpx 0.28.1.
+`mcp` stays < 2: mcp 2.x renamed FastMCP and langchain-mcp-adapters 0.3.1 fails to import against it.
 pandas stays < 3 because evidently 0.7.23 imports a pandas-2 internal. Re-running `python -m ihds.pipeline` on
 3.14 with these pins reproduces every reported number (only Welch p-values differ in the 15th significant digit).
 
 ```bash
 pip install -r requirements-dev.txt
-pytest -q              # -> 43 passed, 4 skipped (no key)
+pytest -q              # -> 52 passed, 4 skipped (no key)
 pytest -m vocareum -v  # -> 4 passed (live, key exported)
 python -m ihds.pipeline
 ```
 
-## 1. Automated tests (pytest) — 47 / 47 passed with the key (43 offline + 4 live)
+## 1. Automated tests (pytest) — 56 / 56 passed with the key (52 offline + 4 live)
+
+The `system` fixture builds the graph with its tools served by the real MCP server (stdio subprocess), so every
+graph-level test below also exercises MCP.
 
 | File | Tests | Covers | Result |
 |---|---|---|---|
@@ -34,15 +39,17 @@ python -m ihds.pipeline
 | `tests/test_model.py` | 4 | test ROC-AUC > 0.78 and recall > 0.6, monotonic in glucose, contributions sum exactly to the logit, imputation of missing optional values | 4 passed |
 | `tests/test_gan.py` | 3 | hand-written backprop vs finite differences, valid/finite/non-collapsed samples, glucose mean within 10 mg/dL after training | 3 passed |
 | `tests/test_workflow.py` | 9 | guard (ranges, required fields, injection, dosing, documented paraphrase gap), zero normalisation, TF-IDF retrieval, grounding score, template passes review, reviewer rejects unsafe text | 9 passed |
-| `tests/test_agents.py` | 20 | **graph structure** equals the exported `docs/architecture.mmd`; **routing** functions and supervisor order; non-borderline, borderline (uncertainty agent) and blocked paths; **revision loop cap** (3 writer attempts → escalation); loop recovery after one rejection; LLM error fallback; gpt-4o-mini selection and `OPENAI_API_BASE` (Vocareum) honored; **each agent node** (safety_guard, risk, evidence, uncertainty, writer, reviewer, finalize) | 19 passed |
+| `tests/test_agents.py` | 20 | **graph structure** equals the exported `docs/architecture.mmd`; **routing** functions and supervisor order; non-borderline, borderline (uncertainty agent) and blocked paths; **revision loop cap** (3 writer attempts → escalation); loop recovery after one rejection; LLM error fallback; gpt-4o-mini selection and `OPENAI_API_BASE` (Vocareum) honored; **each agent node** (safety_guard, risk, evidence, uncertainty, writer, reviewer, finalize) | 20 passed |
 | `tests/test_monitoring.py` | 1 | Evidently holdout/shifted/synthetic reports written (HTML+JSON); no drift on holdout; Glucose drift and lower precision on the shifted set | 1 passed |
+| `tests/test_mcp_api.py` | 9 | **real MCP server** subprocess over stdio: `list_tools` = 5 tools, `call_tool` results match the model; **streamable HTTP** server: every tool over MCP returns the same JSON as in-process; **graph via MCP** = in-process on 10 records, transport in trace and tool log; unreachable MCP → labelled `inprocess-fallback` in auto mode, error in `IHDS_TOOLS=mcp`; **FastAPI** `/health`, `/assess` (ok, unsafe question blocked, missing Glucose blocked), 422 on bad types, 400 for `use_llm` without key, `/monitoring/summary`; **Streamlit with `IHDS_API_URL`** calls `POST /assess` | 9 passed |
 | `tests/test_e2e.py` | 2 | full pipeline end-to-end incl. Evidently agent evaluation; Streamlit app runs and the "Run advisory workflow" button works with no API key (`streamlit.testing.v1.AppTest`) | 2 passed |
 
 | `tests/test_vocareum_live.py` (marker `vocareum`) | 4 | **live** "vocareum test": base URL set, gpt-4o-mini ping (`pong`, model `gpt-4o-mini-2024-07-18`), full graph run uses the LLM writer (not template) and the reviewer approves with disclaimer, unsafe request refused before any LLM call | 4 passed (live) |
 
 Live-test note: in one full-suite run the LLM draft for the original fixed record failed grounding three times and was
 escalated (the safety design working, but a flaky test). The test now uses held-out record #0 and allows up to 3
-independent graph runs; after the change: `pytest -m vocareum` 4/4 passed three times in a row, full suite with key 47/47.
+independent graph runs; after the change: `pytest -m vocareum` 4/4 passed three times in a row. After the MCP change
+the live tests run with tools over MCP stdio; full suite with key 56/56 on 3.11 and 3.14.
 
 Offline, the LLM writer path is also covered with LangChain's `FakeListChatModel` and a broken client.
 
@@ -59,6 +66,8 @@ Offline, the LLM writer path is also covered with LangChain's `FakeListChatModel
 | Benign questions (3) | all allowed | 3/3 allowed | ✅ |
 | Revision-loop cap with an always-unsafe stand-in LLM | ≤3 writer attempts, then template + escalation | 3 attempts, 3 rejections, template released, `escalated=True` | ✅ |
 | Docker image | builds; `/_stcore/health` = ok; container healthcheck healthy | built (`python:3.11-slim`), health `ok`, status `healthy` | ✅ |
+| Docker: three layers | MCP HTTP → API → UI | `GET :8000/health` → `tools_transport: mcp-http`, 5 tools; `POST /assess` → `ok`, p 0.737, imputed SkinThickness/Insulin; UI trace "Workflow route: REST API http://127.0.0.1:8000 · tool transport: mcp-http" (`docs/screenshots/07_docker_api_mcp_trace.png`); ~0.83 GB RAM | ✅ |
+| Results unchanged by MCP | `python -m ihds.pipeline` numbers identical | identical (Welch p-values differ only in the 15th digit) | ✅ |
 | Headless Streamlit | serves on 8501 without a key | HTTP 200, health `ok` | ✅ |
 
 ## 2b. Live LLM evaluation (`scripts/run_llm_eval.py --n 30`, gpt-4o-mini via Vocareum)

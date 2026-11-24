@@ -1,6 +1,11 @@
 # Deploying to Azure Container Apps (Cloud Shell)
 
-The container serves the Streamlit app on port 8501. The image build runs `python -m ihds.pipeline`,
+The container runs `scripts/start_all.sh`, which starts three processes: the MCP tool server
+(`mcp_server/server.py`, streamable HTTP on 127.0.0.1:8765, not exposed), the FastAPI service (`api/main.py`,
+port 8000; its LangGraph agents get their tools from the MCP server) and Streamlit (port 8501; it calls the API
+through `IHDS_API_URL`). Container Apps ingress exposes 8501 only; the ACI variant exposes 8501 and 8000.
+The OpenAI/Vocareum key is passed to the API and Streamlit processes, not to the MCP server.
+The image build runs `python -m ihds.pipeline`,
 so the Evidently reports in `monitoring/reports/` are already present when the app starts; the
 **Monitoring (Evidently)** tab can also regenerate them on demand.
 
@@ -40,6 +45,7 @@ and env vars on update). Check: the app sidebar shows "LLM key detected · endpo
 ```bash
 FQDN=$(az containerapp show -n ihds-app -g $RG --query properties.configuration.ingress.fqdn -o tsv)
 curl -s https://$FQDN/_stcore/health          # -> ok
+az containerapp logs show -n ihds-app -g $RG --tail 50 | grep -i -E "uvicorn|mcp"   # API and MCP server started
 az containerapp revision list -n ihds-app -g $RG -o table
 az containerapp logs show -n ihds-app -g $RG --tail 50
 ```
@@ -52,7 +58,10 @@ Risk assessment result, the Monitoring tab table, one Evidently HTML report, the
 
 ```bash
 bash deploy/azure/deploy_aci.sh                # uses the image already built in $ACR
+curl -s http://<fqdn>:8000/health              # {"status":"ok","tools_transport":"mcp-http",...}
 ```
+
+Re-deploying a changed image to an existing app: `export TAG=v2` before `bash deploy/azure/deploy_aca.sh`.
 
 ## Troubleshooting (lab subscriptions)
 

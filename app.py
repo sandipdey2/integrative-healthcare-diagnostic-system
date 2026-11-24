@@ -3,6 +3,9 @@
 Run locally:  streamlit run app.py --server.headless true
 Optional secret: OPENAI_API_KEY (Streamlit secrets or environment). Without it the
 explanation is produced by a deterministic template and everything else still works.
+If IHDS_API_URL is set (e.g. http://127.0.0.1:8000) the advisory workflow is called through the
+FastAPI service (api/main.py); otherwise the LangGraph graph runs in this process, with its tools
+served by the MCP server (mcp_server/server.py, stdio subprocess or IHDS_MCP_URL).
 """
 from __future__ import annotations
 
@@ -35,9 +38,24 @@ def _load_secret_key() -> None:
 _load_secret_key()
 
 
+API_URL = os.environ.get("IHDS_API_URL", "").rstrip("/")
+
+
 @st.cache_resource(show_spinner="Training risk model and GAN (first load only)...")
 def get_system():
-    return build_system()
+    # In API mode the graph runs in the API service; the local system only feeds the other tabs.
+    return build_system(tools_mode="inprocess" if API_URL else None)
+
+
+def run_via_api(record: dict, question: str, use_llm: bool) -> agents.AdvisoryResult:
+    import httpx
+
+    r = httpx.post(f"{API_URL}/assess", json={"record": record, "question": question, "use_llm": use_llm},
+                   timeout=180)
+    r.raise_for_status()
+    d = r.json()
+    d["contributions"] = [model.Contribution(**c) for c in d.get("contributions", [])]
+    return agents.AdvisoryResult(**d)
 
 
 S = get_system()
@@ -55,14 +73,27 @@ st.caption(
 
 with st.sidebar:
     st.header("Run mode")
-    has_key = workflow.llm_available()
+    api_health = None
+    if API_URL:
+        try:
+            import httpx
+            api_health = httpx.get(f"{API_URL}/health", timeout=10).json()
+        except Exception as exc:  # shown below
+            api_health = {"error": str(exc)}
+    has_key = bool(api_health.get("llm_available")) if api_health else workflow.llm_available()
     use_llm = st.toggle(f"Use {LLM_MODEL} for the explanation draft", value=has_key, disabled=not has_key,
                         help="Needs OPENAI_API_KEY. Without it a deterministic template is used.")
-    if has_key:
+    if has_key and API_URL:
+        st.write("LLM key configured on the API server")
+    elif has_key:
         base = agents.llm_base_url()
         st.write("LLM key detected" + (f" · endpoint: {base}" if base else " · endpoint: api.openai.com"))
     else:
         st.write("No OPENAI_API_KEY: template mode")
+    if API_URL:
+        st.write(f"Workflow via REST API {API_URL} · tools: {api_health.get('tools_transport', api_health.get('error'))}")
+    else:
+        st.write(f"Workflow in-process · agent tools via {S.tools.transport}")
     st.divider()
     st.markdown("**Advisory system only** — clinician review required.")
 
@@ -100,8 +131,11 @@ with tabs[0]:
     question = st.text_input("Optional clinician question", placeholder="e.g. Which factors drive this score?")
 
     if st.button("Run advisory workflow", type="primary"):
-        graph = get_llm_graph() if (use_llm and has_key) else S.graph
-        res = agents.run(graph, record, question)
+        if API_URL:
+            res = run_via_api(record, question, bool(use_llm))
+        else:
+            graph = get_llm_graph() if (use_llm and has_key) else S.graph
+            res = agents.run(graph, record, question)
         if res.status == "blocked":
             st.error(res.draft)
         else:
@@ -130,6 +164,8 @@ with tabs[0]:
             with st.expander("Reviewer checks"):
                 st.json(res.review)
             with st.expander("Agent trace (LangGraph node order) and tool-call log (audit)"):
+                st.caption(f"Workflow route: {'REST API ' + API_URL if API_URL else 'in-process LangGraph'} · "
+                           f"tool transport: {res.transport}")
                 st.write(res.trace)
                 st.dataframe(pd.DataFrame(res.tool_calls), hide_index=True)
 
@@ -146,14 +182,14 @@ with tabs[1]:
                           index=["actual 0", "actual 1"], columns=["pred 0", "pred 1"]))
     st.subheader("Coefficients (standardized features)")
     st.dataframe(model.coefficients(S.pipe).round(3), hide_index=True)
-    st.subheader("Welch t-tests: diabetic vs non-diabetic (statistical-analysis-project method)")
+    st.subheader("Welch t-tests: diabetic vs non-diabetic (Project 2 statistical-analysis-project method)")
     st.dataframe(stats_analysis.welch_tests(data.clean(raw)), hide_index=True)
     st.subheader("Impossible-zero audit (treated as missing)")
     st.dataframe(data.missing_audit(raw), hide_index=True)
 
 # ------------------------------------------------------------------ Synthetic
 with tabs[2]:
-    st.subheader("Tabular GAN (NumPy re-implementation of the generative-mnist recipe)")
+    st.subheader("Tabular GAN (NumPy re-implementation of the Project 5 generative-mnist recipe)")
     hist = pd.DataFrame(S.gan.history)
     hist.index = hist.index * 50
     st.line_chart(hist, x_label="training step", y_label="loss")
@@ -217,7 +253,12 @@ with tabs[4]:
     img = ROOT / "docs" / "architecture.png"
     if img.exists():
         st.image(str(img))
-    st.markdown((ROOT / "diagrams" / "system_architecture.md").read_text().replace("![LangGraph agent graph](../docs/architecture.png)", ""))
+    dep = ROOT / "docs" / "deployment.png"
+    if dep.exists():
+        st.image(str(dep), caption="Service view (exported from code): Streamlit → FastAPI → LangGraph → MCP tool server")
+    st.markdown((ROOT / "diagrams" / "system_architecture.md").read_text()
+                .replace("![LangGraph agent graph](../docs/architecture.png)", "")
+                .replace("![service view exported from code](../docs/deployment.png)", ""))
 
 # ------------------------------------------------------------------ About
 with tabs[5]:

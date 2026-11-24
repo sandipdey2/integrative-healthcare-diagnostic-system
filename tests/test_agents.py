@@ -16,7 +16,7 @@ def nodes_of(trace):
 
 @pytest.fixture(scope="module")
 def nodes(system):
-    return agents.make_nodes(system.pipe, system.kb, system.welch, system.synthetic_pool)
+    return agents.make_nodes(system.tools)
 
 
 def _state_after(nodes, record, upto, question=""):

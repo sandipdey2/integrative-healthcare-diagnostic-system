@@ -16,8 +16,8 @@ az container create -g "$RG" -n "$NAME" -l "$LOCATION" \
   --image "$ACR.azurecr.io/ihds:$TAG" \
   --registry-login-server "$ACR.azurecr.io" --registry-username "$ACR_USER" --registry-password "$ACR_PASS" \
   --os-type Linux --cpu 1 --memory 2 \
-  --ports 8501 --ip-address Public --dns-name-label "$DNS" \
+  --ports 8501 8000 --ip-address Public --dns-name-label "$DNS" \
   --only-show-errors -o none
 unset ACR_PASS
 FQDN=$(az container show -g "$RG" -n "$NAME" --query ipAddress.fqdn -o tsv)
-echo ">> Deployed: http://$FQDN:8501"
+echo ">> Deployed: http://$FQDN:8501 (Streamlit)  http://$FQDN:8000/docs (FastAPI)"

@@ -4,7 +4,9 @@
 A LangGraph multi-agent system that turns eight routine measurements into an **advisory draft for a
 clinician**: a calibrated risk probability, the factors driving it, cited guideline snippets, a robustness
 check for borderline cases, and a full audit trace. Evidently AI monitors both the input data and the
-agents' outputs. Built on the public **Pima Indians Diabetes Database** (768 records; Smith et al., 1988).
+agents' outputs. The specialist agents get their tools from a real **MCP server** (official `mcp` SDK,
+FastMCP), and the workflow is also served as a **FastAPI** REST service. Built on the public **Pima Indians
+Diabetes Database** (768 records; Smith et al., 1988).
 
 > Not a diagnostic device. Every output says so, and the clinician makes the decision.
 
@@ -12,12 +14,15 @@ agents' outputs. Built on the public **Pima Indians Diabetes Database** (768 rec
 
 ## Prior capstone projects integrated (explicit, with file evidence)
 
-| Prior project | Method reused | Where in this repo |
+| Prior capstone project | Method reused | Where in this repo |
 |---|---|---|
-| [statistical-analysis-project](https://github.com/sandipdey2/statistical-analysis-project) (Heart Failure data) | Group descriptive stats + Welch t-test (`scipy.stats.ttest_ind(equal_var=False)`) | `ihds/stats_analysis.py`; exposed to agents as the `population_context` tool |
-| [breast-cancer-classification](https://github.com/sandipdey2/breast-cancer-classification) | Stratified split, `StandardScaler`, `LogisticRegression(max_iter=1000, random_state=42)`, same metric set | `ihds/data.py`, `ihds/model.py`; `risk_score` / `explain_contributions` tools |
-| [generative-mnist](https://github.com/sandipdey2/generative-mnist) | MLP Generator/Discriminator GAN, LeakyReLU(0.2), BCE, Adam(2e-4, β=(0.5, 0.999)) — re-implemented in NumPy for tabular data | `ihds/gan.py`; `synthetic_neighbors` tool + Evidently fidelity report |
-| [agentic-rag-system](https://github.com/sandipdey2/agentic-rag-system) | LangGraph `StateGraph` with typed state, input guard, TF-IDF RAG over a CSV knowledge base, reviewer with grounding score, gpt-4o-mini, trace logging | `ihds/agents.py`, `ihds/workflow.py`, `data/clinical_knowledge.csv` |
+| Project 2: [statistical-analysis-project](https://github.com/sandipdey2/statistical-analysis-project) (Heart Failure data) | Group descriptive stats + Welch t-test (`scipy.stats.ttest_ind(equal_var=False)`) | `ihds/stats_analysis.py`; exposed to agents as the `population_context` tool |
+| Project 3: [breast-cancer-classification](https://github.com/sandipdey2/breast-cancer-classification) | Stratified split, `StandardScaler`, `LogisticRegression(max_iter=1000, random_state=42)`, same metric set | `ihds/data.py`, `ihds/model.py`; `risk_score` / `explain_contributions` tools |
+| Project 5: [generative-mnist](https://github.com/sandipdey2/generative-mnist) | MLP Generator/Discriminator GAN, LeakyReLU(0.2), BCE, Adam(2e-4, β=(0.5, 0.999)) — re-implemented in NumPy for tabular data | `ihds/gan.py`; `synthetic_neighbors` tool + Evidently fidelity report |
+| Project 6: [agentic-rag-system](https://github.com/sandipdey2/agentic-rag-system) | LangGraph `StateGraph` with typed state, input guard, TF-IDF RAG over a CSV knowledge base, reviewer with grounding score, gpt-4o-mini, trace logging | `ihds/agents.py`, `ihds/workflow.py`, `data/clinical_knowledge.csv` |
+
+Project 1 ([ai-programming-foundations-project](https://github.com/sandipdey2/ai-programming-foundations-project)) and Project 4
+([imdb-sentiment-rnn](https://github.com/sandipdey2/imdb-sentiment-rnn)) are not reused in this code.
 
 New in this project: the Pima dataset, the supervisor/specialist graph design, the uncertainty agent,
 the revision loop with a cap and escalation, and Evidently monitoring of data **and** agent outputs.
@@ -33,6 +38,17 @@ modelling (GAN), generative AI (optional gpt-4o-mini writer), agentic systems (L
 3. `writer_agent` drafts the note (gpt-4o-mini when `OPENAI_API_KEY` is set — via `OPENAI_API_BASE`, e.g. Vocareum — otherwise a deterministic template).
 4. `reviewer` checks disclaimer, citations, stated probability, banned phrases and grounding. A rejected draft
    goes back to the writer with feedback, at most 2 times; then `finalize` uses the template and marks the case escalated.
+
+### Service layers (all implemented, all tested)
+
+| Layer | Code | What it does |
+|---|---|---|
+| MCP tool server | `mcp_server/server.py` (`mcp` 1.30 FastMCP) | Serves `risk_score`, `explain_contributions`, `rag_search`, `population_context`, `synthetic_neighbors` over stdio or streamable HTTP (`/mcp`). Builds the same seeded model/GAN at start-up. |
+| Agents → MCP | `ihds/tool_backends.py` | `langchain-mcp-adapters` loads the MCP tools into the LangGraph agents over one persistent session: a stdio subprocess by default, or `IHDS_MCP_URL` for HTTP. If the server cannot start, an in-process fallback is used and labelled `inprocess-fallback` (`IHDS_TOOLS=mcp` disables the fallback). The transport is written in the trace (`risk_agent: [tools via mcp-stdio] ...`) and in every tool-call log entry. |
+| REST API | `api/main.py` (FastAPI + pydantic) | `POST /assess` (record + question + `use_llm` → draft, review, trace, tool log, transport), `GET /health`, `GET /monitoring/summary`, `GET /schema/features`; OpenAPI docs at `/docs`. |
+| UI | `app.py` (Streamlit) | Calls `POST /assess` when `IHDS_API_URL` is set; otherwise runs the graph in-process (tools still via MCP stdio). |
+
+![service view exported from code](docs/deployment.png)
 
 Details, state schema, assumptions, tradeoffs and boundaries: [`diagrams/system_architecture.md`](diagrams/system_architecture.md).
 
@@ -56,9 +72,22 @@ Full numbers: `evaluation/results.json`, `monitoring/reports/`, and [`TESTING.md
 ```bash
 python3 -m venv .venv          # Python 3.11–3.14 && source .venv/bin/activate
 pip install -r requirements-dev.txt
-pytest -q                                   # 43 offline tests (+4 live tests skipped without a key)
+pytest -q                                   # 52 offline tests (+4 live tests skipped without a key)
 python -m ihds.pipeline                     # evaluation + Evidently reports
-streamlit run app.py --server.headless true # http://localhost:8501
+streamlit run app.py --server.headless true # http://localhost:8501 (graph in-process, tools via MCP stdio)
+```
+
+Each layer on its own:
+
+```bash
+python -m mcp_server.server                                            # MCP server, stdio
+python -m mcp_server.server --transport streamable-http --port 8765    # MCP server, http://127.0.0.1:8765/mcp
+IHDS_MCP_URL=http://127.0.0.1:8765/mcp uvicorn api.main:app --port 8000   # API (omit IHDS_MCP_URL to spawn MCP over stdio)
+curl -s localhost:8000/health                                          # {"status":"ok","tools_transport":"mcp-http",...}
+curl -s -X POST localhost:8000/assess -H 'content-type: application/json' \
+  -d '{"record":{"Pregnancies":2,"Glucose":150,"BloodPressure":72,"SkinThickness":null,"Insulin":null,"BMI":34,"DiabetesPedigreeFunction":0.5,"Age":45}}'
+IHDS_API_URL=http://127.0.0.1:8000 streamlit run app.py --server.headless true   # UI calls the API
+sh scripts/start_all.sh                                                # all three (what the Docker image runs)
 ```
 
 ### Live LLM via Vocareum (optional)
@@ -78,9 +107,12 @@ For Streamlit, the same two values can go in `.streamlit/secrets.toml` (git-igno
 ## Deploy
 
 - **Streamlit Community Cloud:** repo `sandipdey2/integrative-healthcare-diagnostic-system`, branch `main`,
-  main file `app.py`, any Python 3.11–3.14 (Cloud's default 3.14 works; all pins have 3.14 wheels). Secrets (optional, TOML):
+  main file `app.py`, any Python 3.11–3.14 (Cloud's default 3.14 works; all pins have 3.14 wheels). The app spawns
+  the MCP server as a stdio subprocess (falls back to labelled in-process tools if it cannot). Secrets (optional, TOML):
   `OPENAI_API_KEY = "voc-..."` and `OPENAI_API_BASE = "https://openai.vocareum.com/v1"`.
-- **Azure Container Apps:** `Dockerfile` (port 8501) + [`deploy/azure/README.md`](deploy/azure/README.md)
+- **Docker:** `docker build -t ihds . && docker run -p 8501:8501 -p 8000:8000 ihds` runs `scripts/start_all.sh`
+  (MCP HTTP server on 127.0.0.1:8765 → FastAPI on 8000 → Streamlit on 8501, health-checked).
+- **Azure Container Apps:** the same image (public port 8501; ACI also exposes 8000) + [`deploy/azure/README.md`](deploy/azure/README.md)
   (`az acr build` + `az containerapp create`; ACI alternative and cleanup scripts included). With
   `WITH_OPENAI=1` the key becomes the Container Apps secret `openai-key` (`OPENAI_API_KEY=secretref:openai-key`)
   and `OPENAI_API_BASE` is set as an environment variable.
@@ -89,16 +121,18 @@ For Streamlit, the same two values can go in `.streamlit/secrets.toml` (git-igno
 
 | Path | Content |
 |---|---|
+| `mcp_server/` | MCP server exposing the five tools (stdio / streamable HTTP) |
+| `api/` | FastAPI service (`/assess`, `/health`, `/monitoring/summary`) |
 | `app.py` | Streamlit UI (risk assessment, model & data, synthetic stress test, monitoring, architecture, limits) |
-| `ihds/` | `agents.py` (LangGraph), `workflow.py` (guard/RAG/reviewer blocks), `model.py`, `gan.py`, `stats_analysis.py`, `data.py`, `monitoring.py`, `pipeline.py` |
+| `ihds/` | `agents.py` (LangGraph), `tools.py` (the five tool functions), `tool_backends.py` (MCP client / fallback), `workflow.py` (guard/RAG/reviewer blocks), `model.py`, `gan.py`, `stats_analysis.py`, `data.py`, `monitoring.py`, `pipeline.py` |
 | `data/` | Pima CSV, clinical knowledge base, data card |
 | `notebooks/integrated_diagnostic_system.ipynb` | Executed walkthrough of the same code |
-| `tests/` | 43 offline pytest tests (units, every agent node, routing, loop cap, Evidently, end-to-end, Streamlit AppTest) + 4 live `vocareum` tests |
+| `tests/` | 52 offline pytest tests (units, every agent node, routing, loop cap, Evidently, end-to-end, Streamlit AppTest, real MCP server over stdio and HTTP, FastAPI) + 4 live `vocareum` tests |
 | `agentic_system.ipynb` | Live run of the multi-agent graph (low / borderline / high risk, refusal, revision loop) with traces |
-| `scripts/` | `export_graph.py` (diagram from code), `run_llm_eval.py` (live LLM vs template, Evidently) |
+| `scripts/` | `export_graph.py` (diagrams from code), `start_all.sh` (MCP + API + UI), `run_llm_eval.py` (live LLM vs template, Evidently) |
 | `monitoring/reports/` | Evidently HTML/JSON reports |
 | `evaluation/` | `results.json`, synthetic samples |
-| `docs/` | `architecture.mmd/.png` (exported from code), app screenshots, `module_summary.pdf` |
+| `docs/` | `architecture.mmd/.png` and `deployment.mmd/.png` (exported from code), app screenshots, `module_summary.pdf` |
 | `deploy/azure/` | Container Apps / ACI scripts and guide |
 
 ## Limitations

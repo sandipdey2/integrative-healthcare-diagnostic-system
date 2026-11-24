@@ -1,0 +1,123 @@
+"""IHDS REST API (FastAPI).
+
+    uvicorn api.main:app --port 8000
+
+POST /assess runs the LangGraph multi-agent workflow (tools via the MCP server by default) and returns the
+advisory draft, review, trace and the tool transport used. GET /health and GET /monitoring/summary are
+read-only. Set IHDS_MCP_URL to use a running MCP HTTP server instead of a stdio subprocess.
+"""
+from __future__ import annotations
+
+import json
+from contextlib import asynccontextmanager
+from dataclasses import asdict
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException
+from fastapi.concurrency import run_in_threadpool
+from pydantic import BaseModel, Field
+
+from ihds import agents, monitoring, workflow
+from ihds.config import FEATURES, LLM_MODEL, REPORTS_DIR
+
+STATE: dict = {}
+
+
+class PatientRecord(BaseModel):
+    Pregnancies: float | None = None
+    Glucose: float | None = None
+    BloodPressure: float | None = None
+    SkinThickness: float | None = None
+    Insulin: float | None = None
+    BMI: float | None = None
+    DiabetesPedigreeFunction: float | None = None
+    Age: float | None = None
+
+
+class AssessRequest(BaseModel):
+    record: PatientRecord
+    question: str = ""
+    use_llm: bool = Field(False, description=f"Use {LLM_MODEL} for the writer agent (needs OPENAI_API_KEY on the server)")
+
+
+class AssessResponse(BaseModel):
+    status: str
+    probability: float | None = None
+    band: str | None = None
+    borderline: bool = False
+    contributions: list[dict] = []
+    evidence: list[dict] = []
+    population: list[dict] = []
+    uncertainty: dict | None = None
+    draft: str = ""
+    draft_source: str = ""
+    review: dict = {}
+    revisions: int = 0
+    escalated: bool = False
+    guard_reasons: list[str] = []
+    imputed: list[str] = []
+    trace: list[str] = []
+    tool_calls: list[dict] = []
+    transport: str = ""
+
+
+def get_system():
+    if "system" not in STATE:
+        from ihds.pipeline import build_system
+        STATE["system"] = build_system()
+    return STATE["system"]
+
+
+def get_graph(use_llm: bool):
+    S = get_system()
+    if not use_llm:
+        return S.graph
+    if "llm_graph" not in STATE:
+        llm = agents.default_llm()
+        if llm is None:
+            raise HTTPException(status_code=400, detail="use_llm=true but no OPENAI_API_KEY is configured on the server")
+        STATE["llm_graph"] = S.graph_with_llm(llm)
+    return STATE["llm_graph"]
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    await run_in_threadpool(get_system)
+    yield
+    S = STATE.pop("system", None)
+    if S is not None:
+        S.tools.close()
+
+
+app = FastAPI(title="IHDS advisory API", version="1.0",
+              description="Advisory diabetes-risk drafts for clinician review. Not a diagnosis.", lifespan=lifespan)
+
+
+@app.get("/health")
+def health():
+    S = get_system()
+    return {"status": "ok", "tools_transport": S.tools.transport, "tools": sorted(S.tools.tools),
+            "llm_available": workflow.llm_available(), "model": LLM_MODEL}
+
+
+@app.post("/assess", response_model=AssessResponse)
+def assess(req: AssessRequest):
+    res = agents.run(get_graph(req.use_llm), req.record.model_dump(), req.question)
+    out = asdict(res)
+    out["transport"] = res.transport or get_system().tools.transport
+    return out
+
+
+@app.get("/monitoring/summary")
+def monitoring_summary():
+    llm = Path(REPORTS_DIR) / "llm_eval_summary.json"
+    data = {"data_drift": monitoring.load_summary(), "agent_eval": monitoring.load_agent_summary(),
+            "llm_vs_template": json.loads(llm.read_text()) if llm.exists() else None}
+    if data["data_drift"] is None:
+        raise HTTPException(status_code=404, detail="no monitoring reports; run python -m ihds.pipeline")
+    return data
+
+
+@app.get("/schema/features")
+def features():
+    return {"features": FEATURES}

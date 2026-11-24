@@ -17,10 +17,10 @@ All numbers come from `python -m ihds.pipeline` (seed 42) on 2026-11-24 → `eva
 ## Prior projects → components (explicit integration)
 | Prior repo | Method | Module | Agent tool |
 |---|---|---|---|
-| statistical-analysis-project | Welch t-test | ihds/stats_analysis.py | population_context |
-| breast-cancer-classification | StandardScaler + LogisticRegression(max_iter=1000, rs=42), metrics | ihds/model.py | risk_score, explain_contributions |
-| generative-mnist | MLP GAN, LeakyReLU 0.2, BCE, Adam 2e-4 (0.5, 0.999) → NumPy tabular GAN | ihds/gan.py | synthetic_neighbors |
-| agentic-rag-system | LangGraph StateGraph, input guard, TF-IDF RAG, reviewer + grounding, gpt-4o-mini | ihds/agents.py, ihds/workflow.py | rag_search |
+| Project 2 — [statistical-analysis-project](https://github.com/sandipdey2/statistical-analysis-project) | Welch t-test | ihds/stats_analysis.py | population_context |
+| Project 3 — [breast-cancer-classification](https://github.com/sandipdey2/breast-cancer-classification) | StandardScaler + LogisticRegression(max_iter=1000, rs=42), metrics | ihds/model.py | risk_score, explain_contributions |
+| Project 5 — [generative-mnist](https://github.com/sandipdey2/generative-mnist) | MLP GAN, LeakyReLU 0.2, BCE, Adam 2e-4 (0.5, 0.999) → NumPy tabular GAN | ihds/gan.py | synthetic_neighbors |
+| Project 6 — [agentic-rag-system](https://github.com/sandipdey2/agentic-rag-system) | LangGraph StateGraph, input guard, TF-IDF RAG, reviewer + grounding, gpt-4o-mini | ihds/agents.py, ihds/workflow.py | rag_search |
 Domains: statistics/data analysis, ML, deep generative model (GAN), GenAI (optional LLM writer), agentic (LangGraph).
 
 ## Statistics (Welch, diabetic vs non-diabetic)
@@ -42,8 +42,18 @@ all 8 features p < 1e-5.
 - Supervisor is rule-based (hub-and-spoke); uncertainty_agent only when 0.40 ≤ p < 0.60.
 - Reviewer → writer revision loop, MAX_REVISIONS = 2 (writer ≤ 3 runs) → template + escalated=True. recursion_limit 30.
 - Writer: gpt-4o-mini (langchain-openai, temperature 0) only if OPENAI_API_KEY; base URL from OPENAI_BASE_URL / OPENAI_API_BASE (Vocareum https://openai.vocareum.com/v1); else deterministic template.
-- Typed state (TypedDict) with append-only trace and tool_calls; tools are LangChain StructuredTools (in-process).
-- Diagram exported from code: docs/architecture.mmd/.png; test asserts they match.
+- Typed state (TypedDict) with append-only trace and tool_calls (each entry: agent, tool, transport, args, preview, time).
+- Diagram exported from code: docs/architecture.mmd/.png; test asserts they match. Service view docs/deployment.mmd/.png built from FastAPI routes + tools listed over MCP + agent→tool pairs from a real run.
+
+## MCP server + FastAPI (implemented 2026-11-24)
+- MCP server: mcp_server/server.py, official `mcp` SDK 1.30.0 FastMCP("ihds-tools"); 5 tools: risk_score, explain_contributions, rag_search, population_context, synthetic_neighbors (JSON in/out, null = missing). Transports: stdio (default) and streamable HTTP (`--transport streamable-http --port 8765`, path /mcp). Never receives the API key.
+- Agents → MCP: ihds/tool_backends.py, langchain-mcp-adapters 0.3.1 MultiServerMCPClient + load_mcp_tools, one persistent session on a background asyncio thread. Default stdio subprocess; IHDS_MCP_URL → HTTP. IHDS_TOOLS=auto (default) falls back to labelled "inprocess-fallback" only if MCP can't start; =mcp fails instead; =inprocess explicit.
+- Trace shows transport: "risk_agent: [tools via mcp-stdio] p=... ". MCP and in-process give identical outputs (test on 10 records + every tool over HTTP).
+- Agent→tool map (from tool-call log): risk_agent → risk_score, explain_contributions; evidence_agent → rag_search, population_context; uncertainty_agent → synthetic_neighbors.
+- FastAPI api/main.py (fastapi 0.165.0, uvicorn 0.54.0): POST /assess, GET /health, GET /monitoring/summary, GET /schema/features, /docs. use_llm=true without key → 400; bad types → 422.
+- Streamlit uses the API when IHDS_API_URL is set, else in-process graph (tools via MCP stdio).
+- Docker: scripts/start_all.sh → MCP HTTP 127.0.0.1:8765 → API :8000 (IHDS_TOOLS=mcp) → Streamlit :8501; container healthy, /health tools_transport "mcp-http", UI trace "Workflow route: REST API ... · tool transport: mcp-http" (docs/screenshots/07_docker_api_mcp_trace.png); ~0.83 GB RAM after one UI run.
+- Timing: MCP stdio graph run ≈ 0.02 s per case (50 cases 0.86 s) after ~5 s server start-up. Pipeline evaluation results unchanged by the switch to MCP (float noise only).
 
 ## Scenario evaluation
 - 154 test records: 151 released, 3 blocked (missing BMI); reviewer approved 151/151; mean grounding 0.551.
@@ -68,15 +78,15 @@ all 8 features p < 1e-5.
 - 30 held-out cases (scripts/run_llm_eval.py): first-draft approval 23/30 (76.7%); 5 approved after 1 revision; 2 escalated after 3 rejected drafts (template released); 11 rejections, all grounding < 0.2; final approval 30/30.
 - Evidently TextEvals: citation 100%, disclaimer 100%, forbidden phrases 0 (LLM and template).
 - Mean grounding LLM 0.303 (min 0.200) vs template 0.549 (min 0.392); citations 2.7 vs 3.0; length 771 vs 1001 chars; latency 4.7 s vs 0.01 s per case; drift test LLM vs template on grounding & citations p < 0.001.
-- Notebook agentic_system.ipynb executed live: low (#8, p=0.132), borderline (#2, p=0.439, uncertainty agent range 0.208–0.699), high (#7, p=0.962), refusal (metformin dose), revision loop (#1: 1 revision), cap (#3: 3 rejections → escalated).
+- Notebook agentic_system.ipynb re-executed live with tools via mcp-stdio: low (#8, p=0.132, approved), borderline (#2, p=0.439, uncertainty agent range 0.208–0.699; this run 3 grounding rejections → escalated), high (#7, p=0.962, approved), refusal (metformin dose), #1 approved first try this run (1 revision in the earlier run), cap (#3: 3 rejections → escalated). LLM output varies run to run.
 - Failure insight: one live draft cited [K4] (BMI) for the pregnancies driver — valid id, wrong claim; reviewer can't detect.
 
 ## Tests
-- 47 pytest tests: 43 offline (py3.11, 3.12, 3.14) + 4 live `vocareum` (skipped without key); all pass with key. Docker image builds, healthcheck healthy.
+- 56 pytest tests: 52 offline (pass on py3.11, 3.12, 3.14) + 4 live `vocareum` (skipped without key); 56/56 pass with key on 3.11 and 3.14. New: 9 in tests/test_mcp_api.py (real MCP subprocess stdio list/call, HTTP server vs in-process, graph via MCP = in-process, fallback, FastAPI health/assess/blocked/422/400/monitoring, Streamlit via API). Docker image builds, healthcheck healthy.
 
 ## Honest-scope statements (use these words)
 - Rule-based supervisor; LLM only writes text and is optional.
-- In-process LangChain tools; no MCP server; single process; per-request state only (no long-term memory).
+- Tools served by a real MCP server in a separate process (stdio or HTTP); the agent graph runs in one process (API or Streamlit); per-request state only (no long-term memory). MCP server and API have no authentication (localhost/private network only).
 - Offline runs use the template writer; scenario numbers above are template runs (reproducible).
 - Live gpt-4o-mini verified via Vocareum on 2026-11-24 (see Live LLM section); the revision loop fires naturally with the live model.
 

@@ -39,6 +39,29 @@ BENIGN_QUESTIONS = [
 
 
 @dataclass
+class Core:
+    """Everything except the agent graph (used by the MCP server and by build_system)."""
+    train: pd.DataFrame
+    test: pd.DataFrame
+    pipe: object
+    gan: gan.TabularGAN
+    synthetic: pd.DataFrame
+    kb: workflow.KnowledgeBase
+    welch: pd.DataFrame
+    synthetic_pool: pd.DataFrame
+
+
+def build_core(gan_steps: int = 3000, n_synthetic: int = 500) -> Core:
+    df = data.load_clean()
+    train, test = data.split(df)
+    pipe = model.train(train)
+    imputed = pd.DataFrame(pipe.named_steps["impute"].transform(train[FEATURES]), columns=FEATURES)
+    g = gan.TabularGAN(steps=gan_steps).fit(imputed)
+    return Core(train, test, pipe, g, g.sample(n_synthetic), workflow.KnowledgeBase(),
+                stats_analysis.welch_tests(df), g.sample(2000, seed=7))
+
+
+@dataclass
 class System:
     train: pd.DataFrame
     test: pd.DataFrame
@@ -48,24 +71,20 @@ class System:
     kb: workflow.KnowledgeBase
     welch: pd.DataFrame
     synthetic_pool: pd.DataFrame
-    graph: object  # compiled LangGraph, offline (template writer)
+    tools: object  # tool backend (MCP by default), see ihds/tool_backends.py
+    graph: object  # compiled LangGraph with the template writer
 
     def graph_with_llm(self, llm):
-        return agents.build_graph(self.pipe, self.kb, self.welch, self.synthetic_pool, llm=llm)
+        return agents.build_graph(self.tools, llm=llm)
 
 
-def build_system(gan_steps: int = 3000, n_synthetic: int = 500) -> System:
-    df = data.load_clean()
-    train, test = data.split(df)
-    pipe = model.train(train)
-    imputed = pd.DataFrame(pipe.named_steps["impute"].transform(train[FEATURES]), columns=FEATURES)
-    g = gan.TabularGAN(steps=gan_steps).fit(imputed)
-    synthetic = g.sample(n_synthetic)
-    pool = g.sample(2000, seed=7)
-    kb = workflow.KnowledgeBase()
-    welch = stats_analysis.welch_tests(df)
-    graph = agents.build_graph(pipe, kb, welch, pool, llm=None)
-    return System(train, test, pipe, g, synthetic, kb, welch, pool, graph)
+def build_system(gan_steps: int = 3000, n_synthetic: int = 500, tools_mode: str | None = None) -> System:
+    from .tool_backends import make_backend
+
+    c = build_core(gan_steps, n_synthetic)
+    backend = make_backend(c.pipe, c.kb, c.welch, c.synthetic_pool, mode=tools_mode, gan_steps=gan_steps)
+    graph = agents.build_graph(backend, llm=None)
+    return System(c.train, c.test, c.pipe, c.gan, c.synthetic, c.kb, c.welch, c.synthetic_pool, backend, graph)
 
 
 def _records(df: pd.DataFrame) -> list[dict]:
