@@ -1,0 +1,112 @@
+{
+  "holdout": {
+    "drifted_columns": {
+      "Pregnancies": false,
+      "Glucose": false,
+      "BloodPressure": false,
+      "SkinThickness": false,
+      "Insulin": false,
+      "BMI": false,
+      "DiabetesPedigreeFunction": false,
+      "Age": false
+    },
+    "drift_p_values": {
+      "Pregnancies": 0.99827,
+      "Glucose": 0.97859,
+      "BloodPressure": 0.88943,
+      "SkinThickness": 0.99864,
+      "Insulin": 0.10273,
+      "BMI": 0.75307,
+      "DiabetesPedigreeFunction": 0.4164,
+      "Age": 0.94857
+    },
+    "drifted_columns_count": 0,
+    "drifted_columns_share": 0.0,
+    "accuracy": 0.7338,
+    "precision": 0.6032,
+    "recall": 0.7037,
+    "f1score": 0.6496,
+    "drifted_feature_names": [],
+    "report": "holdout",
+    "html": "holdout_report.html",
+    "json": "holdout_report.json",
+    "reference_rows": 614,
+    "current_rows": 154
+  },
+  "shifted": {
+    "drifted_columns": {
+      "Pregnancies": false,
+      "Glucose": true,
+      "BloodPressure": false,
+      "SkinThickness": false,
+      "Insulin": false,
+      "BMI": false,
+      "DiabetesPedigreeFunction": false,
+      "Age": false
+    },
+    "drift_p_values": {
+      "Pregnancies": 0.99827,
+      "Glucose": 0.0,
+      "BloodPressure": 0.88943,
+      "SkinThickness": 0.99864,
+      "Insulin": 0.10273,
+      "BMI": 0.75307,
+      "DiabetesPedigreeFunction": 0.4164,
+      "Age": 0.94857
+    },
+    "drifted_columns_count": 1,
+    "drifted_columns_share": 0.125,
+    "accuracy": 0.6818,
+    "precision": 0.5269,
+    "recall": 0.9074,
+    "f1score": 0.6667,
+    "drifted_feature_names": [
+      "Glucose"
+    ],
+    "report": "shifted",
+    "html": "shifted_report.html",
+    "json": "shifted_report.json",
+    "reference_rows": 614,
+    "current_rows": 154
+  },
+  "synthetic": {
+    "drifted_columns": {
+      "Pregnancies": true,
+      "Glucose": false,
+      "BloodPressure": false,
+      "SkinThickness": true,
+      "Insulin": true,
+      "BMI": false,
+      "DiabetesPedigreeFunction": true,
+      "Age": true
+    },
+    "drift_p_values": {
+      "Pregnancies": 0.01041,
+      "Glucose": 0.28512,
+      "BloodPressure": 0.44831,
+      "SkinThickness": 0.0,
+      "Insulin": 0.0,
+      "BMI": 0.15507,
+      "DiabetesPedigreeFunction": 0.04054,
+      "Age": 0.01705
+    },
+    "drifted_columns_count": 5,
+    "drifted_columns_share": 0.625,
+    "drifted_feature_names": [
+      "Pregnancies",
+      "SkinThickness",
+      "Insulin",
+      "DiabetesPedigreeFunction",
+      "Age"
+    ],
+    "report": "synthetic",
+    "html": "synthetic_report.html",
+    "json": "synthetic_report.json",
+    "reference_rows": 614,
+    "current_rows": 500
+  },
+  "notes": {
+    "shifted": "Simulated +25 mg/dL glucose calibration error on the test split; labels unchanged.",
+    "synthetic": "GAN rows vs imputed training rows; drift here means the generator did not match that feature's distribution."
+  }
+}
