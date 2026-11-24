@@ -1,34 +1,91 @@
 # Project 7 — Integrative Industry Synthesis
-## Healthcare AI Diagnostic Support System
+## Healthcare AI Diagnostic Support: multi-agent diabetes-risk advisory system (advisory only)
 
-### Prior Capstone Projects Integrated (minimum 3 required)
-This artifact explicitly integrates methods and insights from the following completed projects:
+A LangGraph multi-agent system that turns eight routine measurements into an **advisory draft for a
+clinician**: a calibrated risk probability, the factors driving it, cited guideline snippets, a robustness
+check for borderline cases, and a full audit trace. Evidently AI monitors both the input data and the
+agents' outputs. Built on the public **Pima Indians Diabetes Database** (768 records; Smith et al., 1988).
 
-1. **breast-cancer-classification**  
-   https://github.com/sandipdey2/breast-cancer-classification  
-   Supervised logistic regression on the Breast Cancer Wisconsin (Diagnostic) dataset. Provides the core classification and probability scoring component.
+> Not a diagnostic device. Every output says so, and the clinician makes the decision.
 
-2. **agentic-rag-system**  
-   https://github.com/sandipdey2/agentic-rag-system  
-   LangGraph multi-agent orchestration, tool calling, guardrails, reviewer checks, and RAGAS-style evaluation. Provides the explanation and retrieval layer.
+![agent graph exported from code](docs/architecture.png)
 
-3. **generative-mnist**  
-   https://github.com/sandipdey2/generative-mnist  
-   GAN-based synthetic sample generation on MNIST. Informs synthetic edge-case generation and evaluation practices.
+## Prior capstone projects integrated (explicit, with file evidence)
 
-Additional practices from **statistical-analysis-project** inform exploratory analysis of score distributions.
+| Prior project | Method reused | Where in this repo |
+|---|---|---|
+| [statistical-analysis-project](https://github.com/sandipdey2/statistical-analysis-project) (Heart Failure data) | Group descriptive stats + Welch t-test (`scipy.stats.ttest_ind(equal_var=False)`) | `ihds/stats_analysis.py`; exposed to agents as the `population_context` tool |
+| [breast-cancer-classification](https://github.com/sandipdey2/breast-cancer-classification) | Stratified split, `StandardScaler`, `LogisticRegression(max_iter=1000, random_state=42)`, same metric set | `ihds/data.py`, `ihds/model.py`; `risk_score` / `explain_contributions` tools |
+| [generative-mnist](https://github.com/sandipdey2/generative-mnist) | MLP Generator/Discriminator GAN, LeakyReLU(0.2), BCE, Adam(2e-4, β=(0.5, 0.999)) — re-implemented in NumPy for tabular data | `ihds/gan.py`; `synthetic_neighbors` tool + Evidently fidelity report |
+| [agentic-rag-system](https://github.com/sandipdey2/agentic-rag-system) | LangGraph `StateGraph` with typed state, input guard, TF-IDF RAG over a CSV knowledge base, reviewer with grounding score, gpt-4o-mini, trace logging | `ihds/agents.py`, `ihds/workflow.py`, `data/clinical_knowledge.csv` |
 
-### Submission Contents
-- `docs/module_summary.pdf` — Reflective Synthesis Paper (1,500+ words, required sections, APA 7, scholarly source)
-- `notebooks/integrated_diagnostic_system.ipynb` — New integrative notebook
-- `diagrams/system_architecture.md` — Architecture with component mapping
-- `requirements.txt`
-- `README.md`
+New in this project: the Pima dataset, the supervisor/specialist graph design, the uncertainty agent,
+the revision loop with a cap and escalation, and Evidently monitoring of data **and** agent outputs.
 
-### Integration Flow
-Classification scores (breast-cancer-classification) → Agentic RAG workflow (agentic-rag-system) → Synthetic evaluation cases (generative-mnist concepts) → Evidently AI monitoring → Clinician review
+AI domains combined: data analysis (statistics), machine learning (logistic regression), deep generative
+modelling (GAN), generative AI (optional gpt-4o-mini writer), agentic systems (LangGraph).
 
-### System Boundaries
-- Advisory outputs only
-- Human-in-the-loop required
-- All results include confidence and limitations
+## How it works
+
+1. `safety_guard` checks ranges/required fields and blocks prompt-injection or dosing/diagnosis questions → `refuse`.
+2. `supervisor` (rule-based router) sends the case to `risk_agent`, then `evidence_agent`, then — only for
+   borderline probabilities (0.40–0.60) — `uncertainty_agent`; each returns to the supervisor.
+3. `writer_agent` drafts the note (gpt-4o-mini when `OPENAI_API_KEY` is set, otherwise a deterministic template).
+4. `reviewer` checks disclaimer, citations, stated probability, banned phrases and grounding. A rejected draft
+   goes back to the writer with feedback, at most 2 times; then `finalize` uses the template and marks the case escalated.
+
+Details, state schema, assumptions, tradeoffs and boundaries: [`diagrams/system_architecture.md`](diagrams/system_architecture.md).
+
+## Key results (reproducible: `python -m ihds.pipeline`)
+
+| Item | Result |
+|---|---|
+| Test split (n=154) | accuracy 0.734, precision 0.603, recall 0.704, F1 0.650, ROC-AUC 0.813 |
+| Risk bands vs observed diabetes rate (test) | low 9.5% (n=63), moderate 47.2% (n=36), high 59.6% (n=52) |
+| Agent drafts (151 released) | 100% cite retrieved evidence, 100% carry the disclaimer, 0 forbidden phrases, mean grounding 0.551 |
+| Safety guard (19 labelled cases) | accuracy 0.947, precision 1.0, recall 0.889 — **missed** "Should she stop taking my medication?" |
+| Revision loop cap | unsafe stand-in LLM → 3 writer attempts, 3 rejections, template released, `escalated=True` |
+| Simulated +25 mg/dL glucose calibration error | Evidently flags Glucose drift (p<0.001); precision 0.603 → 0.527; agent mean probability 0.452 → 0.606 |
+| GAN fidelity (Evidently) | 5 of 8 features drift vs real data (Insulin, SkinThickness, Pregnancies, DPF, Age) → synthetic rows used only for stress tests |
+
+Full numbers: `evaluation/results.json`, `monitoring/reports/`, and [`TESTING.md`](TESTING.md).
+
+## Run locally
+
+```bash
+python3.11 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
+pytest -q                                   # 42 tests
+python -m ihds.pipeline                     # evaluation + Evidently reports
+streamlit run app.py --server.headless true # http://localhost:8501
+```
+
+Optional: `export OPENAI_API_KEY=...` (or `.streamlit/secrets.toml`, see `.streamlit/secrets.toml.example`) to
+enable the gpt-4o-mini writer. Everything else works without a key.
+
+## Deploy
+
+- **Streamlit Community Cloud:** repo `sandipdey2/integrative-healthcare-diagnostic-system`, branch `main`,
+  main file `app.py`, Python 3.11 (Advanced settings). Secret (optional): `OPENAI_API_KEY`.
+- **Azure Container Apps:** `Dockerfile` (port 8501) + [`deploy/azure/README.md`](deploy/azure/README.md)
+  (`az acr build` + `az containerapp create`; ACI alternative and cleanup scripts included).
+
+## Repository map
+
+| Path | Content |
+|---|---|
+| `app.py` | Streamlit UI (risk assessment, model & data, synthetic stress test, monitoring, architecture, limits) |
+| `ihds/` | `agents.py` (LangGraph), `workflow.py` (guard/RAG/reviewer blocks), `model.py`, `gan.py`, `stats_analysis.py`, `data.py`, `monitoring.py`, `pipeline.py` |
+| `data/` | Pima CSV, clinical knowledge base, data card |
+| `notebooks/integrated_diagnostic_system.ipynb` | Executed walkthrough of the same code |
+| `tests/` | 42 pytest tests (units, every agent node, routing, loop cap, Evidently, end-to-end, Streamlit AppTest) |
+| `monitoring/reports/` | Evidently HTML/JSON reports |
+| `evaluation/` | `results.json`, synthetic samples |
+| `docs/` | `architecture.mmd/.png` (exported from code), app screenshots, `module_summary.pdf` |
+| `deploy/azure/` | Container Apps / ACI scripts and guide |
+
+## Limitations
+
+Single public dataset from one population; small hand-written knowledge base; keyword guard can be bypassed by
+paraphrase; GAN does not reproduce imputation-heavy features; the LLM writer path is tested with offline stand-in
+models (no live API call is part of the test suite). See `TESTING.md` for failure cases.
