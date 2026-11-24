@@ -20,15 +20,16 @@ st.set_page_config(page_title="Healthcare AI Diagnostic Support", page_icon="�
 
 
 def _load_secret_key() -> None:
-    """Copy OPENAI_API_KEY from st.secrets into the environment if present (never displayed)."""
-    if os.environ.get("OPENAI_API_KEY"):
-        return
-    try:
-        key = st.secrets.get("OPENAI_API_KEY")
-    except Exception:  # no secrets file
-        key = None
-    if key:
-        os.environ["OPENAI_API_KEY"] = key
+    """Copy OPENAI_API_KEY / OPENAI_API_BASE from st.secrets into the environment (values never displayed)."""
+    for name in ("OPENAI_API_KEY", "OPENAI_API_BASE", "OPENAI_BASE_URL"):
+        if os.environ.get(name):
+            continue
+        try:
+            val = st.secrets.get(name)
+        except Exception:  # no secrets file
+            val = None
+        if val:
+            os.environ[name] = str(val)
 
 
 _load_secret_key()
@@ -55,9 +56,13 @@ st.caption(
 with st.sidebar:
     st.header("Run mode")
     has_key = workflow.llm_available()
-    use_llm = st.toggle(f"Use {LLM_MODEL} for the explanation draft", value=False, disabled=not has_key,
+    use_llm = st.toggle(f"Use {LLM_MODEL} for the explanation draft", value=has_key, disabled=not has_key,
                         help="Needs OPENAI_API_KEY. Without it a deterministic template is used.")
-    st.write("LLM key detected" if has_key else "No OPENAI_API_KEY: template mode")
+    if has_key:
+        base = agents.llm_base_url()
+        st.write("LLM key detected" + (f" · endpoint: {base}" if base else " · endpoint: api.openai.com"))
+    else:
+        st.write("No OPENAI_API_KEY: template mode")
     st.divider()
     st.markdown("**Advisory system only** — clinician review required.")
 

@@ -1,15 +1,17 @@
 # Testing — final test plan and results
 
 Run date: 2026-11-24. Environment: Python 3.11.x (also re-run in a fresh Python 3.12 venv from
-`requirements-dev.txt`: same result). No API key set (offline mode).
+`requirements-dev.txt`: same result). Offline suite runs with no API key; the live suite used a Vocareum key
+(`OPENAI_API_BASE=https://openai.vocareum.com/v1`).
 
 ```bash
 pip install -r requirements-dev.txt
-pytest -q              # -> 42 passed
+pytest -q              # -> 43 passed, 4 skipped (no key)
+pytest -m vocareum -v  # -> 4 passed (live, key exported)
 python -m ihds.pipeline
 ```
 
-## 1. Automated tests (pytest) — 42 / 42 passed
+## 1. Automated tests (pytest) — 47 / 47 passed with the key (43 offline + 4 live)
 
 | File | Tests | Covers | Result |
 |---|---|---|---|
@@ -17,11 +19,17 @@ python -m ihds.pipeline
 | `tests/test_model.py` | 4 | test ROC-AUC > 0.78 and recall > 0.6, monotonic in glucose, contributions sum exactly to the logit, imputation of missing optional values | 4 passed |
 | `tests/test_gan.py` | 3 | hand-written backprop vs finite differences, valid/finite/non-collapsed samples, glucose mean within 10 mg/dL after training | 3 passed |
 | `tests/test_workflow.py` | 9 | guard (ranges, required fields, injection, dosing, documented paraphrase gap), zero normalisation, TF-IDF retrieval, grounding score, template passes review, reviewer rejects unsafe text | 9 passed |
-| `tests/test_agents.py` | 19 | **graph structure** equals the exported `docs/architecture.mmd`; **routing** functions and supervisor order; non-borderline, borderline (uncertainty agent) and blocked paths; **revision loop cap** (3 writer attempts → escalation); loop recovery after one rejection; LLM error fallback; gpt-4o-mini selection; **each agent node** (safety_guard, risk, evidence, uncertainty, writer, reviewer, finalize) | 19 passed |
+| `tests/test_agents.py` | 20 | **graph structure** equals the exported `docs/architecture.mmd`; **routing** functions and supervisor order; non-borderline, borderline (uncertainty agent) and blocked paths; **revision loop cap** (3 writer attempts → escalation); loop recovery after one rejection; LLM error fallback; gpt-4o-mini selection and `OPENAI_API_BASE` (Vocareum) honored; **each agent node** (safety_guard, risk, evidence, uncertainty, writer, reviewer, finalize) | 19 passed |
 | `tests/test_monitoring.py` | 1 | Evidently holdout/shifted/synthetic reports written (HTML+JSON); no drift on holdout; Glucose drift and lower precision on the shifted set | 1 passed |
 | `tests/test_e2e.py` | 2 | full pipeline end-to-end incl. Evidently agent evaluation; Streamlit app runs and the "Run advisory workflow" button works with no API key (`streamlit.testing.v1.AppTest`) | 2 passed |
 
-The LLM writer path is tested with LangChain's `FakeListChatModel` and a broken client (no live OpenAI call in tests).
+| `tests/test_vocareum_live.py` (marker `vocareum`) | 4 | **live** "vocareum test": base URL set, gpt-4o-mini ping (`pong`, model `gpt-4o-mini-2024-07-18`), full graph run uses the LLM writer (not template) and the reviewer approves with disclaimer, unsafe request refused before any LLM call | 4 passed (live) |
+
+Live-test note: in one full-suite run the LLM draft for the original fixed record failed grounding three times and was
+escalated (the safety design working, but a flaky test). The test now uses held-out record #0 and allows up to 3
+independent graph runs; after the change: `pytest -m vocareum` 4/4 passed three times in a row, full suite with key 47/47.
+
+Offline, the LLM writer path is also covered with LangChain's `FakeListChatModel` and a broken client.
 
 ## 2. Scenario evaluation (`python -m ihds.pipeline` → `evaluation/results.json`)
 
@@ -37,6 +45,28 @@ The LLM writer path is tested with LangChain's `FakeListChatModel` and a broken 
 | Revision-loop cap with an always-unsafe stand-in LLM | ≤3 writer attempts, then template + escalation | 3 attempts, 3 rejections, template released, `escalated=True` | ✅ |
 | Docker image | builds; `/_stcore/health` = ok; container healthcheck healthy | built (`python:3.11-slim`), health `ok`, status `healthy` | ✅ |
 | Headless Streamlit | serves on 8501 without a key | HTTP 200, health `ok` | ✅ |
+
+## 2b. Live LLM evaluation (`scripts/run_llm_eval.py --n 30`, gpt-4o-mini via Vocareum)
+
+Same 30 held-out cases (first 30 with Glucose and BMI present), run through the graph twice: live LLM writer and template writer.
+Evidently `TextEvals` report: `monitoring/reports/llm_vs_template_report.html`; per-case drafts and traces: `evaluation/llm_eval_cases.csv`.
+
+| Metric | gpt-4o-mini | template |
+|---|---|---|
+| Released LLM draft | 28/30 (2 escalated → template) | n/a |
+| Reviewer approved on first draft | 23/30 (76.7%) | 30/30 |
+| Approved after 1 revision | 5/30 | — |
+| Reviewer rejections (all for grounding < 0.2) | 11 | 0 |
+| Final approved | 30/30 | 30/30 |
+| Drafts with `[K#]` citation / disclaimer / no forbidden phrases | 100% / 100% / 100% | 100% / 100% / 100% |
+| Mean citations per draft | 2.7 | 3.0 |
+| Mean grounding (min) | 0.303 (0.200) | 0.549 (0.392) |
+| Mean length / sentences | 771 chars / 6.6 | 1001 chars / 8.8 |
+| Mean latency per case | 4.7 s | 0.01 s |
+
+Evidently drift test LLM vs template: grounding score and citation count distributions differ (p < 0.001).
+Observation: one live draft cited [K4] (BMI guidance) for the pregnancies driver — a valid id on the wrong claim,
+which the reviewer's checks cannot detect.
 
 ## 3. Evidently AI results (`monitoring/reports/`)
 
@@ -65,4 +95,4 @@ The LLM writer path is tested with LangChain's `FakeListChatModel` and a broken 
 
 - [ ] Streamlit Cloud URL opens and "Run advisory workflow" returns a draft.
 - [ ] Azure Container App URL opens; `curl https://<fqdn>/_stcore/health` returns `ok`.
-- [ ] Optional: with `OPENAI_API_KEY` set, the draft source shows `llm` and the reviewer approves it.
+- [x] Live: with the Vocareum key set, the draft source shows `llm` and the reviewer approves it (verified 2026-11-24).

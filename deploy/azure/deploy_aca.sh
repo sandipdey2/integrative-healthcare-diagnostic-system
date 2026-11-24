@@ -8,7 +8,10 @@
 #
 # Optional:
 #   export LOCATION=eastus                       # default: the resource group's location
-#   export WITH_OPENAI=1                         # prompts (hidden input) for an OpenAI key, stored as a Container Apps secret
+#   export WITH_OPENAI=1                         # enable the gpt-4o-mini writer. Uses $OPENAI_API_KEY if already exported,
+#                                                # otherwise prompts (hidden input). Stored as Container Apps secret
+#                                                # "openai-key"; OPENAI_API_BASE (default Vocareum) is set as a plain env var.
+#   export OPENAI_API_BASE=https://openai.vocareum.com/v1
 #
 # Notes for Udacity/Vocareum lab subscriptions:
 #   * You usually cannot create resource groups -> this script never creates one.
@@ -48,12 +51,22 @@ ACR_PASS=$(az acr credential show -n "$ACR" --query 'passwords[0].value' -o tsv)
 
 EXTRA=()
 if [[ "${WITH_OPENAI:-0}" == "1" ]]; then
-  read -r -s -p "OpenAI API key (input hidden): " OPENAI_KEY; echo
-  EXTRA=(--secrets "openai-key=$OPENAI_KEY" --env-vars "OPENAI_API_KEY=secretref:openai-key")
+  OPENAI_KEY="${OPENAI_API_KEY:-}"
+  if [[ -z "$OPENAI_KEY" ]]; then
+    read -r -s -p "OpenAI / Vocareum API key (input hidden): " OPENAI_KEY; echo
+  fi
+  API_BASE="${OPENAI_API_BASE:-https://openai.vocareum.com/v1}"
+  EXTRA=(--secrets "openai-key=$OPENAI_KEY" --env-vars "OPENAI_API_KEY=secretref:openai-key" "OPENAI_API_BASE=$API_BASE")
 fi
 
 if az containerapp show -n "$APP" -g "$RG" >/dev/null 2>&1; then
-  az containerapp update -n "$APP" -g "$RG" --image "$IMAGE" --only-show-errors -o none
+  if [[ "${WITH_OPENAI:-0}" == "1" ]]; then
+    az containerapp secret set -n "$APP" -g "$RG" --secrets "openai-key=$OPENAI_KEY" --only-show-errors -o none
+    az containerapp update -n "$APP" -g "$RG" --image "$IMAGE" \
+      --set-env-vars "OPENAI_API_KEY=secretref:openai-key" "OPENAI_API_BASE=$API_BASE" --only-show-errors -o none
+  else
+    az containerapp update -n "$APP" -g "$RG" --image "$IMAGE" --only-show-errors -o none
+  fi
 else
   az containerapp create -n "$APP" -g "$RG" \
     --environment "$ENVNAME" \

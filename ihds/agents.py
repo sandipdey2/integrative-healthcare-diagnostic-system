@@ -121,13 +121,21 @@ def build_tools(pipe, kb: wf.KnowledgeBase, welch: pd.DataFrame, synthetic_pool:
     return {f.__name__: StructuredTool.from_function(f) for f in fns}
 
 
+def llm_base_url() -> str | None:
+    """OpenAI-compatible endpoint, e.g. Vocareum's https://openai.vocareum.com/v1 (None = api.openai.com)."""
+    return os.environ.get("OPENAI_BASE_URL") or os.environ.get("OPENAI_API_BASE") or None
+
+
 def default_llm():
-    """gpt-4o-mini via langchain-openai, only when a key is configured."""
+    """gpt-4o-mini via langchain-openai, only when a key is configured.
+
+    Honors OPENAI_BASE_URL / OPENAI_API_BASE so a Vocareum (OpenAI-compatible proxy) key works.
+    """
     if not os.environ.get("OPENAI_API_KEY"):
         return None
     from langchain_openai import ChatOpenAI
 
-    return ChatOpenAI(model=LLM_MODEL, temperature=0, timeout=30, max_retries=1)
+    return ChatOpenAI(model=LLM_MODEL, temperature=0, timeout=60, max_retries=2, base_url=llm_base_url())
 
 
 class _C:  # light object so template_draft/llm prompt can use .feature/.value/.contribution

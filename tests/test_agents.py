@@ -180,3 +180,11 @@ def test_contributions_roundtrip(system, good_record):
     assert math.isclose(sum(c.contribution for c in r.contributions)
                         + system.pipe.named_steps["clf"].intercept_[0],
                         math.log(r.probability / (1 - r.probability)), rel_tol=1e-3)
+
+
+def test_default_llm_honors_vocareum_base_url(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-not-a-real-key")
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.setenv("OPENAI_API_BASE", "https://openai.vocareum.com/v1")
+    llm = agents.default_llm()
+    assert llm.openai_api_base == "https://openai.vocareum.com/v1"

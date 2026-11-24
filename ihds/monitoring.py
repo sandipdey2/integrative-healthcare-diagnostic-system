@@ -233,3 +233,52 @@ def run_agent_eval(holdout: pd.DataFrame, shifted: pd.DataFrame, guard_cases: pd
 def load_agent_summary(out_dir: Path = REPORTS_DIR) -> dict | None:
     p = Path(out_dir) / "agent_eval_summary.json"
     return json.loads(p.read_text()) if p.exists() else None
+
+
+# ------------------------------------------------------------------ live LLM vs template drafts
+LLM_EVAL_NUMERIC = ["grounding_score", "approved", "revisions", "escalated", "n_citations", "latency_s"]
+
+
+def run_llm_vs_template_eval(llm_df: pd.DataFrame, template_df: pd.DataFrame, out_dir: Path = REPORTS_DIR) -> dict:
+    """Evidently TextEvals on live gpt-4o-mini drafts (current) vs template drafts (reference) for the same cases.
+
+    Both frames need: draft, grounding_score, approved, revisions, escalated, n_citations, latency_s.
+    """
+    import warnings
+
+    from evidently.presets import TextEvals
+
+    warnings.filterwarnings("ignore", category=RuntimeWarning)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    dd = DataDefinition(text_columns=["draft"], numerical_columns=LLM_EVAL_NUMERIC)
+    cols = ["draft"] + LLM_EVAL_NUMERIC
+    cur = Dataset.from_pandas(llm_df[cols].reset_index(drop=True), data_definition=dd, descriptors=_text_descriptors())
+    ref = Dataset.from_pandas(template_df[cols].reset_index(drop=True), data_definition=dd, descriptors=_text_descriptors())
+    snap = Report([TextEvals(), DataDriftPreset(columns=["grounding_score", "n_citations"])]).run(cur, ref)
+    snap.save_html(str(out_dir / "llm_vs_template_report.html"))
+    snap.save_json(str(out_dir / "llm_vs_template_report.json"))
+
+    def stats(ds, df):
+        d = ds.as_dataframe()
+        return {
+            "runs": int(len(df)),
+            "reviewer_approved_first_try": round(float(((df["approved"] == 1) & (df["revisions"] == 0)).mean()), 3),
+            "reviewer_approved_final": round(float(df["approved"].mean()), 3),
+            "escalated": int(df["escalated"].sum()),
+            "mean_revisions": round(float(df["revisions"].mean()), 3),
+            "has_citation_rate": round(float(d["has_citation"].mean()), 3),
+            "has_disclaimer_rate": round(float(d["has_disclaimer"].mean()), 3),
+            "no_forbidden_phrases_rate": round(float(d["no_forbidden_phrases"].mean()), 3),
+            "mean_citations": round(float(df["n_citations"].mean()), 2),
+            "mean_grounding": round(float(df["grounding_score"].mean()), 3),
+            "min_grounding": round(float(df["grounding_score"].min()), 3),
+            "mean_length_chars": round(float(d["draft_length"].mean()), 1),
+            "mean_sentences": round(float(d["draft_sentences"].mean()), 2),
+            "mean_latency_s": round(float(df["latency_s"].mean()), 2),
+        }
+
+    summary = {"llm": stats(cur, llm_df), "template": stats(ref, template_df),
+               "drift_p_values": _summarize(snap)["drift_p_values"], "html": "llm_vs_template_report.html"}
+    (out_dir / "llm_eval_summary.json").write_text(json.dumps(summary, indent=2))
+    return summary

@@ -22,8 +22,18 @@ echo $ACR                                # note it down for cleanup
 bash deploy/azure/deploy_aca.sh
 ```
 
-Optional LLM drafting (otherwise template mode): `export WITH_OPENAI=1` before running; the key is
-read with hidden input and stored as a Container Apps secret (`OPENAI_API_KEY=secretref:openai-key`).
+Optional live LLM writer (gpt-4o-mini through Vocareum; otherwise template mode):
+
+```bash
+export WITH_OPENAI=1
+export OPENAI_API_BASE=https://openai.vocareum.com/v1
+read -r -s OPENAI_API_KEY && export OPENAI_API_KEY      # paste the voc-... key; input hidden, not in history
+bash deploy/azure/deploy_aca.sh
+```
+
+The key is stored as the Container Apps secret `openai-key` and exposed as `OPENAI_API_KEY=secretref:openai-key`;
+`OPENAI_API_BASE` is a plain environment variable. The script also works on an existing app (it sets the secret
+and env vars on update). Check: the app sidebar shows "LLM key detected · endpoint: https://openai.vocareum.com/v1".
 
 ## 3. Verify
 

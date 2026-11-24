@@ -1,0 +1,39 @@
+{
+  "llm": {
+    "runs": 30,
+    "reviewer_approved_first_try": 0.767,
+    "reviewer_approved_final": 1.0,
+    "escalated": 2,
+    "mean_revisions": 0.367,
+    "has_citation_rate": 1.0,
+    "has_disclaimer_rate": 1.0,
+    "no_forbidden_phrases_rate": 1.0,
+    "mean_citations": 2.7,
+    "mean_grounding": 0.303,
+    "min_grounding": 0.2,
+    "mean_length_chars": 771.3,
+    "mean_sentences": 6.63,
+    "mean_latency_s": 4.7
+  },
+  "template": {
+    "runs": 30,
+    "reviewer_approved_first_try": 1.0,
+    "reviewer_approved_final": 1.0,
+    "escalated": 0,
+    "mean_revisions": 0.0,
+    "has_citation_rate": 1.0,
+    "has_disclaimer_rate": 1.0,
+    "no_forbidden_phrases_rate": 1.0,
+    "mean_citations": 3.0,
+    "mean_grounding": 0.549,
+    "min_grounding": 0.392,
+    "mean_length_chars": 1001.2,
+    "mean_sentences": 8.8,
+    "mean_latency_s": 0.01
+  },
+  "drift_p_values": {
+    "grounding_score": 0.0,
+    "n_citations": 0.0
+  },
+  "html": "llm_vs_template_report.html"
+}

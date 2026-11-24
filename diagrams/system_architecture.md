@@ -33,7 +33,7 @@ and append-only `trace` and `tool_calls` lists (reducer `operator.add`).
 | `risk_agent` | specialist | Probability, band, per-feature log-odds contributions | `risk_score`, `explain_contributions` (LR pipeline) |
 | `evidence_agent` | specialist | Top-3 knowledge snippets + population statistics for the top driver | `rag_search` (TF-IDF), `population_context` (Welch results) |
 | `uncertainty_agent` | specialist | Probability spread over the 25 nearest GAN-generated profiles | `synthetic_neighbors` (GAN pool) |
-| `writer_agent` | generator | Advisory draft; uses reviewer feedback on revisions | gpt-4o-mini via `langchain-openai` if `OPENAI_API_KEY` is set, else deterministic template |
+| `writer_agent` | generator | Advisory draft; uses reviewer feedback on revisions | gpt-4o-mini via `langchain-openai` if `OPENAI_API_KEY` is set (base URL from `OPENAI_API_BASE`, e.g. Vocareum), else deterministic template |
 | `reviewer` | critic agent | Disclaimer, `[K#]` citations of retrieved ids, exact probability, banned phrases, grounding ≥ 0.2 | rules (`workflow.review`) |
 | `finalize` | terminal | Releases approved draft; if the cap is hit, swaps in the template draft and sets `escalated=True` | — |
 
@@ -61,8 +61,9 @@ Outputs: `monitoring/reports/*_report.{html,json}`, `summary.json`, `agent_eval_
 - Tools are LangChain `StructuredTool`s called in-process; there is no MCP server or remote tool service.
 - All agents run in one Python process and share one state object; there is no message bus or memory store
   beyond the per-request state (no cross-session memory).
-- Without an API key the writer is a template, so offline runs never take the revision loop; the loop is
-  exercised in tests and in the evaluation with an offline stand-in chat model that always writes an unsafe draft.
+- Without an API key the writer is a template, so offline runs never take the revision loop. With the live
+  gpt-4o-mini writer the loop fires naturally (11 grounding rejections in a 30-case live run, 2 escalations);
+  tests also exercise it with an offline stand-in model.
 - No EHR integration, authentication, or storage of patient inputs.
 
 ## Assumptions

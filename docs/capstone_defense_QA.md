@@ -1,7 +1,7 @@
 # Capstone Defense — Q&A Preparation
 
 **Healthcare AI Diagnostic Support: multi-agent diabetes-risk advisory system (advisory only)**  
-Sandip Dey · Repo: `sandipdey2/integrative-healthcare-diagnostic-system` (branch `main`) · All numbers from `python -m ihds.pipeline`, seed 42
+Sandip Dey · Repo: `sandipdey2/integrative-healthcare-diagnostic-system` (branch `main`) · Template-mode numbers from `python -m ihds.pipeline` (seed 42); live LLM numbers from `scripts/run_llm_eval.py`
 
 ## 60-second elevator pitch
 
@@ -27,7 +27,7 @@ I used the Pima Indians Diabetes Database (Smith et al., 1988) from OpenML #37: 
 It provides explicit nodes, conditional edges, typed shared state with reducers and a recursion limit (30). That makes the control flow inspectable, testable and exportable as a diagram. I had already used it in my Agentic RAG project, so I reused a pattern I had validated.
 
 **6. Why is the supervisor rule-based instead of LLM-driven?**
-The routing logic is simple and safety-relevant: risk, then evidence, then uncertainty only when needed, then the writer. Rules make every path deterministic and unit-testable (19 agent tests), cost nothing and work offline. LLM routing would add latency, cost and non-determinism without a clear benefit here. The tradeoff is less flexibility for unanticipated requests.
+The routing logic is simple and safety-relevant: risk, then evidence, then uncertainty only when needed, then the writer. Rules make every path deterministic and unit-testable (20 offline agent tests), cost nothing and work offline. LLM routing would add latency, cost and non-determinism without a clear benefit here. The tradeoff is less flexibility for unanticipated requests.
 
 **7. Is this really multi-agent if the supervisor is rules?**
 Yes. In the sense LangGraph uses, it has separate specialist nodes with their own tools and responsibilities, a router and a critic that can reject work. I am careful not to overclaim: the agents are nodes in one process sharing one state. They are not autonomous services, and the LLM only writes text.
@@ -42,7 +42,7 @@ No. They are LangChain `StructuredTool`s called in-process: `risk_score`, `expla
 It keeps only per-request state. The trace and tool log are accumulated within one run and shown in the UI. There is no long-term or cross-session memory, which is intentional because I do not want to store patient inputs.
 
 **11. Where is the LLM used?**
-Only in `writer_agent`. It uses gpt-4o-mini through `langchain-openai` (temperature 0) when `OPENAI_API_KEY` is set; otherwise it uses a deterministic template. All reported results use the template. The LLM path is unit-tested with `FakeListChatModel` and a broken client, but I have not yet verified a live gpt-4o-mini run.
+Only in `writer_agent`. It uses gpt-4o-mini through `langchain-openai` (temperature 0) when `OPENAI_API_KEY` is set; otherwise it uses a deterministic template. It honors `OPENAI_API_BASE`, so it runs through Vocareum's OpenAI-compatible endpoint. I verified it live: four Vocareum tests pass (ping, full graph run with the LLM writer approved, unsafe request refused before any LLM call), and a 30-case live evaluation is summarised in T2. Scenario numbers elsewhere come from reproducible template runs.
 
 ## C. Integration of prior projects
 
@@ -91,7 +91,7 @@ I ran all 154 test records through the graph: 151 were released and 3 were block
 They are used only for stress tests and the uncertainty neighbourhood, never for training. Evidently found that 5 of 8 synthetic features drifted from real data (Pregnancies, SkinThickness, Insulin, DPF and Age), because the GAN does not reproduce the median-imputation spikes. Glucose, BloodPressure and BMI did not drift.
 
 **24. How did you test the system?**
-There are 42 pytest tests, all passing on Python 3.11 and 3.12. They cover data and statistics, the model, GAN gradients, the guard, retrieval and reviewer, graph structure against the documented diagram, routing, every agent node, the loop cap, LLM fallback, Evidently reports, the end-to-end pipeline and the Streamlit app through `AppTest`. The Docker image builds and passes its healthcheck. The details are in `TESTING.md`.
+There are 47 pytest tests: 43 offline tests (passing on Python 3.11 and 3.12) and 4 live `vocareum` tests that call gpt-4o-mini and are skipped without a key; all 47 pass with the key. They cover data and statistics, the model, GAN gradients, the guard, retrieval and reviewer, graph structure against the documented diagram, routing, every agent node, the loop cap, LLM fallback, Evidently reports, the end-to-end pipeline and the Streamlit app through `AppTest`. The Docker image builds and passes its healthcheck. The details are in `TESTING.md`.
 
 ## F. Safety, ethics and deployment
 
@@ -110,7 +110,7 @@ It is rule-based. It checks ranges and required fields, and uses regex patterns 
 It would need external and subgroup validation, an intent classifier instead of keyword rules, live drift alerts with owners, clinical governance of the knowledge base, authentication and audit logging, privacy compliance and a regulatory assessment under FDA clinical-decision-support guidance.
 
 **28. How is it deployed?**
-The Streamlit app (`app.py`) can be deployed to Streamlit Community Cloud from `main`, using Python 3.11 and an optional `OPENAI_API_KEY` secret. For Azure, a `python:3.11-slim` Docker image on port 8501 is deployed with `deploy/azure/deploy_aca.sh` (`az acr build` + `az containerapp create`). An ACI alternative and a cleanup script are included. Evidently reports are generated during the image build.
+The Streamlit app (`app.py`) can be deployed to Streamlit Community Cloud from `main`, using Python 3.11 and optional `OPENAI_API_KEY` and `OPENAI_API_BASE` secrets. For Azure, a `python:3.11-slim` Docker image on port 8501 is deployed with `deploy/azure/deploy_aca.sh` (`az acr build` + `az containerapp create`). With `WITH_OPENAI=1` the script stores the key as a Container Apps secret and sets `OPENAI_API_BASE` as an environment variable. An ACI alternative and a cleanup script are included. Evidently reports are generated during the image build.
 
 ## G. Failure cases, limitations and next steps
 
@@ -118,13 +118,13 @@ The Streamlit app (`app.py`) can be deployed to Streamlit Community Cloud from `
 The confident false negative: a diabetic patient with glucose 78, BMI 31 and age 26 received p = 0.077. Low glucose dominates the linear model. This is why the output is advisory and shows the drivers, so a clinician can see that the low risk depends almost entirely on one value.
 
 **30. What are the main limitations?**
-There is one small dataset from one population, the hand-written knowledge base has only 14 rows, the keyword guard can be bypassed by paraphrase, the GAN has fidelity gaps, there is no live LLM verification and the routing is rule-based. Also, there is no EHR integration, authentication or persistent storage.
+There is one small dataset from one population, the hand-written knowledge base has only 14 rows, the keyword guard can be bypassed by paraphrase, the GAN has fidelity gaps, live LLM drafts are less grounded than the template (mean 0.303 vs 0.549) and the routing is rule-based. Also, there is no EHR integration, authentication or persistent storage.
 
 **31. What would you do next?**
 
 1. Validate on external, multi-ethnic data and report subgroup metrics.
 2. Replace the keyword guard with an embedding or LLM intent classifier and add the paraphrase cases.
-3. Run and evaluate the gpt-4o-mini writer live, using Evidently text evaluations.
+3. Add claim-level citation checks to the reviewer, since one live draft cited a real snippet for an unrelated claim.
 4. Schedule Evidently drift checks on production inputs, with alerting.
 5. Calibrate probabilities and tune the threshold together with clinicians.
 6. Expand the knowledge base with clinical review.
@@ -135,7 +135,7 @@ There is one small dataset from one population, the hand-written knowledge base 
 The routing is rule-based, and I say so. What makes it agentic is the structure: separate tool-using specialists, a shared typed state, a hub-and-spoke supervisor that decides from state, and a critic that can reject work and trigger a bounded loop. The diagram is exported from the compiled graph and tested, so it shows exactly what runs.
 
 **T2. "Did you ever run the LLM?"**
-Not live. All reported results use the deterministic template. The LLM path, including revisions, error fallback and model selection, is unit-tested with offline stand-in models. Setting `OPENAI_API_KEY` enables gpt-4o-mini, and I list a live evaluation as the next step.
+Yes, live, through Vocareum's endpoint. On 30 held-out cases, gpt-4o-mini drafts were approved first time in 23 cases and after one revision in 5; 2 hit the revision cap and were escalated with the template. All 11 rejections were for low grounding. Evidently showed 100% citation and disclaimer rates and no forbidden phrases, but mean grounding of 0.303 against 0.549 for the template, and 4.7 s against 0.01 s per case. So the reviewer loop did real work: it caught weakly grounded drafts the model produced on its own.
 
 **T3. "A precision of 0.60 means 40% of positive flags are wrong. Is that acceptable?"**
 For an advisory screening prompt that leads to a cheap confirmatory test, yes. That is the recall-first trade-off. For a diagnostic claim, no, and the system makes no diagnostic claim.

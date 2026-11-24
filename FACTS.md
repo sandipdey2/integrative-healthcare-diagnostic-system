@@ -41,7 +41,7 @@ all 8 features p < 1e-5.
 - Nodes: safety_guard, supervisor, risk_agent, evidence_agent, uncertainty_agent, writer_agent, reviewer (+ refuse, finalize).
 - Supervisor is rule-based (hub-and-spoke); uncertainty_agent only when 0.40 ≤ p < 0.60.
 - Reviewer → writer revision loop, MAX_REVISIONS = 2 (writer ≤ 3 runs) → template + escalated=True. recursion_limit 30.
-- Writer: gpt-4o-mini (langchain-openai, temperature 0) only if OPENAI_API_KEY; else deterministic template.
+- Writer: gpt-4o-mini (langchain-openai, temperature 0) only if OPENAI_API_KEY; base URL from OPENAI_BASE_URL / OPENAI_API_BASE (Vocareum https://openai.vocareum.com/v1); else deterministic template.
 - Typed state (TypedDict) with append-only trace and tool_calls; tools are LangChain StructuredTools (in-process).
 - Diagram exported from code: docs/architecture.mmd/.png; test asserts they match.
 
@@ -63,14 +63,22 @@ all 8 features p < 1e-5.
 1. Guard paraphrase bypass (keyword brittleness). 2. Glucose calibration drift → precision 0.603→0.527, caught by Evidently.
 3. Confident false negative: Glucose 78, BMI 31, age 26, diabetic, p=0.077. 4. GAN fidelity on imputation-heavy features.
 
+## Live LLM (gpt-4o-mini-2024-07-18 via Vocareum, 2026-11-24)
+- Live tests (`pytest -m vocareum`): 4/4 passed — ping, full graph with LLM writer approved + disclaimer, unsafe request refused before LLM.
+- 30 held-out cases (scripts/run_llm_eval.py): first-draft approval 23/30 (76.7%); 5 approved after 1 revision; 2 escalated after 3 rejected drafts (template released); 11 rejections, all grounding < 0.2; final approval 30/30.
+- Evidently TextEvals: citation 100%, disclaimer 100%, forbidden phrases 0 (LLM and template).
+- Mean grounding LLM 0.303 (min 0.200) vs template 0.549 (min 0.392); citations 2.7 vs 3.0; length 771 vs 1001 chars; latency 4.7 s vs 0.01 s per case; drift test LLM vs template on grounding & citations p < 0.001.
+- Notebook agentic_system.ipynb executed live: low (#8, p=0.132), borderline (#2, p=0.439, uncertainty agent range 0.208–0.699), high (#7, p=0.962), refusal (metformin dose), revision loop (#1: 1 revision), cap (#3: 3 rejections → escalated).
+- Failure insight: one live draft cited [K4] (BMI) for the pregnancies driver — valid id, wrong claim; reviewer can't detect.
+
 ## Tests
-- 42 pytest tests, all passing (py3.11 and fresh py3.12 venv); Docker image builds, healthcheck healthy.
+- 47 pytest tests: 43 offline (py3.11 + fresh py3.12) + 4 live `vocareum` (skipped without key); all pass with key. Docker image builds, healthcheck healthy.
 
 ## Honest-scope statements (use these words)
 - Rule-based supervisor; LLM only writes text and is optional.
 - In-process LangChain tools; no MCP server; single process; per-request state only (no long-term memory).
-- Offline runs use the template writer, so the revision loop is exercised in tests/evaluation with a stand-in LLM.
-- No live gpt-4o-mini call has been verified on the box (no key used); the LLM path is unit-tested with fake models.
+- Offline runs use the template writer; scenario numbers above are template runs (reproducible).
+- Live gpt-4o-mini verified via Vocareum on 2026-11-24 (see Live LLM section); the revision loop fires naturally with the live model.
 
 ## References usable in the paper (APA 7)
 - American Diabetes Association Professional Practice Committee. (2024). 2. Diagnosis and classification of diabetes: Standards of Care in Diabetes—2024. *Diabetes Care, 47*(Suppl. 1), S20–S42. https://doi.org/10.2337/dc24-S002

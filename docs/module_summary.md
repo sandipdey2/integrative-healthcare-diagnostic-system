@@ -22,7 +22,7 @@ The system is new work, but each core component deliberately reuses a method I d
 | generative-mnist | MLP generator/discriminator GAN (LeakyReLU 0.2, BCE, Adam 2e-4, β = 0.5/0.999), re-implemented in NumPy for tabular data | `ihds/gan.py` | `synthetic_neighbors` |
 | agentic-rag-system | LangGraph StateGraph with typed state, input guard, TF-IDF retrieval over a CSV knowledge base, reviewer with grounding score, trace logging | `ihds/agents.py`, `ihds/workflow.py`, `data/clinical_knowledge.csv` | `rag_search` |
 
-My Statistical Analysis project taught me to test group differences before modelling rather than assume them. Here, Welch t-tests confirm that all eight features separate diabetic from non-diabetic patients (p < 1e-5); glucose has the largest effect (142.3 vs 110.6 mg/dL, d = 1.16). The evidence agent quotes these population statistics for the patient's top risk driver, giving the clinician context beyond a single number.
+My Statistical Analysis project taught me to test group differences before modelling rather than assume them. Here, Welch t-tests confirm that all eight features separate diabetic from non-diabetic patients (p < 1e-5); glucose has the largest effect (142.3 vs 110.6 mg/dL, d = 1.16). The evidence agent quotes these population statistics for the patient's top risk driver.
 
 My Breast Cancer Classification project showed that a scaled logistic regression is a strong, auditable baseline for medical tabular data. I kept that pipeline and metric set, and added `class_weight="balanced"` and median imputation for the impossible zeros.
 
@@ -47,7 +47,7 @@ At start-up, `ihds/pipeline.py` loads and cleans the data, runs the statistics, 
 
 **Key decisions and tradeoffs.** Logistic regression was chosen over more flexible models because its log-odds contributions are exact, which makes the explanations faithful rather than approximate (Amann et al., 2020). The cost is a ceiling on accuracy (test ROC-AUC 0.813). Class balancing trades precision for recall because, in screening, a missed case usually costs more than an extra confirmatory test. The supervisor uses rules rather than an LLM, so routing is deterministic and every path can be tested; the cost is less flexibility for unanticipated requests. The LLM only writes text and is optional, so the system runs offline, at no cost and reproducibly. The NumPy GAN keeps the container small but reproduces some features poorly.
 
-**Honest scope.** All agents run in one Python process. Tools are in-process LangChain tools; there is no MCP server, gateway or message bus, and there is no memory beyond the single request. A live gpt-4o-mini run has not yet been verified: the LLM path is unit-tested with offline stand-in models, and all reported results use the template writer. The system has no EHR integration or authentication and does not store patient inputs. The Streamlit app is packaged in a Docker image with deployment scripts for Azure Container Apps.
+**Honest scope.** All agents run in one Python process. Tools are in-process LangChain tools; there is no MCP server, gateway or message bus, and there is no memory beyond the single request. The gpt-4o-mini writer was verified live through Vocareum's OpenAI-compatible endpoint (results below); without a key the template writer is used, and the scenario results above it come from template runs. The system has no EHR integration or authentication and does not store patient inputs.
 
 ## Ethical Considerations and Responsible AI
 
@@ -63,13 +63,15 @@ At start-up, `ihds/pipeline.py` loads and cleans the data, runs the statistics, 
 
 ## Evaluation and Reflection
 
-All results are reproducible with `python -m ihds.pipeline` (seed 42), and 42 automated tests pass.
+Template-mode results are reproducible with `python -m ihds.pipeline` (seed 42). All 47 automated tests pass, including four live Vocareum tests.
 
 **Model.** On the held-out test set (n = 154), the model reached accuracy 0.734, precision 0.603, recall 0.704, F1 0.650 and ROC-AUC 0.813. Training ROC-AUC was 0.851, a small gap that suggests limited overfitting. Glucose (odds ratio 3.27 per SD) and BMI (2.03) dominate, which is clinically plausible.
 
-**Workflow scenarios.** Of 154 test records, 151 were released and 3 were correctly blocked for missing BMI. The reviewer approved all 151 drafts (mean grounding 0.551). Risk bands were ordered as intended: observed diabetes rates were 9.5% in the low band, 47.2% in the moderate band and 59.6% in the high band. All 27 borderline cases were routed to the uncertainty agent. All 500 GAN-generated cases ran without failure. With an always-unsafe stand-in LLM, the revision cap held: three writer attempts were made, the template was released and the case was escalated.
+**Workflow scenarios.** Of 154 test records, 151 were released and 3 were correctly blocked for missing BMI. The reviewer approved all 151 drafts (mean grounding 0.551). Risk bands were ordered as intended: observed diabetes rates were 9.5% in the low band, 47.2% in the moderate band and 59.6% in the high band. All 27 borderline cases were routed to the uncertainty agent. With an always-unsafe stand-in LLM, the revision cap held: three writer attempts were made, the template was released and the case was escalated.
 
-**Evidently monitoring.** On the hold-out data, 0 of 8 features drifted. Evidently's text evaluation of the 151 drafts found 100% citation and disclaimer rates and no forbidden phrases.
+**Evidently monitoring.** On the hold-out data, 0 of 8 features drifted. The 151 template drafts had 100% citation and disclaimer rates and no forbidden phrases.
+
+**Live LLM writer.** On 30 held-out cases run live with gpt-4o-mini, the reviewer approved 23 drafts first time and 5 after one revision; 2 cases hit the cap and were escalated with the template. All 11 rejections were for grounding below 0.2. Evidently found 100% citation and disclaimer rates and no forbidden phrases, but LLM drafts were less grounded than template drafts (mean 0.303 vs 0.549) and took 4.7 s rather than 0.01 s. One draft attached a valid citation to an unrelated claim, which the reviewer cannot detect.
 
 **Did the system meet its goals?** Mostly. It produces grounded, explainable, auditable advisory drafts, blocks incomplete records and fails safely when the writer misbehaves. It does not reach diagnostic-grade accuracy, which was never the aim.
 
@@ -80,13 +82,13 @@ All results are reproducible with `python -m ihds.pipeline` (seed 42), and 42 au
 3. *Confident false negative.* A diabetic patient with glucose 78 mg/dL, BMI 31 and age 26 received p = 0.077 because low glucose dominates the linear model.
 4. *GAN fidelity drift.* Evidently found that 5 of 8 synthetic features drifted from the real data (Pregnancies, SkinThickness, Insulin, DPF and Age). The generator does not reproduce the imputation spikes, so synthetic rows are never used for training.
 
-**Strengths and limitations.** The design is strongest where components check each other: the reviewer constrains the writer, Evidently monitors inputs and outputs, and the GAN probes robustness. Its limitations are a single small dataset, a 14-row hand-written knowledge base, a brittle keyword guard and an unverified live LLM path.
+**Strengths and limitations.** The design is strongest where components check each other: the reviewer constrains the writer, Evidently monitors inputs and outputs, and the GAN probes robustness. Its limitations are a single small dataset, a 14-row hand-written knowledge base, a brittle keyword guard, and LLM drafts that are fluent but less grounded than the template.
 
-**Performance, complexity and responsible use.** A gradient-boosted model or an LLM-routed supervisor might improve accuracy or flexibility, but each would weaken auditability and testability. The revision loop adds latency only when a draft fails. I deliberately chose transparency and safe failure over marginal performance gains.
+**Performance, complexity and responsible use.** A gradient-boosted model or an LLM-routed supervisor might improve accuracy or flexibility, but each would weaken auditability and testability. I deliberately chose transparency and safe failure over marginal performance gains.
 
 ## Professional Relevance
 
-This project reflects the work of an applied AI engineer in a regulated industry. It required framing a clinical problem with its constraints, choosing interpretable models deliberately, orchestrating specialised agents with explicit safety checks, monitoring data and model outputs for drift, and documenting honestly what the system does and does not do. The repository includes typed, tested code (42 tests), pinned requirements, a Docker image, deployment instructions for Streamlit Community Cloud and scripts for Azure Container Apps, Evidently reports and a graph diagram tested against the code. Responding to reviewer feedback by making the architecture match the code also strengthened a habit that matters in industry: claims must be verifiable from the system itself.
+This project reflects the work of an applied AI engineer in a regulated industry. It required framing a clinical problem with its constraints, choosing interpretable models deliberately, orchestrating specialised agents with explicit safety checks, monitoring data and model outputs for drift, and documenting honestly what the system does and does not do. The repository includes tested code (47 tests, four live against gpt-4o-mini), pinned requirements, Docker, Streamlit and Azure deployment instructions, Evidently reports and a graph diagram tested against the code. Responding to reviewer feedback by making the architecture match the code also strengthened a habit that matters in industry: claims must be verifiable from the system itself.
 
 ## References
 
