@@ -91,7 +91,7 @@ I ran all 154 test records through the graph: 151 were released and 3 were block
 They are used only for stress tests and the uncertainty neighbourhood, never for training. Evidently found that 5 of 8 synthetic features drifted from real data (Pregnancies, SkinThickness, Insulin, DPF and Age), because the GAN does not reproduce the median-imputation spikes. Glucose, BloodPressure and BMI did not drift.
 
 **24. How did you test the system?**
-There are 47 pytest tests: 43 offline tests (passing on Python 3.11 and 3.12) and 4 live `vocareum` tests that call gpt-4o-mini and are skipped without a key; all 47 pass with the key. They cover data and statistics, the model, GAN gradients, the guard, retrieval and reviewer, graph structure against the documented diagram, routing, every agent node, the loop cap, LLM fallback, Evidently reports, the end-to-end pipeline and the Streamlit app through `AppTest`. The Docker image builds and passes its healthcheck. The details are in `TESTING.md`.
+There are 47 pytest tests: 43 offline tests (passing on Python 3.11, 3.12 and 3.14) and 4 live `vocareum` tests that call gpt-4o-mini and are skipped without a key; all 47 pass with the key. They cover data and statistics, the model, GAN gradients, the guard, retrieval and reviewer, graph structure against the documented diagram, routing, every agent node, the loop cap, LLM fallback, Evidently reports, the end-to-end pipeline and the Streamlit app through `AppTest`. The Docker image builds and passes its healthcheck. The details are in `TESTING.md`.
 
 ## F. Safety, ethics and deployment
 
@@ -110,7 +110,7 @@ It is rule-based. It checks ranges and required fields, and uses regex patterns 
 It would need external and subgroup validation, an intent classifier instead of keyword rules, live drift alerts with owners, clinical governance of the knowledge base, authentication and audit logging, privacy compliance and a regulatory assessment under FDA clinical-decision-support guidance.
 
 **28. How is it deployed?**
-The Streamlit app (`app.py`) can be deployed to Streamlit Community Cloud from `main`, using Python 3.11 and optional `OPENAI_API_KEY` and `OPENAI_API_BASE` secrets. For Azure, a `python:3.11-slim` Docker image on port 8501 is deployed with `deploy/azure/deploy_aca.sh` (`az acr build` + `az containerapp create`). With `WITH_OPENAI=1` the script stores the key as a Container Apps secret and sets `OPENAI_API_BASE` as an environment variable. An ACI alternative and a cleanup script are included. Evidently reports are generated during the image build.
+The Streamlit app (`app.py`) can be deployed to Streamlit Community Cloud from `main` (Python 3.14 on Cloud; pins install from wheels on 3.11–3.14), with optional `OPENAI_API_KEY` and `OPENAI_API_BASE` secrets. For Azure, a `python:3.11-slim` Docker image on port 8501 is deployed with `deploy/azure/deploy_aca.sh` (`az acr build` + `az containerapp create`). With `WITH_OPENAI=1` the script stores the key as a Container Apps secret and sets `OPENAI_API_BASE` as an environment variable. An ACI alternative and a cleanup script are included. Evidently reports are generated during the image build.
 
 ## G. Failure cases, limitations and next steps
 

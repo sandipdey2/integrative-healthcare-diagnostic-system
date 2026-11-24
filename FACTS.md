@@ -72,7 +72,7 @@ all 8 features p < 1e-5.
 - Failure insight: one live draft cited [K4] (BMI) for the pregnancies driver — valid id, wrong claim; reviewer can't detect.
 
 ## Tests
-- 47 pytest tests: 43 offline (py3.11 + fresh py3.12) + 4 live `vocareum` (skipped without key); all pass with key. Docker image builds, healthcheck healthy.
+- 47 pytest tests: 43 offline (py3.11, 3.12, 3.14) + 4 live `vocareum` (skipped without key); all pass with key. Docker image builds, healthcheck healthy.
 
 ## Honest-scope statements (use these words)
 - Rule-based supervisor; LLM only writes text and is optional.

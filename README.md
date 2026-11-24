@@ -54,7 +54,7 @@ Full numbers: `evaluation/results.json`, `monitoring/reports/`, and [`TESTING.md
 ## Run locally
 
 ```bash
-python3.11 -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv          # Python 3.11–3.14 && source .venv/bin/activate
 pip install -r requirements-dev.txt
 pytest -q                                   # 43 offline tests (+4 live tests skipped without a key)
 python -m ihds.pipeline                     # evaluation + Evidently reports
@@ -78,7 +78,7 @@ For Streamlit, the same two values can go in `.streamlit/secrets.toml` (git-igno
 ## Deploy
 
 - **Streamlit Community Cloud:** repo `sandipdey2/integrative-healthcare-diagnostic-system`, branch `main`,
-  main file `app.py`, Python 3.11 (Advanced settings). Secrets (optional, TOML):
+  main file `app.py`, any Python 3.11–3.14 (Cloud's default 3.14 works; all pins have 3.14 wheels). Secrets (optional, TOML):
   `OPENAI_API_KEY = "voc-..."` and `OPENAI_API_BASE = "https://openai.vocareum.com/v1"`.
 - **Azure Container Apps:** `Dockerfile` (port 8501) + [`deploy/azure/README.md`](deploy/azure/README.md)
   (`az acr build` + `az containerapp create`; ACI alternative and cleanup scripts included). With

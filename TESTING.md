@@ -1,8 +1,23 @@
 # Testing — final test plan and results
 
-Run date: 2026-11-24. Environment: Python 3.11.x (also re-run in a fresh Python 3.12 venv from
-`requirements-dev.txt`: same result). Offline suite runs with no API key; the live suite used a Vocareum key
+Run date: 2026-11-24. Offline suite runs with no API key; the live suite used a Vocareum key
 (`OPENAI_API_BASE=https://openai.vocareum.com/v1`).
+
+### Environments and pinned versions
+
+`requirements.txt` installs **from binary wheels only** (`pip install --only-binary=:all: -r requirements.txt`)
+on Python 3.11, 3.12 and 3.14 (Streamlit Community Cloud ignores the 3.11 setting and runs 3.14.10).
+
+| Python | wheels-only install | offline pytest | live `vocareum` | headless Streamlit |
+|---|---|---|---|---|
+| 3.14.10 | ✅ (uv and pip) | 43 passed, 4 skipped | 4 passed (full suite 47/47 with key) | health `ok`, HTTP 200 |
+| 3.12 | ✅ | 43 passed, 4 skipped | — | — |
+| 3.11 (also Docker `python:3.11-slim`) | ✅ | 43 passed, 4 skipped | 4 passed | container healthy |
+
+Pins: streamlit 1.67.0, evidently 0.7.23, pandas 2.3.3, numpy 2.3.5, pillow 11.3.0, scikit-learn 1.7.2,
+scipy 1.16.3, pyarrow 26.0.1, openai 3.58.0, langgraph 1.2.24, langchain-core 1.8.4, langchain-openai 1.8.5.
+pandas stays < 3 because evidently 0.7.23 imports a pandas-2 internal. Re-running `python -m ihds.pipeline` on
+3.14 with these pins reproduces every reported number (only Welch p-values differ in the 15th significant digit).
 
 ```bash
 pip install -r requirements-dev.txt
