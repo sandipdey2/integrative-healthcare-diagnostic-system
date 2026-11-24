@@ -1,0 +1,35 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	safety_guard(safety_guard)
+	refuse(refuse)
+	supervisor(supervisor)
+	risk_agent(risk_agent)
+	evidence_agent(evidence_agent)
+	uncertainty_agent(uncertainty_agent)
+	writer_agent(writer_agent)
+	reviewer(reviewer)
+	finalize(finalize)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> safety_guard;
+	evidence_agent --> supervisor;
+	reviewer -.-> finalize;
+	reviewer -.-> writer_agent;
+	risk_agent --> supervisor;
+	safety_guard -.-> refuse;
+	safety_guard -.-> supervisor;
+	supervisor -.-> evidence_agent;
+	supervisor -.-> risk_agent;
+	supervisor -.-> uncertainty_agent;
+	supervisor -.-> writer_agent;
+	uncertainty_agent --> supervisor;
+	writer_agent --> reviewer;
+	finalize --> __end__;
+	refuse --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
