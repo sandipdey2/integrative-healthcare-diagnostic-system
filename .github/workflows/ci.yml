@@ -1,0 +1,110 @@
+# GitHub Actions CI/CD for IHDS.
+# To enable: on github.com open the repo -> Add file -> Create new file, name it .github/workflows/ci.yml,
+# paste this file's contents and commit to main (see docs/MLOPS.md, "Turning on GitHub Actions").
+# It is kept here as an example because the token used to push this repo has no `workflow` scope.
+#
+# Jobs: lint (ruff) -> test (52 offline pytest tests + /metrics test) and data-validation + mlops tests
+# (Great Expectations gate, MLflow / Deepchecks / SHAP / Fairlearn / Feast / Prefect tests, `dvc repro`)
+# -> docker (build the app image and smoke-test /health and /metrics) -> deploy (optional, manual only).
+name: ci-cd
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: "Run the optional Azure Container Apps deploy job"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install ruff==0.17.6
+      - run: ruff check .
+
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      # The 4 live `vocareum` tests skip because no OPENAI_API_KEY is set; MLOps tests skip (tools not installed).
+      - run: pytest -q
+
+  data-validation:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements-mlops.txt
+      - name: Great Expectations gate (fails the job if any expectation fails)
+        run: python -m ihds.mlops.validate
+      - name: MLOps tests (MLflow, Deepchecks, SHAP, Fairlearn, Feast, Prefect, configs)
+        run: pytest -q tests/test_mlops.py
+      - name: DVC pipeline (local cache only, no remote)
+        run: dvc repro
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mlops-reports
+          path: |
+            reports/*.json
+            reports/shap_summary.png
+            reports/deepchecks/*.html
+
+  docker:
+    needs: [test, data-validation]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker build
+        run: docker build -t ihds:${{ github.sha }} .
+      - name: Smoke test (FastAPI /health and /metrics inside the image)
+        run: |
+          docker run -d --name ihds-api -p 8000:8000 ihds:${{ github.sha }} \
+            uvicorn api.main:app --host 0.0.0.0 --port 8000
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8000/health && break; sleep 3; done
+          curl -fsS http://127.0.0.1:8000/metrics | grep ihds_http_requests_total
+          docker rm -f ihds-api
+
+  # Optional CD. Runs only when started by hand (Actions -> ci-cd -> Run workflow, deploy = true) AND the
+  # repo has these secrets: AZURE_CREDENTIALS (service-principal JSON for azure/login), ACR_NAME,
+  # AZURE_RESOURCE_GROUP. Vocareum lab accounts usually cannot create service principals, so this job has
+  # not been run; the live Azure app was deployed with deploy/azure/deploy_aca.sh from Cloud Shell.
+  deploy:
+    needs: docker
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy
+    runs-on: ubuntu-latest
+    environment: azure
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Build in ACR and update the Container App
+        run: |
+          az acr build -r "${{ secrets.ACR_NAME }}" -t ihds:${{ github.sha }} .
+          az containerapp update -n ihds-app -g "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+            --image "${{ secrets.ACR_NAME }}.azurecr.io/ihds:${{ github.sha }}"
