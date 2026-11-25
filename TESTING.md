@@ -117,6 +117,15 @@ which the reviewer's checks cannot detect.
 
 ## 5. Manual checks before submission
 
-- [ ] Streamlit Cloud URL opens and "Run advisory workflow" returns a draft.
-- [ ] Azure Container App URL opens; `curl https://<fqdn>/_stcore/health` returns `ok`.
-- [x] Live: with the Vocareum key set, the draft source shows `llm` and the reviewer approves it (verified 2026-11-24).
+- [x] Streamlit Cloud URL opens and "Run advisory workflow" returns a draft (https://ihds-diabetes-advisor.streamlit.app/; live LLM run verified 2026-11-25 — see §6). Unauthenticated curl of `/_stcore/health` returned HTTP 303 to Streamlit's app-auth gate, so that health check was not used as evidence.
+- [x] Azure Container App URL opens; `curl https://ihds-app.bluebay-94b3aae3.westus.azurecontainerapps.io/_stcore/health` returns `ok` (HTTP 200, verified 2026-11-25).
+- [x] Live: with the Vocareum key set, the draft source shows `llm` and the reviewer can approve or reject it (verified 2026-11-24 in the 30-case eval and 2026-11-25 on both live hosts; outcomes vary run to run).
+
+## 6. Deployment smoke tests (2026-11-25)
+
+| Target | Check | Observed | Pass? |
+|---|---|---|---|
+| Streamlit Community Cloud, https://ihds-diabetes-advisor.streamlit.app/ | In-browser "Run advisory workflow" on default inputs with the live LLM (graph in-process, tools via MCP stdio) | First gpt-4o-mini draft rejected (grounding 0.19); second approved (0.207); draft source `llm`. LLM output varies run to run. | ✅ |
+| Azure Container Apps (West US), https://ihds-app.bluebay-94b3aae3.westus.azurecontainerapps.io | `GET /_stcore/health`; default-input assessment through the in-container FastAPI + MCP HTTP stack (`scripts/start_all.sh`) | Health `ok` (HTTP 200). Sidebar: "Workflow via REST API http://127.0.0.1:8000 · tools: mcp-http", "LLM key configured on the API server". Risk p = 0.604, high band, top driver Glucose; evidence K7, K2, K1. Tools `risk_score`, `explain_contributions`, `rag_search`, `population_context` over `mcp-http`. Three gpt-4o-mini drafts rejected for grounding (0.185, 0.182, 0.185); revision cap reached; template draft released (UI grounding 0.703) and case escalated to human review. Screenshots: `docs/screenshots/08_azure_container_app.png`, `docs/screenshots/09_azure_agent_trace.png`. | ✅ |
+
+The Azure escalation is the designed fail-safe, not a host failure: the API, MCP tools and live writer all ran; the reviewer enforced the 0.2 grounding threshold and `finalize` released the template. The result-page "approved" badge is the template's review score. This matches the offline loop-cap test and the 2/30 escalations in the Vocareum evaluation (§2b).

@@ -9,7 +9,13 @@ The image build runs `python -m ihds.pipeline`,
 so the Evidently reports in `monitoring/reports/` are already present when the app starts; the
 **Monitoring (Evidently)** tab can also regenerate them on demand.
 
+Live deployment (West US, `main` image, verified 2026-11-25): 
+https://ihds-app.bluebay-94b3aae3.westus.azurecontainerapps.io 
+(`GET /_stcore/health` returned `ok`, HTTP 200). Lab resource-group and subscription identifiers are not recorded here.
+
 ## 1. Open Cloud Shell (Bash) and get the code
+
+Cloud Shell may open in PowerShell (`PS ...>`). The commands below are Bash: type `bash` and press Enter first.
 
 ```bash
 git clone https://github.com/sandipdey2/integrative-healthcare-diagnostic-system.git
@@ -38,7 +44,16 @@ bash deploy/azure/deploy_aca.sh
 
 The key is stored as the Container Apps secret `openai-key` and exposed as `OPENAI_API_KEY=secretref:openai-key`;
 `OPENAI_API_BASE` is a plain environment variable. The script also works on an existing app (it sets the secret
-and env vars on update). Check: the app sidebar shows "LLM key detected · endpoint: https://openai.vocareum.com/v1".
+and env vars on update). After a secret change, restart the active revision:
+
+```bash
+REV=$(az containerapp revision list -n ihds-app -g $RG --query "[?properties.active].name | [0]" -o tsv)
+az containerapp revision restart -n ihds-app -g $RG --revision "$REV"
+```
+
+Check: with `scripts/start_all.sh`, Streamlit talks to the in-container API, so the sidebar shows
+"LLM key configured on the API server" (and "Workflow via REST API http://127.0.0.1:8000 · tools: mcp-http").
+A local Streamlit process that has the key in its own environment shows "LLM key detected · endpoint: ...".
 
 ## 3. Verify
 
@@ -70,7 +85,9 @@ Re-deploying a changed image to an existing app: `export TAG=v2` before `bash de
 | `AuthorizationFailed` creating a resource group | Do not create one; use the existing `Regroup_*` group (`export RG=...`). |
 | `TasksOperationsNotAllowed` on `az acr build` | ACR Tasks are disabled on some subscriptions. Build locally with Docker Desktop: `docker build -t $ACR.azurecr.io/ihds:v1 . && az acr login -n $ACR && docker push $ACR.azurecr.io/ihds:v1`, then re-run the script (the build step can be commented out). |
 | Region quota / `not available in location` | `export LOCATION=westus2` (or another allowed region) and re-run. A previous lab had 0 App Service quota in East US; Container Apps quota is separate. |
-| `MissingSubscriptionRegistration` for Microsoft.App | `az provider register -n Microsoft.App --wait` |
+| `AuthorizationFailed` on `Microsoft.App/register/action` (or OperationalInsights) | Common on lab accounts that cannot register subscription providers. The deploy script continues; ignore it unless a later create step fails with `MissingSubscriptionRegistration`. |
+| `MissingSubscriptionRegistration` for Microsoft.App | `az provider register -n Microsoft.App --wait` (may itself be denied on a lab subscription). If registration is blocked, use the ACI script below if that SKU is allowed. |
+| `export` is not recognized | Cloud Shell is in PowerShell. Type `bash`, then re-run the `export` / `read` lines (the repo `cd` may need repeating; Bash starts in `~`). |
 | Token expired / `AADSTS` errors | `az login --use-device-code` |
 | App shows "Please wait..." forever | Streamlit needs WebSockets; Container Apps ingress supports them. Check `az containerapp logs show`. |
 

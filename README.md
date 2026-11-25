@@ -104,18 +104,29 @@ streamlit run app.py --server.headless true        # sidebar shows "LLM key dete
 For Streamlit, the same two values can go in `.streamlit/secrets.toml` (git-ignored; see
 `.streamlit/secrets.toml.example`). Without a key everything runs with the template writer.
 
+## Live demo
+
+Both deployments serve the `main` branch. LLM drafts vary from run to run.
+
+- **Streamlit Community Cloud:** [ihds-diabetes-advisor.streamlit.app](https://ihds-diabetes-advisor.streamlit.app/). The app runs the graph in-process and spawns the MCP server over stdio (labelled in-process fallback only if the server cannot start). Optional secrets: `OPENAI_API_KEY` and `OPENAI_API_BASE`. A live gpt-4o-mini run (default inputs) rejected the first draft for grounding (0.19) and approved the second (0.207); draft source `llm`.
+- **Azure Container Apps** (West US): [ihds-app.bluebay-94b3aae3.westus.azurecontainerapps.io](https://ihds-app.bluebay-94b3aae3.westus.azurecontainerapps.io). The Docker image runs `scripts/start_all.sh` (MCP HTTP on `127.0.0.1:8765` → FastAPI on `8000` → Streamlit on `8501`). Public ingress is port 8501; the UI calls the in-container API at `http://127.0.0.1:8000`. Verified 2026-11-25: `GET /_stcore/health` returned `ok` (HTTP 200). On the default record the sidebar showed `Workflow via REST API http://127.0.0.1:8000 · tools: mcp-http` and `LLM key configured on the API server`; risk p = 0.604 (high band, top driver Glucose); evidence K7, K2, K1; tools `risk_score`, `explain_contributions`, `rag_search` and `population_context` over `mcp-http`. The writer produced three gpt-4o-mini drafts; the reviewer rejected all three for grounding (0.185, 0.182, 0.185). The revision cap was reached, so `finalize` released the template draft (page grounding 0.703) and marked the case escalated to human review.
+
+![Azure Container Apps — risk assessment result (template released after three rejected LLM drafts)](docs/screenshots/08_azure_container_app.png)
+
+![Azure Container Apps — agent trace and MCP HTTP tool-call log](docs/screenshots/09_azure_agent_trace.png)
+
 ## Deploy
 
 - **Streamlit Community Cloud:** repo `sandipdey2/integrative-healthcare-diagnostic-system`, branch `main`,
   main file `app.py`, any Python 3.11–3.14 (Cloud's default 3.14 works; all pins have 3.14 wheels). The app spawns
   the MCP server as a stdio subprocess (falls back to labelled in-process tools if it cannot). Secrets (optional, TOML):
-  `OPENAI_API_KEY = "voc-..."` and `OPENAI_API_BASE = "https://openai.vocareum.com/v1"`.
+  `OPENAI_API_KEY = "voc-..."` and `OPENAI_API_BASE = "https://openai.vocareum.com/v1"`. Live URL in [Live demo](#live-demo).
 - **Docker:** `docker build -t ihds . && docker run -p 8501:8501 -p 8000:8000 ihds` runs `scripts/start_all.sh`
   (MCP HTTP server on 127.0.0.1:8765 → FastAPI on 8000 → Streamlit on 8501, health-checked).
 - **Azure Container Apps:** the same image (public port 8501; ACI also exposes 8000) + [`deploy/azure/README.md`](deploy/azure/README.md)
   (`az acr build` + `az containerapp create`; ACI alternative and cleanup scripts included). With
   `WITH_OPENAI=1` the key becomes the Container Apps secret `openai-key` (`OPENAI_API_KEY=secretref:openai-key`)
-  and `OPENAI_API_BASE` is set as an environment variable.
+  and `OPENAI_API_BASE` is set as an environment variable. Live URL in [Live demo](#live-demo).
 
 ## Repository map
 

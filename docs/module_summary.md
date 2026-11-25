@@ -71,7 +71,7 @@ Template-mode results are reproducible with `python -m ihds.pipeline` (seed 42).
 
 **Evidently monitoring.** On the hold-out data, 0 of 8 features drifted. The 151 template drafts had 100% citation and disclaimer rates and no forbidden phrases.
 
-**Live LLM writer.** On 30 held-out cases run live with gpt-4o-mini, the reviewer approved 23 drafts first time and 5 after one revision; 2 cases hit the cap and were escalated with the template. All 11 rejections were for grounding below 0.2. Evidently found 100% citation and disclaimer rates and no forbidden phrases, but LLM drafts were less grounded than template drafts (mean 0.303 vs 0.549) and took 4.7 s rather than 0.01 s. One draft attached a valid citation to an unrelated claim, which the reviewer cannot detect.
+**Live LLM writer.** On 30 held-out cases run live with gpt-4o-mini, the reviewer approved 23 drafts first time and 5 after one revision; 2 cases hit the cap and were escalated with the template. All 11 rejections were for grounding below 0.2. Evidently found 100% citation and disclaimer rates and no forbidden phrases, but LLM drafts were less grounded than template drafts (mean 0.303 vs 0.549) and took 4.7 s rather than 0.01 s. One draft attached a valid citation to an unrelated claim, which the reviewer cannot detect. The cap also fired on a later Azure run; a Streamlit Cloud run approved the second draft. Outcomes vary run to run.
 
 **Did the system meet its goals?** Mostly. It produces grounded, explainable, auditable advisory drafts, blocks incomplete records and fails safely when the writer misbehaves. It does not reach diagnostic-grade accuracy, which was never the aim.
 
@@ -88,7 +88,7 @@ Template-mode results are reproducible with `python -m ihds.pipeline` (seed 42).
 
 ## Professional Relevance
 
-This project reflects the work of an applied AI engineer in a regulated industry. It required framing a clinical problem with its constraints, choosing interpretable models deliberately, orchestrating specialised agents with explicit safety checks, monitoring data and model outputs for drift, and documenting honestly what the system does and does not do. The repository includes tested code (56 tests), an MCP tool server, a REST API, Docker, Streamlit and Azure deployment, Evidently reports and a graph diagram tested against the code. Making the architecture match the code reinforced an industry habit: claims must be verifiable from the system itself.
+This project reflects applied AI engineering in a regulated industry: framing a clinical problem, choosing an interpretable model, orchestrating specialised agents with safety checks, monitoring inputs and outputs, and documenting only what the code does. The repository includes 56 tests, an MCP tool server, a REST API, Docker, Evidently reports and a tested architecture diagram. The system is live on Streamlit Community Cloud and Azure Container Apps (West US; URLs in the README). Making the architecture match the code reinforced an industry habit: claims must be verifiable from the system itself.
 
 ## References
 
