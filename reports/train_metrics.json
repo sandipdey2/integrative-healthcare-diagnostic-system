@@ -1,0 +1,16 @@
+{
+  "mlflow_run_id": "8b95d9818eae4b4d94177879cdde1f3c",
+  "experiment": "ihds-risk-model",
+  "model_uri": "models:/m-eb6aabbab4664232b6725bc80053a4a5",
+  "test_accuracy": 0.7338,
+  "test_precision": 0.6032,
+  "test_recall": 0.7037,
+  "test_f1": 0.6496,
+  "test_roc_auc": 0.8126,
+  "test_tn": 75,
+  "test_fp": 25,
+  "test_fn": 16,
+  "test_tp": 38,
+  "cv_roc_auc_mean": 0.8444,
+  "cv_roc_auc_std": 0.0161
+}

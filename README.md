@@ -45,7 +45,7 @@ modelling (GAN), generative AI (optional gpt-4o-mini writer), agentic systems (L
 |---|---|---|
 | MCP tool server | `mcp_server/server.py` (`mcp` 1.30 FastMCP) | Serves `risk_score`, `explain_contributions`, `rag_search`, `population_context`, `synthetic_neighbors` over stdio or streamable HTTP (`/mcp`). Builds the same seeded model/GAN at start-up. |
 | Agents → MCP | `ihds/tool_backends.py` | `langchain-mcp-adapters` loads the MCP tools into the LangGraph agents over one persistent session: a stdio subprocess by default, or `IHDS_MCP_URL` for HTTP. If the server cannot start, an in-process fallback is used and labelled `inprocess-fallback` (`IHDS_TOOLS=mcp` disables the fallback). The transport is written in the trace (`risk_agent: [tools via mcp-stdio] ...`) and in every tool-call log entry. |
-| REST API | `api/main.py` (FastAPI + pydantic) | `POST /assess` (record + question + `use_llm` → draft, review, trace, tool log, transport), `GET /health`, `GET /monitoring/summary`, `GET /schema/features`; OpenAPI docs at `/docs`. |
+| REST API | `api/main.py` (FastAPI + pydantic) | `POST /assess` (record + question + `use_llm` → draft, review, trace, tool log, transport), `GET /health`, `GET /monitoring/summary`, `GET /schema/features`, `GET /metrics` (Prometheus); OpenAPI docs at `/docs`. |
 | UI | `app.py` (Streamlit) | Calls `POST /assess` when `IHDS_API_URL` is set; otherwise runs the graph in-process (tools still via MCP stdio). |
 
 ![service view exported from code](docs/deployment.png)
@@ -67,12 +67,31 @@ Details, state schema, assumptions, tradeoffs and boundaries: [`diagrams/system_
 
 Full numbers: `evaluation/results.json`, `monitoring/reports/`, and [`TESTING.md`](TESTING.md).
 
+## MLOps layer (optional, local only) — details in [`docs/MLOPS.md`](docs/MLOPS.md)
+
+These tools run in a separate environment (`pip install -r requirements-mlops.txt`). The Streamlit and Azure
+runtime does not install or import them, apart from `prometheus-client`, which serves `/metrics`.
+
+| Tool | What the code does | Result on 2026-11-25 |
+|---|---|---|
+| Great Expectations | `python -m ihds.mlops.validate`: a 30-expectation suite on the clinical CSV (schema, row count, dtypes, non-null shares, ranges, label set) | 30 / 30 passed |
+| MLflow | `python -m ihds.mlops.train_tracked`: logs params, metrics, coefficients and the model to `mlruns/` (SQLite + artifacts, gitignored) | ROC-AUC 0.8126, CV 0.8444 ± 0.0161; run `8b95d9818eae4b4d94177879cdde1f3c` |
+| DVC | `dvc repro`: 7 stages (prepare, validate, train, evaluate, explain, drift, features), `params.yaml`, local cache and a local folder remote | 7 / 7 stages ran; `dvc status` up to date |
+| Deepchecks | `python -m ihds.mlops.quality`: data-integrity, train-test and model-evaluation suites; exits 1 on a critical check | Gate passed. Non-critical fails: Feature Label Correlation Change (Insulin), Simple Model Comparison |
+| SHAP | `LinearExplainer`: global and local explanations | Top features: Glucose 1.01, BMI 0.59, Pregnancies 0.33 (mean \|SHAP\|, log-odds) |
+| Fairlearn | `MetricFrame` by age band. The data has no sex or race column, so age is the only attribute available | Demographic parity diff 0.420, equalized odds diff 0.563; recall 0.44 for ages 21–29 |
+| Evidently | Drift stage reusing `ihds/monitoring.py` | Holdout: no drift; +25 mg/dL shift: Glucose flagged |
+| Feast | `feature_repo/` (file source, SQLite online store); `python -m ihds.mlops.features` applies, materializes and fetches | Patient 0's online features match the source; p = 0.826 |
+| Prefect | `python -m ihds.mlops.flow` chains all stages on a temporary local API (no Prefect Cloud) | Flow `Completed`, 7 / 7 tasks, 37 s |
+| Prometheus + Grafana | `GET /metrics` plus `docker-compose.monitoring.yml` with a provisioned datasource and dashboard (not part of the Azure deploy) | 104 calls scraped; bands high 35, low 33, moderate 27 |
+| GitHub Actions | `docs/ci.yml.example`: lint, tests, data validation with `dvc repro`, Docker build and smoke test, optional manual deploy | **Not active yet.** It must be added as `.github/workflows/ci.yml` through the GitHub web UI ([steps](docs/MLOPS.md#github-actions-cicd--how-to-turn-it-on)) |
+
 ## Run locally
 
 ```bash
 python3 -m venv .venv          # Python 3.11–3.14 && source .venv/bin/activate
 pip install -r requirements-dev.txt
-pytest -q                                   # 52 offline tests (+4 live tests skipped without a key)
+pytest -q                                   # 56 offline tests pass (+4 live tests and 7 MLOps tests skipped)
 python -m ihds.pipeline                     # evaluation + Evidently reports
 streamlit run app.py --server.headless true # http://localhost:8501 (graph in-process, tools via MCP stdio)
 ```
@@ -123,7 +142,7 @@ Both deployments serve the `main` branch. LLM drafts vary from run to run.
   `OPENAI_API_KEY = "voc-..."` and `OPENAI_API_BASE = "https://openai.vocareum.com/v1"`. Live URL in [Live demo](#live-demo).
 - **Docker:** `docker build -t ihds . && docker run -p 8501:8501 -p 8000:8000 ihds` runs `scripts/start_all.sh`
   (MCP HTTP server on 127.0.0.1:8765 → FastAPI on 8000 → Streamlit on 8501, health-checked).
-- **Azure Container Apps:** the same image (public port 8501; ACI also exposes 8000) + [`deploy/azure/README.md`](deploy/azure/README.md)
+- **Azure Container Apps:** the same image (public port 8501; ACI also exposes 8000, with Prometheus `/metrics` switched off by `IHDS_METRICS=0`) + [`deploy/azure/README.md`](deploy/azure/README.md)
   (`az acr build` + `az containerapp create`; ACI alternative and cleanup scripts included). With
   `WITH_OPENAI=1` the key becomes the Container Apps secret `openai-key` (`OPENAI_API_KEY=secretref:openai-key`)
   and `OPENAI_API_BASE` is set as an environment variable. Live URL in [Live demo](#live-demo).
@@ -133,15 +152,18 @@ Both deployments serve the `main` branch. LLM drafts vary from run to run.
 | Path | Content |
 |---|---|
 | `mcp_server/` | MCP server exposing the five tools (stdio / streamable HTTP) |
-| `api/` | FastAPI service (`/assess`, `/health`, `/monitoring/summary`) |
+| `api/` | FastAPI service (`/assess`, `/health`, `/monitoring/summary`, Prometheus `/metrics`) |
 | `app.py` | Streamlit UI (risk assessment, model & data, synthetic stress test, monitoring, architecture, limits) |
 | `ihds/` | `agents.py` (LangGraph), `tools.py` (the five tool functions), `tool_backends.py` (MCP client / fallback), `workflow.py` (guard/RAG/reviewer blocks), `model.py`, `gan.py`, `stats_analysis.py`, `data.py`, `monitoring.py`, `pipeline.py` |
 | `data/` | Pima CSV, clinical knowledge base, data card |
 | `notebooks/integrated_diagnostic_system.ipynb` | Executed walkthrough of the same code |
-| `tests/` | 52 offline pytest tests (units, every agent node, routing, loop cap, Evidently, end-to-end, Streamlit AppTest, real MCP server over stdio and HTTP, FastAPI) + 4 live `vocareum` tests |
+| `tests/` | 52 original offline pytest tests (units, every agent node, routing, loop cap, Evidently, end-to-end, Streamlit AppTest, real MCP server over stdio and HTTP, FastAPI), 1 `/metrics` test, 4 live `vocareum` tests, and `test_mlops.py` (10 tests: 3 config checks that run everywhere, 7 that skip unless the MLOps tools are installed) |
 | `agentic_system.ipynb` | Live run of the multi-agent graph (low / borderline / high risk, refusal, revision loop) with traces |
 | `scripts/` | `export_graph.py` (diagrams from code), `start_all.sh` (MCP + API + UI), `run_llm_eval.py` (live LLM vs template, Evidently) |
 | `monitoring/reports/` | Evidently HTML/JSON reports |
+| `ihds/mlops/`, `dvc.yaml`, `params.yaml`, `feature_repo/`, `reports/` | Optional MLOps layer (GX, MLflow, DVC, Deepchecks, SHAP/Fairlearn, Feast, Prefect) and its committed JSON results — see `docs/MLOPS.md` |
+| `docker-compose.monitoring.yml`, `monitoring/prometheus/`, `monitoring/grafana/` | Local Prometheus + Grafana stack (provisioned datasource and dashboard) |
+| `requirements-mlops.txt`, `ruff.toml`, `docs/ci.yml.example` | MLOps environment, lint config, GitHub Actions CI/CD workflow (to be added via the web UI) |
 | `evaluation/` | `results.json`, synthetic samples |
 | `docs/` | `architecture.mmd/.png` and `deployment.mmd/.png` (exported from code), app screenshots, `module_summary.pdf` |
 | `deploy/azure/` | Container Apps / ACI scripts and guide |

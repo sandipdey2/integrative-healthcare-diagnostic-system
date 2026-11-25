@@ -1,0 +1,8 @@
+# Lint config used by CI (docs/ci.yml.example) and `ruff check .` locally.
+target-version = "py311"
+line-length = 120
+extend-exclude = ["*.ipynb", ".venv*", "mlruns", "feature_repo/data"]
+
+[lint]
+select = ["E", "F", "W"]
+ignore = ["E501", "E702"]  # long lines and `a; b` one-liners are allowed

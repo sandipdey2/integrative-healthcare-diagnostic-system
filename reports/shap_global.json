@@ -1,0 +1,109 @@
+{
+  "explainer": "LinearExplainer (log-odds, standardized features)",
+  "n_explained": 154,
+  "global": [
+    {
+      "feature": "Glucose",
+      "mean_abs_shap": 1.0136
+    },
+    {
+      "feature": "BMI",
+      "mean_abs_shap": 0.587
+    },
+    {
+      "feature": "Pregnancies",
+      "mean_abs_shap": 0.3285
+    },
+    {
+      "feature": "DiabetesPedigreeFunction",
+      "mean_abs_shap": 0.2051
+    },
+    {
+      "feature": "Age",
+      "mean_abs_shap": 0.1488
+    },
+    {
+      "feature": "Insulin",
+      "mean_abs_shap": 0.0297
+    },
+    {
+      "feature": "BloodPressure",
+      "mean_abs_shap": 0.0106
+    },
+    {
+      "feature": "SkinThickness",
+      "mean_abs_shap": 0.0088
+    }
+  ],
+  "local": [
+    {
+      "test_row": 0,
+      "base_value_logodds": -0.4317,
+      "sum_shap_logodds": 1.4426,
+      "prediction_proba": 0.7332,
+      "top_features": [
+        {
+          "feature": "Glucose",
+          "shap_logodds": 1.6553,
+          "value": 159.0
+        },
+        {
+          "feature": "BMI",
+          "shap_logodds": -0.5681,
+          "value": 27.4
+        },
+        {
+          "feature": "Pregnancies",
+          "shap_logodds": 0.3423,
+          "value": 7.0
+        }
+      ]
+    },
+    {
+      "test_row": 1,
+      "base_value_logodds": -0.4317,
+      "sum_shap_logodds": -0.8828,
+      "prediction_proba": 0.2117,
+      "top_features": [
+        {
+          "feature": "Glucose",
+          "shap_logodds": -1.9371,
+          "value": 68.0
+        },
+        {
+          "feature": "Pregnancies",
+          "shap_logodds": 0.6802,
+          "value": 10.0
+        },
+        {
+          "feature": "BMI",
+          "shap_logodds": 0.2748,
+          "value": 35.5
+        }
+      ]
+    },
+    {
+      "test_row": 2,
+      "base_value_logodds": -0.4317,
+      "sum_shap_logodds": 0.1876,
+      "prediction_proba": 0.4393,
+      "top_features": [
+        {
+          "feature": "BMI",
+          "shap_logodds": 0.3165,
+          "value": 35.9
+        },
+        {
+          "feature": "Pregnancies",
+          "shap_logodds": -0.2207,
+          "value": 2.0
+        },
+        {
+          "feature": "Glucose",
+          "shap_logodds": 0.1946,
+          "value": 122.0
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,325 @@
+# MLOps layer — what is implemented, how to run it, and the measured results
+
+Everything here is **optional and local-only**. The Streamlit Cloud app and the Azure Container App install
+only `requirements.txt` and never import `ihds/mlops/`. The one runtime addition is `prometheus-client`, which
+serves `GET /metrics` on the FastAPI service.
+
+All numbers below come from runs on 2026-11-25 (seed 42, Python 3.11, versions pinned in
+`requirements-mlops.txt`). Re-running reproduces the metrics exactly. MLflow run IDs and timings change on
+every run.
+
+| Tool | Role here | Code / config | Status |
+|---|---|---|---|
+| MLflow 3.18 | Experiment tracking for the risk model | `ihds/mlops/train_tracked.py` | Implemented, run locally |
+| DVC 3.67 | Data + pipeline versioning (7 stages) | `dvc.yaml`, `params.yaml`, `dvc.lock`, `.dvc/config` | Implemented, `dvc repro` run locally; local remote only |
+| Great Expectations 1.25 | Validation of the clinical input data | `ihds/mlops/validate.py` | Implemented, gate in DVC, Prefect and CI |
+| Feast 0.68 | Local feature store (file offline store, SQLite online store) | `feature_repo/`, `ihds/mlops/features.py` | Implemented, local only; the app does not read from Feast |
+| Prefect 3.9 | Orchestration of the stages | `ihds/mlops/flow.py` | Implemented, runs locally on a temporary Prefect API (no Prefect Cloud) |
+| GitHub Actions | CI/CD | `docs/ci.yml.example` | Written and checked by a test; **not active until added as `.github/workflows/ci.yml`** (see below) |
+| FastAPI | Model-serving API | `api/main.py` | Already existed; unchanged apart from `/metrics` |
+| Docker | Container image | `Dockerfile`, `scripts/start_all.sh` | Already existed; unchanged; rebuilt and smoke-tested |
+| Deepchecks 0.19.1 | Model-quality testing with a pass/fail gate | `ihds/mlops/quality.py` | Implemented |
+| Prometheus + Grafana | API metrics and dashboard | `api/main.py` (`/metrics`), `docker-compose.monitoring.yml`, `monitoring/prometheus/`, `monitoring/grafana/` | Implemented, local only (not in the Azure deploy) |
+| Evidently 0.7 | Drift detection | `ihds/monitoring.py` (existing), `ihds/mlops/drift.py` | Already existed; also run as a pipeline stage |
+| SHAP 0.51 + Fairlearn 0.15 | Explainability and a fairness audit | `ihds/mlops/explain.py` | Implemented |
+
+## Setup
+
+The MLOps tools need their own virtual environment. `prefect` 3.9 requires `fastapi<0.151`, but the app
+pins `fastapi==0.165.0`, so the two environments cannot be merged.
+
+```bash
+python3.11 -m venv .venv-mlops && source .venv-mlops/bin/activate
+pip install -r requirements-mlops.txt
+```
+
+Run every command below from the repo root with this environment active.
+
+## The pipeline
+
+```
+prepare ─┬─> train (MLflow) ─┬─> evaluate (Deepchecks)
+         │        ^          ├─> explain (SHAP + Fairlearn)
+validate ┘ (GX gate)         ├─> drift (Evidently)
+                             └─> features (Feast)
+```
+
+| Run with | Command | What happens |
+|---|---|---|
+| DVC | `dvc repro` (graph: `dvc dag`, metrics: `dvc metrics show`) | Re-runs only the stages whose deps or params changed. Hashes go to `dvc.lock`; outputs go to the local cache `.dvc/cache`. |
+| Prefect | `python -m ihds.mlops.flow` | Runs the same stages as tasks. A failed GX validation or a critical Deepchecks failure raises `QualityGateError`, so the flow ends `Failed` and later tasks do not run. Writes `reports/flow_run.json`. |
+| One stage | `python -m ihds.mlops.<prepare\|validate\|train_tracked\|quality\|explain\|drift\|features>` | `validate` and `quality` exit 1 on failure. |
+
+### DVC (data and pipeline versioning)
+
+- `dvc init` has been run. `.dvc/config` disables analytics and sets the default remote `localstore` to the
+  folder `dvc-storage/` (gitignored). That remote is a plain local folder, so it needs no credentials.
+  `dvc push` copied the cached outputs there.
+- `data/pima_diabetes.csv` stays tracked by git because Streamlit and Azure read it directly. DVC versions it
+  as a stage dependency: its md5 is recorded in `dvc.lock`, so any change to it re-runs the downstream stages.
+  The derived files are DVC outputs and are not in git: `data/processed/*.parquet`,
+  `feature_repo/data/patient_features.parquet`, `models/risk_model.joblib`, `reports/deepchecks/`, `reports/drift/`.
+- The small JSON metrics in `reports/` and `reports/shap_summary.png` are committed (`cache: false`), so
+  reviewers can read the results without running anything.
+- `params.yaml` holds the split, validation thresholds, model hyperparameters, the critical Deepchecks checks
+  and the age bands.
+- Last `dvc repro -f`: 7 of 7 stages ran. After a later edit to `ihds/mlops/validate.py`, `dvc repro` re-ran
+  only `validate` and skipped the other 6 stages, because `validation.json` came out unchanged. `dvc status`
+  then reported "Data and pipelines are up to date."
+
+### Great Expectations (data validation)
+
+`python -m ihds.mlops.validate` checks the CSV after the same zero-to-missing cleaning the model uses
+(GX 1.x API, ephemeral context). The suite has **30 expectations**:
+
+- the column list and its order;
+- the row count (700–1000);
+- a numeric dtype for each of the 9 columns;
+- a non-null share for each column;
+- `config.VALID_RANGES` for each of the 8 features (at least 99% of non-null values must fall inside);
+- `Outcome` ∈ {0, 1}, with a mean between 0.2 and 0.5.
+
+The non-null thresholds sit just below the observed shares (Insulin is only 51.3% present, SkinThickness
+70.4%). They catch a pipeline that loses more data than the source already lacks. They do **not** mean the
+data is complete. One BloodPressure value (24 mmHg) is below the guard's 30 mmHg floor, which is why ranges
+use `mostly=0.99`.
+
+- **Result: 30 / 30 passed** (`reports/validation.json`; suite definition in `reports/gx_suite.json`).
+- A test corrupts 50 Glucose values to 900 and blanks 100 Ages. The suite then fails, naming
+  exactly those two expectations.
+
+### MLflow (experiment tracking)
+
+`python -m ihds.mlops.train_tracked` trains the same pipeline as `ihds/model.py`: median impute, then
+StandardScaler, then LogisticRegression with `class_weight=balanced`, using hyperparameters from `params.yaml`.
+
+- **What it logs:** params, test-split metrics, 5-fold CV ROC-AUC on the training split,
+  `coefficients.json`, and the sklearn model with an input signature and example.
+- **Where it's stored:** MLflow 3.x refuses a plain `./mlruns` file store unless `MLFLOW_ALLOW_FILE_STORE=true`
+  is set. So metadata goes to the SQLite file `mlruns/mlflow.db` and artifacts go to `mlruns/artifacts/`.
+  Both are local and gitignored. Browse them with `mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db`.
+- **Results** (identical in every run; experiment `ihds-risk-model`, 6 runs on the box):
+  - test accuracy 0.7338, precision 0.6032, recall 0.7037, F1 0.6496, ROC-AUC 0.8126;
+  - confusion matrix TN 75, FP 25, FN 16, TP 38;
+  - CV ROC-AUC 0.8444 ± 0.0161.
+- **Run IDs:** `dvc repro -f` produced `8b95d9818eae4b4d94177879cdde1f3c` (stored in `reports/train_metrics.json`).
+  The last Prefect flow produced `b1085973ece0449c93940c9b9d94725c` (stored in `reports/flow_run.json`).
+- **Check:** a test reloads the logged model from MLflow and confirms it gives the same probabilities as the
+  in-memory model.
+
+### Deepchecks (model-quality testing)
+
+`python -m ihds.mlops.quality` runs three built-in suites: `data_integrity` on the full cleaned data,
+`train_test_validation`, and `model_evaluation` with the trained model. It writes the HTML reports to
+`reports/deepchecks/` (about 4.8 MB each, gitignored) and a summary to `reports/deepchecks_summary.json`.
+
+**The gate:** the stage exits 1 if any of these checks fails, or if test ROC-AUC is below 0.75:
+
+- Data Duplicates, Mixed Nulls, Conflicting Labels;
+- Train Test Samples Mix, New Label Train Test;
+- Label / Feature / Prediction Drift;
+- Train Test Performance.
+
+| Suite | Checks | Pass | Warn | Fail | Not run* |
+|---|---|---|---|---|---|
+| data_integrity | 12 | 11 | 0 | 0 | 1 |
+| train_test_validation | 12 | 8 | 0 | 1 — Feature Label Correlation Change | 3 |
+| model_evaluation | 18 | 12 | 2 — Weak Segments (train/test) | 1 — Simple Model Comparison | 3 |
+
+\*These checks cannot apply to this data: there is no datetime or index column, and some checks are for
+regression or boosting models only.
+
+**Result: gate passed. No critical failures; test ROC-AUC 0.8126.** Two checks failed without being critical:
+
+- **Feature Label Correlation Change:** Insulin's predictive power score differs by 0.3 between train and
+  test. Insulin is about 49% missing, and the test split is small (n = 154).
+- **Simple Model Comparison:** for class 0 the F1 gain over Deepchecks' simple baseline is −0.97%, below the
+  10% condition. The balanced class weights trade class-0 F1 for recall on the diabetic class.
+
+These two are reported, not hidden. A test feeds a "test" set containing 94 training rows. The gate then
+fails on Train Test Samples Mix.
+
+**Compatibility note:** deepchecks 0.19.1 is the latest release and still uses NumPy aliases that NumPy 2
+removed (`np.Inf`, …). `quality._numpy2_aliases()` re-adds those aliases before the import. It only adds
+names; it changes no values.
+
+### SHAP and Fairlearn (explainability and fairness)
+
+`python -m ihds.mlops.explain` uses `shap.LinearExplainer` on the logistic-regression step, over the imputed
+and standardized features, with a background of 100 training rows. Values are in log-odds.
+
+**Global ranking** (mean |SHAP| over the 154 test patients, in `reports/shap_global.json`, plotted in
+`reports/shap_summary.png`):
+
+| Feature | mean \|SHAP\| |
+|---|---|
+| Glucose | 1.0136 |
+| BMI | 0.5870 |
+| Pregnancies | 0.3285 |
+| DiabetesPedigreeFunction | 0.2051 |
+| Age | 0.1488 |
+| Insulin | 0.0297 |
+| BloodPressure | 0.0106 |
+| SkinThickness | 0.0088 |
+
+Local explanations for the first 3 test patients list their top 3 features. A test checks additivity: base
+value plus the sum of SHAP values equals the model's log-odds.
+
+**Fairness: the attribute used.** The Pima data has no sex, race or ethnicity column; every row is a Pima
+Indian woman aged 21 or over. So the only attribute that can be audited is **age**, in the bands 21–29,
+30–44 and 45+. Fairlearn `MetricFrame` ran on the test split at threshold 0.5 (`reports/fairness.json`):
+
+| Age band | n | Diabetic | Accuracy | Recall (TPR) | Precision | Selection rate | FPR |
+|---|---|---|---|---|---|---|---|
+| 21–29 | 85 | 16 | 0.741 | 0.438 | 0.350 | 0.235 | 0.188 |
+| 30–44 | 40 | 26 | 0.700 | 0.731 | 0.792 | 0.600 | 0.357 |
+| 45+ | 29 | 12 | 0.759 | 1.000 | 0.632 | 0.655 | 0.412 |
+
+**Disparity results:**
+
+- Demographic parity difference **0.420** (ratio 0.359).
+- Equalized odds difference **0.563** (ratio 0.438).
+
+These are large gaps. Age is itself a model input and a real clinical risk factor, so a higher selection rate
+in older bands is expected. The finding that matters is that **recall is lowest for 21–29-year-olds
+(7 of 16 diabetic patients flagged)**.
+
+The bands are small, so these estimates are noisy. The audit is reported for review and does not fail the
+pipeline. No mitigation (for example, per-group thresholds) has been applied.
+
+### Evidently (drift) as a pipeline stage
+
+`python -m ihds.mlops.drift` reuses `ihds.monitoring.run_all` and writes to `reports/drift/`. The Streamlit
+Monitoring tab keeps using the committed `monitoring/reports/`, which this stage does not touch.
+
+- **Holdout:** no drifted features; accuracy 0.7338.
+- **Shifted** (simulated +25 mg/dL glucose meter error): Glucose flagged (1 of 8 columns); precision 0.6032 → 0.5269,
+  recall 0.7037 → 0.9074, accuracy 0.6818.
+
+### Feast (feature store)
+
+- **Definitions:** `feature_repo/features.py` defines entity `patient` (join key `patient_id`), a `FileSource`
+  over `feature_repo/data/patient_features.parquet`, the feature view `patient_clinical_features` (8 features
+  plus `Outcome`) and the feature service `risk_model_v1`.
+- **Storage:** `feature_store.yaml` uses the local provider, with SQLite for both the registry and the online
+  store, all under `feature_repo/data/` (gitignored).
+- **Honest limits:** `patient_id` is just the CSV row number, and every row shares one fixed
+  `event_timestamp` (2026-01-01). The dataset has neither real IDs nor timestamps.
+- **Commands:**
+
+```bash
+python -m ihds.mlops.features --patient-id 0 --patient-id 5   # apply + materialize + online fetch
+python -m ihds.mlops.features --patient-id 9 --no-apply       # fetch only
+# CLI equivalent, from feature_repo/:
+feast apply && feast materialize-incremental "$(date -u +%Y-%m-%dT%H:%M:%S)"
+```
+
+**Result:**
+
+- `feast apply` created the project `ihds`, entity `patient`, feature view `patient_clinical_features`,
+  feature service `risk_model_v1` and the SQLite table.
+- The online fetch for patient 0 returned Glucose 148, BMI 33.6, Age 50, BloodPressure 72, SkinThickness 35,
+  Pregnancies 6, DPF 0.627, and Insulin `None` (the raw 0, read as missing).
+- The fetched values match the source parquet (`matches_source_parquet: true`).
+- Scored on those fetched features, the model gives p = 0.826 for patient 0 and 0.2059 for patient 5
+  (`reports/feast_online_sample.json`).
+
+### Prefect (orchestration)
+
+`python -m ihds.mlops.flow` ran the flow `ihds-mlops-pipeline` on a temporary local Prefect API; no Prefect
+Cloud and no `PREFECT_API_URL` were needed.
+
+**Result:** all 7 tasks reached `Completed` (prepare, validate-gx, train-mlflow, evaluate-deepchecks,
+explain-shap-fairlearn, drift-evidently, feature-store-feast), and the flow state was **Completed**. It took
+37 s wall time, including the temporary server's start-up.
+
+A test uses a throwaway Prefect API (`prefect_test_harness`) and checks two things:
+
+- the task order;
+- that a failing GX result stops the flow at `validate`, leaving it `Failed`.
+
+## Prometheus and Grafana (local only)
+
+**The endpoint:** `api/main.py` serves `GET /metrics` through `prometheus_client`. Route labels use the route
+template, and `/metrics` itself is not counted. The series are:
+
+- `ihds_http_requests_total{method,route,status}`
+- `ihds_http_request_duration_seconds` (histogram)
+- `ihds_predictions_total{band}` (low / moderate / high)
+- `ihds_assess_total{status,draft_source}`
+- `ihds_escalations_total`
+
+```bash
+docker compose -f docker-compose.monitoring.yml up -d --build
+# API http://127.0.0.1:8000  Prometheus http://127.0.0.1:9090  Grafana http://127.0.0.1:3000 (anonymous viewer)
+docker compose -f docker-compose.monitoring.yml down
+```
+
+**The stack:** the compose file runs the app image as `api` (FastAPI only), `prom/prometheus:v3.5.0` (scraping
+`api:8000/metrics` every 15 s) and `grafana/grafana:12.1.0`. Grafana gets a provisioned Prometheus datasource
+and the dashboard `monitoring/grafana/dashboards/ihds_api.json`, which has 8 panels:
+
+- totals: assessments, escalations, high-risk predictions, blocked;
+- request rate per route;
+- p50 / p95 latency;
+- predictions per band;
+- outcomes and escalations.
+
+All ports bind to 127.0.0.1. Grafana's admin login keeps its default and is meant for local use only.
+
+**Azure:** this stack is not part of the Azure deployment. Container Apps exposes only port 8501, so the API's
+`/metrics` is not reachable from outside. `deploy/azure/deploy_aci.sh` publishes port 8000, so it sets
+`IHDS_METRICS=0`, which makes `/metrics` return 404. The running Azure app is still the image deployed before
+`/metrics` was added.
+
+**Measured on the box (2026-11-25):** in this sandbox, traffic between containers on the Docker bridge network
+timed out, so Prometheus could not reach `api:8000`. The stack was therefore run with a box-only override (not
+committed) that puts the same three images and the same dashboard on the host network, with targets rewritten
+to `127.0.0.1`. On a normal Docker host the committed compose file should not need this; that case was not
+tested here.
+
+- Prometheus showed both targets `up`.
+- A script sent 104 `POST /assess` calls to the rebuilt image: the first 100 Pima rows, plus 4 dosing questions.
+  Prometheus then returned:
+  - `ihds_assess_total`: ok 95, blocked 9 (the 4 dosing questions and 5 rows outside the guard's ranges or
+    missing required fields);
+  - `ihds_predictions_total`: high 35, low 33, moderate 27;
+  - `ihds_escalations_total` 0 (template writer, no LLM);
+  - `/assess` latency p50 0.028 s and p95 0.048 s.
+- Grafana's datasource health was "Successfully queried the Prometheus API", and a Grafana `/api/ds/query`
+  returned the band counts.
+- Screenshot: `docs/screenshots/10_grafana_dashboard.png`.
+
+## GitHub Actions (CI/CD) — how to turn it on
+
+`docs/ci.yml.example` defines the workflow `ci-cd`:
+
+- **lint:** `ruff check .`, configured in `ruff.toml`.
+- **test:** `pip install -r requirements-dev.txt` and `pytest -q`.
+- **data-validation:** `pip install -r requirements-mlops.txt`, then the GX gate, `pytest tests/test_mlops.py`
+  and `dvc repro`, uploading the reports.
+- **docker:** `docker build`, then a smoke test of `/health` and `/metrics`.
+- **deploy** (optional): runs only through manual `workflow_dispatch` with `deploy=true`, and needs the secrets
+  `AZURE_CREDENTIALS`, `ACR_NAME` and `AZURE_RESOURCE_GROUP`. It has never been run. Vocareum lab accounts
+  usually cannot create the service principal it needs. The live app was deployed with
+  `deploy/azure/deploy_aca.sh`.
+
+The token used to push this repo has no `workflow` scope, so the file cannot be pushed to `.github/workflows/`.
+To activate it:
+
+1. On github.com, open `sandipdey2/integrative-healthcare-diagnostic-system`.
+2. Choose **Add file → Create new file**.
+3. Name it `.github/workflows/ci.yml` (typing `/` creates the folders).
+4. Paste the full contents of `docs/ci.yml.example`.
+5. Choose **Commit changes…** and commit directly to `main`.
+6. Open the **Actions** tab. The `ci-cd` run starts on that commit.
+
+Until this is done, **no CI runs on GitHub**. Every job's commands were run by hand on the box instead:
+
+- `ruff check .`: all checks passed;
+- `pytest`;
+- `python -m ihds.mlops.validate`;
+- `dvc repro`;
+- `docker build`, with `/health` and `/metrics` answering.
+
+The workflow has not run on GitHub's runners, so its first run there is the real test.

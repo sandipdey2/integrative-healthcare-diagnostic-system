@@ -1,7 +1,6 @@
 """MCP server (real subprocess, stdio + streamable HTTP), MCP-backed graph, and the FastAPI service."""
 import asyncio
 import json
-import os
 import socket
 import subprocess
 import sys
@@ -190,3 +189,19 @@ def test_streamlit_uses_api_when_ihds_api_url_set(client, monkeypatch):
     assert ("post", "http://api.test/assess") in calls
     assert any("Risk probability" in m.label for m in at.metric)
     assert any("mcp-stdio" in str(c.value) for c in at.caption)
+
+
+def test_api_prometheus_metrics(client, system, monkeypatch):
+    """GET /metrics exposes request, latency, risk-band and escalation series after an /assess call."""
+    client.post("/assess", json={"record": _rec(system, 1)})
+    client.get("/health")
+    r = client.get("/metrics")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/plain")
+    body = r.text
+    for name in ("ihds_http_requests_total", "ihds_http_request_duration_seconds_bucket", "ihds_predictions_total",
+                 "ihds_assess_total", "ihds_escalations_total"):
+        assert name in body
+    assert 'route="/assess"' in body and 'route="/health"' in body and 'route="/metrics"' not in body
+    assert any(f'ihds_predictions_total{{band="{b}"}}' in body for b in ("low", "moderate", "high"))
+    monkeypatch.setenv("IHDS_METRICS", "0")  # switch used by deploy/azure/deploy_aci.sh (public port 8000)
+    assert client.get("/metrics").status_code == 404

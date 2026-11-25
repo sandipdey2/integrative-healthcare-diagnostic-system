@@ -1,0 +1,12 @@
+# Local Prometheus config for docker-compose.monitoring.yml: scrapes the FastAPI /metrics endpoint.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+scrape_configs:
+  - job_name: ihds-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["api:8000"]
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

@@ -85,8 +85,35 @@ all 8 features p < 1e-5.
 - Streamlit Community Cloud: https://ihds-diabetes-advisor.streamlit.app/ — graph in-process, tools via mcp-stdio. Live gpt-4o-mini run (default inputs): first draft rejected (grounding 0.19), second approved (0.207), draft source `llm`. Unauthenticated curl of `/_stcore/health` returned HTTP 303 to Streamlit's app-auth gate; the in-browser run is the evidence for this row. LLM output varies run to run.
 - Azure Container Apps (West US): https://ihds-app.bluebay-94b3aae3.westus.azurecontainerapps.io — image from `deploy/azure/deploy_aca.sh` (`scripts/start_all.sh`: MCP HTTP :8765 → FastAPI :8000 → Streamlit :8501; ingress 8501). `GET /_stcore/health` → `ok` (HTTP 200). Default inputs: sidebar "Workflow via REST API http://127.0.0.1:8000 · tools: mcp-http", "LLM key configured on the API server"; p=0.604 high, top driver Glucose; evidence K7,K2,K1; tools risk_score, explain_contributions, rag_search, population_context over mcp-http. Writer: 3 gpt-4o-mini drafts, reviewer rejected all for grounding (0.185/0.182/0.185) → revision cap → template draft released (UI grounding 0.703) and case escalated to human review. The result-page "approved" badge is the template's review, not an approved LLM draft; the banner and trace record the escalation. Screenshots: docs/screenshots/08_azure_container_app.png, 09_azure_agent_trace.png.
 
+## MLOps layer (2026-11-25, optional, local only; details in docs/MLOPS.md)
+- Separate env, `requirements-mlops.txt`: prefect 3.9 needs fastapi<0.151, while the app pins 0.165.0. The runtime adds only prometheus-client 0.24.1.
+- GX 1.25: suite `pima_clinical_input`, 30 expectations, 30/30 passed. One BloodPressure value (24) is below the 30 floor, so ranges use mostly=0.99.
+- MLflow 3.18: experiment `ihds-risk-model`, SQLite store at mlruns/mlflow.db (MLflow 3 refuses the plain file store by default).
+  - Test results: acc 0.7338, prec 0.6032, rec 0.7037, F1 0.6496, ROC-AUC 0.8126; TN75 FP25 FN16 TP38.
+  - CV ROC-AUC 0.8444 ± 0.0161.
+  - Run IDs: `dvc repro -f` → 8b95d9818eae4b4d94177879cdde1f3c; Prefect → b1085973ece0449c93940c9b9d94725c.
+- DVC 3.67: 7 stages; local remote `dvc-storage/` (gitignored). Raw CSV stays in git, hashed in dvc.lock. `dvc repro -f` ran 7/7 stages; status up to date.
+- Deepchecks 0.19.1 (with NumPy 2 alias shim): gate passed, 0 critical failures.
+  - data_integrity: 11/12 pass.
+  - train_test_validation: 8/12 pass, 1 fail (Feature Label Correlation Change, Insulin PPS diff 0.3).
+  - model_evaluation: 12/18 pass, 2 warn (Weak Segments), 1 fail (Simple Model Comparison, class-0 F1 gain −0.97%).
+  - The rest were not applicable.
+- SHAP 0.51, mean |SHAP| in log-odds: Glucose 1.0136, BMI 0.587, Pregnancies 0.3285, DPF 0.2051, Age 0.1488, Insulin 0.0297, BP 0.0106, Skin 0.0088.
+- Fairlearn 0.15: no sex/race column exists, so age bands are used (test split).
+  - Selection rate: 21–29 0.235 (n=85), 30–44 0.600 (n=40), 45+ 0.655 (n=29).
+  - Recall: 0.438 / 0.731 / 1.000.
+  - DP diff 0.4199 (ratio 0.3591); EO diff 0.5625 (ratio 0.4375). Reported, not mitigated.
+- Feast 0.68: patient 0 online features match the parquet; model p = 0.826 (patient 5: 0.2059). patient_id = CSV row; one fixed timestamp.
+- Prefect 3.9.5: flow `ihds-mlops-pipeline` Completed, 7/7 tasks, 37 s, temporary local API.
+- Prometheus/Grafana: `/metrics` plus the compose stack.
+  - Box result: 104 /assess calls → ok 95, blocked 9; high 35, low 33, moderate 27; escalations 0; p95 0.048 s.
+  - The box's Docker bridge blocked container-to-container traffic, so it was verified with a host-network override.
+  - Not in Azure. ACI sets IHDS_METRICS=0.
+- GitHub Actions: docs/ci.yml.example (lint/test/data-validation/docker/optional deploy). NOT active until added as .github/workflows/ci.yml via the web UI.
+
 ## Tests
 - 56 pytest tests: 52 offline (pass on py3.11, 3.12, 3.14) + 4 live `vocareum` (skipped without key); 56/56 pass with key on 3.11 and 3.14. New: 9 in tests/test_mcp_api.py (real MCP subprocess stdio list/call, HTTP server vs in-process, graph via MCP = in-process, fallback, FastAPI health/assess/blocked/422/400/monitoring, Streamlit via API). Docker image builds, healthcheck healthy. Azure Container Apps deployment smoke-tested 2026-11-25 (see Live deployments).
+- 2026-11-25 MLOps update: runtime env 56 passed / 11 skipped (52 original + 1 /metrics + 3 config tests; skips are 4 live and 7 MLOps). MLOps env: tests/test_mlops.py 10/10 passed. `ruff check .` clean.
 
 ## Honest-scope statements (use these words)
 - Rule-based supervisor; LLM only writes text and is optional.

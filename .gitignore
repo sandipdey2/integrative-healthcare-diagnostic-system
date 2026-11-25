@@ -7,3 +7,12 @@ __pycache__/
 .env
 .streamlit/secrets.toml
 artifacts/
+# MLOps (local-only outputs; see docs/MLOPS.md)
+.venv-mlops/
+mlruns/
+mlflow.db
+dvc-storage/
+feature_repo/data/registry.db
+feature_repo/data/online_store.db
+reports/deepchecks/
+reports/drift/

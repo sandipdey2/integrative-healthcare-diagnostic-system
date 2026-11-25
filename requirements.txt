@@ -1,4 +1,5 @@
-# Runtime (Streamlit app, LangGraph agents, MCP tool server, FastAPI service, Evidently monitoring).
+# Runtime (Streamlit app, LangGraph agents, MCP tool server, FastAPI service + Prometheus /metrics, Evidently monitoring).
+# The optional MLOps toolchain (MLflow, DVC, GX, Feast, Prefect, Deepchecks, SHAP, Fairlearn) is in requirements-mlops.txt.
 # All pins install from binary wheels on Python 3.11, 3.12, 3.13 and 3.14 (Streamlit Community Cloud uses 3.14).
 streamlit==1.67.0
 evidently==0.7.23
@@ -17,3 +18,4 @@ langchain-mcp-adapters==0.3.1
 fastapi==0.165.0
 uvicorn==0.54.0
 httpx==0.28.1
+prometheus-client==0.24.1

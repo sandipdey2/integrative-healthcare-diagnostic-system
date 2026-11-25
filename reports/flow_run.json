@@ -1,0 +1,76 @@
+{
+  "flow": "ihds-mlops-pipeline",
+  "state": "Completed",
+  "result": {
+    "prepare": {
+      "rows": 768,
+      "train_rows": 614,
+      "test_rows": 154,
+      "train_positive_rate": 0.3485
+    },
+    "validate": {
+      "success": true,
+      "evaluated": 30,
+      "passed": 30,
+      "failed": 0
+    },
+    "train": {
+      "mlflow_run_id": "b1085973ece0449c93940c9b9d94725c",
+      "experiment": "ihds-risk-model",
+      "model_uri": "models:/m-53396a26d8cc4b04a0e5a4446533eb4b",
+      "test_accuracy": 0.7338,
+      "test_precision": 0.6032,
+      "test_recall": 0.7037,
+      "test_f1": 0.6496,
+      "test_roc_auc": 0.8126,
+      "test_tn": 75,
+      "test_fp": 25,
+      "test_fn": 16,
+      "test_tp": 38,
+      "cv_roc_auc_mean": 0.8444,
+      "cv_roc_auc_std": 0.0161
+    },
+    "evaluate": {
+      "passed": true,
+      "critical_failures": [],
+      "test_roc_auc": 0.8126
+    },
+    "explain": {
+      "shap_top3": [
+        "Glucose",
+        "BMI",
+        "Pregnancies"
+      ],
+      "demographic_parity_difference": 0.4199,
+      "equalized_odds_difference": 0.5625
+    },
+    "drift": {
+      "holdout": {
+        "drifted_feature_names": [],
+        "drifted_columns_share": 0.0,
+        "accuracy": 0.7338,
+        "precision": 0.6032,
+        "recall": 0.7037
+      },
+      "shifted": {
+        "drifted_feature_names": [
+          "Glucose"
+        ],
+        "drifted_columns_share": 0.125,
+        "accuracy": 0.6818,
+        "precision": 0.5269,
+        "recall": 0.9074
+      },
+      "glucose_shift_mg_dl": 25.0
+    },
+    "feast": {
+      "patient_ids": [
+        0
+      ],
+      "matches_source_parquet": true,
+      "risk_probability": [
+        0.826
+      ]
+    }
+  }
+}

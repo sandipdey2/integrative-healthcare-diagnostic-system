@@ -13,3 +13,13 @@ docs/module_summary.pdf
 docs/screenshots
 tests
 artifacts
+# MLOps / local-only outputs (not needed in the app image)
+.venv-mlops
+mlruns
+dvc-storage
+.dvc/cache
+.dvc/tmp
+data/processed
+models
+reports
+feature_repo/data

@@ -1,0 +1,110 @@
+# DVC pipeline (local only, no remote needed). Run from the repo root in the MLOps env:
+#   dvc repro            # re-runs only stages whose deps / params changed
+#   dvc dag              # show the stage graph
+#   dvc metrics show     # reports/*.json metrics
+# data/pima_diabetes.csv stays in git because the Streamlit / Azure app reads it; DVC versions it by hash in
+# dvc.lock and caches the derived outputs (parquet splits, model, HTML reports) in .dvc/cache.
+stages:
+  prepare:
+    cmd: python -m ihds.mlops.prepare
+    deps:
+      - data/pima_diabetes.csv
+      - ihds/data.py
+      - ihds/mlops/prepare.py
+    params:
+      - prepare
+    outs:
+      - data/processed/train.parquet
+      - data/processed/test.parquet
+      - feature_repo/data/patient_features.parquet
+
+  validate:
+    cmd: python -m ihds.mlops.validate
+    deps:
+      - data/pima_diabetes.csv
+      - ihds/config.py
+      - ihds/mlops/validate.py
+    params:
+      - validate
+    metrics:
+      - reports/validation.json:
+          cache: false
+    outs:
+      - reports/gx_suite.json:
+          cache: false
+
+  train:
+    cmd: python -m ihds.mlops.train_tracked
+    deps:
+      - data/processed/train.parquet
+      - data/processed/test.parquet
+      - ihds/model.py
+      - ihds/mlops/train_tracked.py
+      - reports/validation.json
+    params:
+      - train
+    outs:
+      - models/risk_model.joblib
+    metrics:
+      - reports/train_metrics.json:
+          cache: false
+
+  evaluate:
+    cmd: python -m ihds.mlops.quality
+    deps:
+      - data/processed/train.parquet
+      - data/processed/test.parquet
+      - models/risk_model.joblib
+      - ihds/mlops/quality.py
+    params:
+      - evaluate
+    outs:
+      - reports/deepchecks
+    metrics:
+      - reports/deepchecks_summary.json:
+          cache: false
+
+  explain:
+    cmd: python -m ihds.mlops.explain
+    deps:
+      - data/processed/train.parquet
+      - data/processed/test.parquet
+      - models/risk_model.joblib
+      - ihds/mlops/explain.py
+    params:
+      - explain
+      - train.threshold
+    metrics:
+      - reports/fairness.json:
+          cache: false
+      - reports/shap_global.json:
+          cache: false
+    plots:
+      - reports/shap_summary.png:
+          cache: false
+
+  drift:
+    cmd: python -m ihds.mlops.drift
+    deps:
+      - data/processed/train.parquet
+      - data/processed/test.parquet
+      - models/risk_model.joblib
+      - ihds/monitoring.py
+      - ihds/mlops/drift.py
+    outs:
+      - reports/drift
+    metrics:
+      - reports/drift_summary.json:
+          cache: false
+
+  features:
+    cmd: python -m ihds.mlops.features --patient-id 0 --patient-id 5
+    deps:
+      - feature_repo/feature_store.yaml
+      - feature_repo/features.py
+      - feature_repo/data/patient_features.parquet
+      - models/risk_model.joblib
+      - ihds/mlops/features.py
+    outs:
+      - reports/feast_online_sample.json:
+          cache: false

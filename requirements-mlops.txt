@@ -1,0 +1,26 @@
+# Optional MLOps toolchain (local only). NOT installed in the Streamlit / Azure image.
+#   python -m venv .venv-mlops && .venv-mlops/bin/pip install -r requirements-mlops.txt
+# Kept as a separate environment on purpose: prefect 3.9 requires fastapi<0.151 while the app pins
+# fastapi==0.165.0 (requirements.txt), so the two cannot share one environment. The MLOps stages only import
+# ihds.config / data / model / monitoring, which need the data-science pins below (same versions as runtime).
+pandas==2.3.3
+numpy==2.3.5
+scikit-learn==1.7.2
+scipy==1.16.3
+pyarrow==26.0.1
+evidently==0.7.23
+matplotlib==3.10.9
+pytest==9.2.0
+pyyaml==6.0.4
+joblib==1.6.0
+# experiment tracking / versioning / validation / features / orchestration / quality / explainability
+mlflow==3.18.0
+dvc==3.67.1
+great-expectations==1.25.0
+feast==0.68.0
+prefect==3.9.5
+deepchecks==0.19.1
+setuptools<81            # deepchecks 0.19.1 imports pkg_resources (removed in setuptools 81)
+shap==0.51.0
+fairlearn==0.15.0
+ruff==0.17.6

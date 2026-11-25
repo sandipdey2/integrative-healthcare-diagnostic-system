@@ -9,7 +9,6 @@ served by the MCP server (mcp_server/server.py, stdio subprocess or IHDS_MCP_URL
 """
 from __future__ import annotations
 
-import json
 import os
 
 import pandas as pd

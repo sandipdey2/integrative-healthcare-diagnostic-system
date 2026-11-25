@@ -1,0 +1,453 @@
+{
+  "deepchecks_version": "0.19.1",
+  "test_roc_auc": 0.8126,
+  "critical_checks": [
+    "Conflicting Labels",
+    "Data Duplicates",
+    "Feature Drift",
+    "Label Drift",
+    "Mixed Nulls",
+    "New Label Train Test",
+    "Prediction Drift",
+    "Train Test Performance",
+    "Train Test Samples Mix"
+  ],
+  "critical_failures": [],
+  "passed": true,
+  "data_integrity": {
+    "checks": 12,
+    "passed": 11,
+    "warned": 0,
+    "failed": [],
+    "not_run": [
+      "Identifier Label Correlation - Train Dataset"
+    ],
+    "detail": [
+      {
+        "check": "Single Value in Column",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "Does not contain only a single value",
+            "category": "PASS",
+            "details": "Passed for 9 relevant columns"
+          }
+        ]
+      },
+      {
+        "check": "Special Characters",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "Ratio of samples containing solely special character is less or equal to 0.1%",
+            "category": "PASS",
+            "details": "Passed for 9 relevant columns"
+          }
+        ]
+      },
+      {
+        "check": "Mixed Nulls",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "Number of different null types is less or equal to 1",
+            "category": "PASS",
+            "details": "Passed for 9 relevant columns"
+          }
+        ]
+      },
+      {
+        "check": "Mixed Data Types",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "Rare data types in column are either more than 10% or less than 1% of the data",
+            "category": "PASS",
+            "details": "9 columns passed: found 0 columns with negligible types mix, and 9 columns without any types mix"
+          }
+        ]
+      },
+      {
+        "check": "String Mismatch",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "No string variants",
+            "category": "PASS",
+            "details": "Passed for 1 relevant column"
+          }
+        ]
+      },
+      {
+        "check": "Data Duplicates",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "Duplicate data ratio is less or equal to 5%",
+            "category": "PASS",
+            "details": "Found 0% duplicate data"
+          }
+        ]
+      },
+      {
+        "check": "String Length Out Of Bounds",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "Ratio of string length outliers is less or equal to 0%",
+            "category": "PASS",
+            "details": "No relevant columns to check were found"
+          }
+        ]
+      },
+      {
+        "check": "Conflicting Labels",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "Ambiguous sample ratio is less or equal to 0%",
+            "category": "PASS",
+            "details": "Ratio of samples with conflicting labels: 0%"
+          }
+        ]
+      },
+      {
+        "check": "Feature Label Correlation",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "Features' Predictive Power Score is less than 0.8",
+            "category": "PASS",
+            "details": "Passed for 8 relevant columns"
+          }
+        ]
+      },
+      {
+        "check": "Feature-Feature Correlation",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "Not more than 0 pairs are correlated above 0.9",
+            "category": "PASS",
+            "details": "All correlations are less than 0.9 except pairs []"
+          }
+        ]
+      },
+      {
+        "check": "Outlier Sample Detection",
+        "status": "pass",
+        "conditions": []
+      },
+      {
+        "check": "Identifier Label Correlation - Train Dataset",
+        "status": "not_run",
+        "detail": "Dataset does not contain an index or a datetime"
+      }
+    ]
+  },
+  "train_test_validation": {
+    "checks": 12,
+    "passed": 8,
+    "warned": 0,
+    "failed": [
+      "Feature Label Correlation Change"
+    ],
+    "not_run": [
+      "Date Train Test Leakage Duplicates",
+      "Date Train Test Leakage Overlap",
+      "Index Train Test Leakage"
+    ],
+    "detail": [
+      {
+        "check": "Feature Label Correlation Change",
+        "status": "fail",
+        "conditions": [
+          {
+            "name": "Train-Test features' Predictive Power Score difference is less than 0.2",
+            "category": "FAIL",
+            "details": "Found 1 out of 8 features with PPS difference above threshold: {'Insulin': '0.3'}"
+          },
+          {
+            "name": "Train features' Predictive Power Score is less than 0.7",
+            "category": "PASS",
+            "details": "Passed for 8 relevant columns"
+          }
+        ]
+      },
+      {
+        "check": "Datasets Size Comparison",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "Test-Train size ratio is greater than 0.01",
+            "category": "PASS",
+            "details": "Test-Train size ratio is 0.25"
+          }
+        ]
+      },
+      {
+        "check": "New Label Train Test",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "Number of new label values is less or equal to 0",
+            "category": "PASS",
+            "details": "Found 0 new labels in test data: []"
+          }
+        ]
+      },
+      {
+        "check": "New Category Train Test",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "Ratio of samples with a new category is less or equal to 0%",
+            "category": "PASS",
+            "details": "No relevant features to check were found"
+          }
+        ]
+      },
+      {
+        "check": "String Mismatch Comparison",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "No new variants allowed in test data",
+            "category": "PASS",
+            "details": "No relevant columns to check were found"
+          }
+        ]
+      },
+      {
+        "check": "Train Test Samples Mix",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "Percentage of test data samples that appear in train data is less or equal to 5%",
+            "category": "PASS",
+            "details": "No samples mix found"
+          }
+        ]
+      },
+      {
+        "check": "Feature Drift",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "categorical drift score < 0.2 and numerical drift score < 0.2",
+            "category": "PASS",
+            "details": "Passed for 8 columns out of 8 columns.\nFound column \"Insulin\" has the highest numerical drift score: 0.16"
+          }
+        ]
+      },
+      {
+        "check": "Label Drift",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "Label drift score < 0.15",
+            "category": "PASS",
+            "details": "Label's drift score Cramer's V is 0"
+          }
+        ]
+      },
+      {
+        "check": "Multivariate Drift",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "Drift value is less than 0.25",
+            "category": "PASS",
+            "details": "Found drift value of: 0, corresponding to a domain classifier AUC of: 0.46"
+          }
+        ]
+      },
+      {
+        "check": "Date Train Test Leakage Duplicates",
+        "status": "not_run",
+        "detail": "Dataset does not contain a datetime"
+      },
+      {
+        "check": "Date Train Test Leakage Overlap",
+        "status": "not_run",
+        "detail": "Dataset does not contain a datetime"
+      },
+      {
+        "check": "Index Train Test Leakage",
+        "status": "not_run",
+        "detail": "Dataset does not contain an index"
+      }
+    ]
+  },
+  "model_evaluation": {
+    "checks": 18,
+    "passed": 12,
+    "warned": 2,
+    "failed": [
+      "Simple Model Comparison"
+    ],
+    "not_run": [
+      "Regression Error Distribution - Train Dataset",
+      "Regression Error Distribution - Test Dataset",
+      "Boosting Overfit"
+    ],
+    "detail": [
+      {
+        "check": "Simple Model Comparison",
+        "status": "fail",
+        "conditions": [
+          {
+            "name": "Model performance gain over simple model is greater than 10%",
+            "category": "FAIL",
+            "details": "Found classes with failed metric's gain: {np.int64(0): {'F1': '-0.97%'}}"
+          }
+        ]
+      },
+      {
+        "check": "Weak Segments Performance - Train Dataset",
+        "status": "warn",
+        "conditions": [
+          {
+            "name": "The relative performance of weakest segment is greater than 80% of average model performance.",
+            "category": "WARN",
+            "details": "Found a segment with accuracy score of 0.484 in comparison to an average score of 0.759 in sampled data."
+          }
+        ]
+      },
+      {
+        "check": "Weak Segments Performance - Test Dataset",
+        "status": "warn",
+        "conditions": [
+          {
+            "name": "The relative performance of weakest segment is greater than 80% of average model performance.",
+            "category": "WARN",
+            "details": "Found a segment with accuracy score of 0.2 in comparison to an average score of 0.734 in sampled data."
+          }
+        ]
+      },
+      {
+        "check": "Train Test Performance",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "Train-Test scores relative degradation is less than 0.1",
+            "category": "PASS",
+            "details": "Found max degradation of 5.56% for metric Precision and class 1."
+          }
+        ]
+      },
+      {
+        "check": "ROC Report - Train Dataset",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "AUC score for all the classes is greater than 0.7",
+            "category": "PASS",
+            "details": "All classes passed, minimum AUC found is 0.85 for class 1"
+          }
+        ]
+      },
+      {
+        "check": "ROC Report - Test Dataset",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "AUC score for all the classes is greater than 0.7",
+            "category": "PASS",
+            "details": "All classes passed, minimum AUC found is 0.81 for class 1"
+          }
+        ]
+      },
+      {
+        "check": "Prediction Drift",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "Prediction drift score < 0.15",
+            "category": "PASS",
+            "details": "Found model prediction Kolmogorov-Smirnov drift score of 0.06"
+          }
+        ]
+      },
+      {
+        "check": "Unused Features - Train Dataset",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "Number of high variance unused features is less or equal to 5",
+            "category": "PASS",
+            "details": "Found 3 high variance unused features"
+          }
+        ]
+      },
+      {
+        "check": "Unused Features - Test Dataset",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "Number of high variance unused features is less or equal to 5",
+            "category": "PASS",
+            "details": "Found 3 high variance unused features"
+          }
+        ]
+      },
+      {
+        "check": "Model Inference Time - Train Dataset",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "Average model inference time for one sample is less than 0.001",
+            "category": "PASS",
+            "details": "Found average inference time (seconds): 1.76e-06"
+          }
+        ]
+      },
+      {
+        "check": "Model Inference Time - Test Dataset",
+        "status": "pass",
+        "conditions": [
+          {
+            "name": "Average model inference time for one sample is less than 0.001",
+            "category": "PASS",
+            "details": "Found average inference time (seconds): 5.58e-06"
+          }
+        ]
+      },
+      {
+        "check": "Confusion Matrix Report - Train Dataset",
+        "status": "pass",
+        "conditions": []
+      },
+      {
+        "check": "Confusion Matrix Report - Test Dataset",
+        "status": "pass",
+        "conditions": []
+      },
+      {
+        "check": "Calibration Metric - Train Dataset",
+        "status": "pass",
+        "conditions": []
+      },
+      {
+        "check": "Calibration Metric - Test Dataset",
+        "status": "pass",
+        "conditions": []
+      },
+      {
+        "check": "Regression Error Distribution - Train Dataset",
+        "status": "not_run",
+        "detail": "Check is irrelevant for classification tasks"
+      },
+      {
+        "check": "Regression Error Distribution - Test Dataset",
+        "status": "not_run",
+        "detail": "Check is irrelevant for classification tasks"
+      },
+      {
+        "check": "Boosting Overfit",
+        "status": "not_run",
+        "detail": "Check is relevant for Boosting models of type ('AdaBoostClassifier', 'GradientBoostingClassifier', 'LGBMClassifier', 'XGBClassifier', 'CatBoostClassifier', 'AdaBoostRegressor', 'GradientBoostingRegres"
+      }
+    ]
+  }
+}

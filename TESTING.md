@@ -16,7 +16,8 @@ on Python 3.11, 3.12 and 3.14 (Streamlit Community Cloud ignores the 3.11 settin
 
 Pins: streamlit 1.67.0, evidently 0.7.23, pandas 2.3.3, numpy 2.3.5, pillow 11.3.0, scikit-learn 1.7.2,
 scipy 1.16.3, pyarrow 26.0.1, openai 3.58.0, langgraph 1.2.24, langchain-core 1.8.4, langchain-openai 1.8.5,
-mcp 1.30.0, langchain-mcp-adapters 0.3.1, fastapi 0.165.0, uvicorn 0.54.0, httpx 0.28.1.
+mcp 1.30.0, langchain-mcp-adapters 0.3.1, fastapi 0.165.0, uvicorn 0.54.0, httpx 0.28.1, prometheus-client 0.24.1
+(added 2026-11-25; the 2026-11-25 additions were tested on Python 3.11 only, see §7).
 `mcp` stays < 2: mcp 2.x renamed FastMCP and langchain-mcp-adapters 0.3.1 fails to import against it.
 pandas stays < 3 because evidently 0.7.23 imports a pandas-2 internal. Re-running `python -m ihds.pipeline` on
 3.14 with these pins reproduces every reported number (only Welch p-values differ in the 15th significant digit).
@@ -129,3 +130,52 @@ which the reviewer's checks cannot detect.
 | Azure Container Apps (West US), https://ihds-app.bluebay-94b3aae3.westus.azurecontainerapps.io | `GET /_stcore/health`; default-input assessment through the in-container FastAPI + MCP HTTP stack (`scripts/start_all.sh`) | Health `ok` (HTTP 200). Sidebar: "Workflow via REST API http://127.0.0.1:8000 · tools: mcp-http", "LLM key configured on the API server". Risk p = 0.604, high band, top driver Glucose; evidence K7, K2, K1. Tools `risk_score`, `explain_contributions`, `rag_search`, `population_context` over `mcp-http`. Three gpt-4o-mini drafts rejected for grounding (0.185, 0.182, 0.185); revision cap reached; template draft released (UI grounding 0.703) and case escalated to human review. Screenshots: `docs/screenshots/08_azure_container_app.png`, `docs/screenshots/09_azure_agent_trace.png`. | ✅ |
 
 The Azure escalation is the designed fail-safe, not a host failure: the API, MCP tools and live writer all ran; the reviewer enforced the 0.2 grounding threshold and `finalize` released the template. The result-page "approved" badge is the template's review score. This matches the offline loop-cap test and the 2/30 escalations in the Vocareum evaluation (§2b).
+
+## 7. MLOps layer and `/metrics` (2026-11-25, Python 3.11)
+
+Full commands and results are in [`docs/MLOPS.md`](docs/MLOPS.md).
+
+| Environment | Command | Result |
+|---|---|---|
+| Runtime (`requirements-dev.txt` + prometheus-client) | `pytest -q -rs` | **56 passed, 11 skipped** (52 original + `test_api_prometheus_metrics` + 3 config tests in `test_mlops.py`; skips are the 4 live `vocareum` tests and 7 MLOps tests whose tools are not installed) |
+| MLOps (`requirements-mlops.txt`, separate venv) | `pytest -q tests/test_mlops.py` | **10 passed** |
+| MLOps | `pip install -r requirements-mlops.txt` in a fresh venv, then `pip check` | installs with pip; "No broken requirements found" |
+| Both | `ruff check .` (`ruff.toml`: E, F, W; E501/E702 ignored) | All checks passed. Fixing it removed 9 unused imports and invalid escapes from existing files; there were no behaviour changes |
+
+What `tests/test_mlops.py` checks:
+
+- **Configs:**
+  - `dvc.yaml` stages, deps and params all exist;
+  - Prometheus, compose and Grafana configs parse, every metric named in the dashboard is exposed by the API,
+    and all ports bind to 127.0.0.1;
+  - `docs/ci.yml.example` has the lint, test, data-validation and docker jobs.
+- **GX:** 30/30 on the shipped data; corrupted data fails the Glucose range and Age non-null expectations.
+- **MLflow:** the run's params and metrics are logged; the reloaded model gives the same predictions.
+- **Deepchecks:** the real split passes the gate; a leaked test set fails on Train Test Samples Mix.
+- **SHAP:** Glucose ranks first, and base + ΣSHAP = log-odds.
+- **Fairlearn:** the group counts sum to n, and DP diff = max − min selection rate.
+- **Feast:** apply, materialize and online fetch in a temp repo; raw 0 Insulin comes back as missing.
+- **Prefect:** the flow completes in task order, and a failed GX result stops it at `validate` (`Failed`).
+
+End-to-end runs on the box:
+
+| Tool | Run | Observed |
+|---|---|---|
+| DVC | `dvc repro -f`, `dvc status`, `dvc push` (local folder remote) | 7/7 stages ran; "Data and pipelines are up to date"; cached outputs pushed |
+| Prefect | `python -m ihds.mlops.flow` | flow `Completed`, 7/7 tasks `Completed`, 37 s |
+| MLflow | DVC train stage | run `8b95d9818eae4b4d94177879cdde1f3c`: ROC-AUC 0.8126, CV 0.8444 ± 0.0161 |
+| GX | validate stage | 30/30 passed |
+| Deepchecks | evaluate stage | gate passed, 0 critical failures (non-critical: Feature Label Correlation Change, Simple Model Comparison) |
+| SHAP / Fairlearn | explain stage | top 3: Glucose, BMI, Pregnancies; DP diff 0.420, EO diff 0.563 across age bands |
+| Feast | features stage | patient 0 and 5 fetched online, matching the source; p = 0.826 / 0.2059 |
+| Docker | `docker compose -f docker-compose.monitoring.yml build`, then `docker run --network host ihds:local` (default CMD = `scripts/start_all.sh`) | image built; Streamlit `/_stcore/health` `ok`; API `/health` showed `tools_transport: mcp-http`; `/metrics` served 18 `ihds_` lines; container healthcheck `healthy`; `mlflow` is not in the image |
+| Prometheus + Grafana | compose stack (host-network override on the box, see below), 104 `/assess` calls | targets `up`; ok 95, blocked 9; high 35, low 33, moderate 27; escalations 0; p95 0.048 s; Grafana datasource health OK; `docs/screenshots/10_grafana_dashboard.png` |
+
+**Docker networking on the box:** traffic between containers on the Docker bridge network timed out in this
+sandbox. Prometheus showed `ihds-api` down with "context deadline exceeded", and `wget api:8000` from the
+Prometheus container timed out. The stack was therefore verified with an uncommitted override that runs the
+same images on the host network, with targets rewritten to 127.0.0.1. The committed bridge-network compose file
+was not verified end to end on a normal Docker host.
+
+**CI:** GitHub Actions has not run, because `docs/ci.yml.example` is not yet in `.github/workflows/`. Each job's
+commands were run by hand as listed above.

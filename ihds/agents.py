@@ -1,4 +1,4 @@
-"""Multi-agent advisory workflow built with LangGraph + LangChain.
+r"""Multi-agent advisory workflow built with LangGraph + LangChain.
 
 Graph (exported from code to docs/architecture.mmd / .png by scripts/export_graph.py):
 
@@ -33,11 +33,8 @@ from __future__ import annotations
 
 import operator
 import os
-from datetime import datetime, timezone
-from typing import Annotated, Any, Optional, TypedDict
+from typing import Annotated, Optional, TypedDict
 
-import numpy as np
-import pandas as pd
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 

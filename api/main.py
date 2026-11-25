@@ -5,22 +5,39 @@
 POST /assess runs the LangGraph multi-agent workflow (tools via the MCP server by default) and returns the
 advisory draft, review, trace and the tool transport used. GET /health and GET /monitoring/summary are
 read-only. Set IHDS_MCP_URL to use a running MCP HTTP server instead of a stdio subprocess.
+
+GET /metrics serves Prometheus metrics (prometheus_client): request count and latency per route, /assess
+outcomes by risk band and status, and escalations. Scraped by docker-compose.monitoring.yml (local only);
+in the Azure Container Apps deployment only Streamlit's port 8501 is public, so /metrics is not reachable
+there. IHDS_METRICS=0 turns the endpoint off (404); deploy/azure/deploy_aci.sh sets it because ACI publishes 8000.
 """
 from __future__ import annotations
 
 import json
+import os
+import time
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 from pydantic import BaseModel, Field
 
 from ihds import agents, monitoring, workflow
 from ihds.config import FEATURES, LLM_MODEL, REPORTS_DIR
 
 STATE: dict = {}
+
+# Prometheus metrics (default process-wide registry).
+REQUESTS = Counter("ihds_http_requests_total", "HTTP requests", ["method", "route", "status"])
+LATENCY = Histogram("ihds_http_request_duration_seconds", "HTTP request latency", ["method", "route"],
+                    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30))
+PREDICTIONS = Counter("ihds_predictions_total", "Completed /assess runs by risk band", ["band"])
+ASSESS_STATUS = Counter("ihds_assess_total", "/assess runs by workflow status and draft source",
+                        ["status", "draft_source"])
+ESCALATIONS = Counter("ihds_escalations_total", "/assess runs escalated to a clinician")
 
 
 class PatientRecord(BaseModel):
@@ -93,6 +110,37 @@ app = FastAPI(title="IHDS advisory API", version="1.0",
               description="Advisory diabetes-risk drafts for clinician review. Not a diagnosis.", lifespan=lifespan)
 
 
+@app.middleware("http")
+async def prometheus_middleware(request: Request, call_next):
+    start = time.perf_counter()
+    status = 500
+    try:
+        response = await call_next(request)
+        status = response.status_code
+        return response
+    finally:
+        route = request.scope.get("route")
+        path = getattr(route, "path", None) or "unmatched"  # route template, so label cardinality stays bounded
+        if path != "/metrics":
+            LATENCY.labels(request.method, path).observe(time.perf_counter() - start)
+            REQUESTS.labels(request.method, path, str(status)).inc()
+
+
+def record_assessment(res) -> None:
+    ASSESS_STATUS.labels(res.status or "unknown", res.draft_source or "none").inc()
+    if res.band:
+        PREDICTIONS.labels(res.band).inc()
+    if res.escalated:
+        ESCALATIONS.inc()
+
+
+@app.get("/metrics", include_in_schema=False)
+def metrics():
+    if os.environ.get("IHDS_METRICS", "1") == "0":
+        raise HTTPException(status_code=404, detail="metrics disabled (IHDS_METRICS=0)")
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
 @app.get("/health")
 def health():
     S = get_system()
@@ -103,6 +151,7 @@ def health():
 @app.post("/assess", response_model=AssessResponse)
 def assess(req: AssessRequest):
     res = agents.run(get_graph(req.use_llm), req.record.model_dump(), req.question)
+    record_assessment(res)
     out = asdict(res)
     out["transport"] = res.transport or get_system().tools.transport
     return out

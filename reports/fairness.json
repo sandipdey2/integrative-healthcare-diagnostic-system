@@ -1,0 +1,60 @@
+{
+  "sensitive_attribute": "Age band (no sex/race/ethnicity column exists in the data)",
+  "bands": [
+    "21-29",
+    "30-44",
+    "45+"
+  ],
+  "split": "test",
+  "threshold": 0.5,
+  "overall": {
+    "count": 154.0,
+    "accuracy": 0.7338,
+    "recall": 0.7037,
+    "precision": 0.6032,
+    "selection_rate": 0.4091,
+    "tpr": 0.7037,
+    "fpr": 0.25
+  },
+  "by_group": [
+    {
+      "age_band": "21-29",
+      "count": 85,
+      "accuracy": 0.7412,
+      "recall": 0.4375,
+      "precision": 0.35,
+      "selection_rate": 0.2353,
+      "tpr": 0.4375,
+      "fpr": 0.1884
+    },
+    {
+      "age_band": "30-44",
+      "count": 40,
+      "accuracy": 0.7,
+      "recall": 0.7308,
+      "precision": 0.7917,
+      "selection_rate": 0.6,
+      "tpr": 0.7308,
+      "fpr": 0.3571
+    },
+    {
+      "age_band": "45+",
+      "count": 29,
+      "accuracy": 0.7586,
+      "recall": 1.0,
+      "precision": 0.6316,
+      "selection_rate": 0.6552,
+      "tpr": 1.0,
+      "fpr": 0.4118
+    }
+  ],
+  "positives_by_group": {
+    "21-29": 16,
+    "30-44": 26,
+    "45+": 12
+  },
+  "demographic_parity_difference": 0.4199,
+  "demographic_parity_ratio": 0.3591,
+  "equalized_odds_difference": 0.5625,
+  "equalized_odds_ratio": 0.4375
+}

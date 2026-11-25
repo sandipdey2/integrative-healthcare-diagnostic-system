@@ -1,0 +1,331 @@
+{
+  "name": "pima_clinical_input",
+  "expectations": [
+    {
+      "type": "expect_table_columns_to_match_ordered_list",
+      "kwargs": {
+        "column_list": [
+          "Pregnancies",
+          "Glucose",
+          "BloodPressure",
+          "SkinThickness",
+          "Insulin",
+          "BMI",
+          "DiabetesPedigreeFunction",
+          "Age",
+          "Outcome"
+        ]
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_table_row_count_to_be_between",
+      "kwargs": {
+        "min_value": 700,
+        "max_value": 1000
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_be_in_type_list",
+      "kwargs": {
+        "column": "Pregnancies",
+        "type_list": [
+          "int64",
+          "float64"
+        ]
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "Pregnancies"
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_be_in_type_list",
+      "kwargs": {
+        "column": "Glucose",
+        "type_list": [
+          "int64",
+          "float64"
+        ]
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "Glucose",
+        "mostly": 0.97
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_be_in_type_list",
+      "kwargs": {
+        "column": "BloodPressure",
+        "type_list": [
+          "int64",
+          "float64"
+        ]
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "BloodPressure",
+        "mostly": 0.93
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_be_in_type_list",
+      "kwargs": {
+        "column": "SkinThickness",
+        "type_list": [
+          "int64",
+          "float64"
+        ]
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "SkinThickness",
+        "mostly": 0.65
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_be_in_type_list",
+      "kwargs": {
+        "column": "Insulin",
+        "type_list": [
+          "int64",
+          "float64"
+        ]
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "Insulin",
+        "mostly": 0.45
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_be_in_type_list",
+      "kwargs": {
+        "column": "BMI",
+        "type_list": [
+          "int64",
+          "float64"
+        ]
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "BMI",
+        "mostly": 0.97
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_be_in_type_list",
+      "kwargs": {
+        "column": "DiabetesPedigreeFunction",
+        "type_list": [
+          "int64",
+          "float64"
+        ]
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "DiabetesPedigreeFunction"
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_be_in_type_list",
+      "kwargs": {
+        "column": "Age",
+        "type_list": [
+          "int64",
+          "float64"
+        ]
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "Age"
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_be_in_type_list",
+      "kwargs": {
+        "column": "Outcome",
+        "type_list": [
+          "int64",
+          "float64"
+        ]
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "Outcome"
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "Pregnancies",
+        "mostly": 0.99,
+        "min_value": 0.0,
+        "max_value": 20.0
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "Glucose",
+        "mostly": 0.99,
+        "min_value": 40.0,
+        "max_value": 400.0
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "BloodPressure",
+        "mostly": 0.99,
+        "min_value": 30.0,
+        "max_value": 150.0
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "SkinThickness",
+        "mostly": 0.99,
+        "min_value": 5.0,
+        "max_value": 100.0
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "Insulin",
+        "mostly": 0.99,
+        "min_value": 10.0,
+        "max_value": 900.0
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "BMI",
+        "mostly": 0.99,
+        "min_value": 12.0,
+        "max_value": 70.0
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "DiabetesPedigreeFunction",
+        "mostly": 0.99,
+        "min_value": 0.05,
+        "max_value": 2.5
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "Age",
+        "mostly": 0.99,
+        "min_value": 21.0,
+        "max_value": 100.0
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_values_to_be_in_set",
+      "kwargs": {
+        "column": "Outcome",
+        "value_set": [
+          0,
+          1
+        ]
+      },
+      "meta": {},
+      "severity": "critical"
+    },
+    {
+      "type": "expect_column_mean_to_be_between",
+      "kwargs": {
+        "column": "Outcome",
+        "min_value": 0.2,
+        "max_value": 0.5
+      },
+      "meta": {},
+      "severity": "critical"
+    }
+  ],
+  "meta": {
+    "great_expectations_version": "1.25.0"
+  },
+  "notes": null
+}

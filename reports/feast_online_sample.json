@@ -1,0 +1,41 @@
+{
+  "feature_views": [
+    "patient_clinical_features"
+  ],
+  "feature_services": [
+    "risk_model_v1"
+  ],
+  "patient_ids": [
+    0,
+    5
+  ],
+  "features": [
+    {
+      "patient_id": 0,
+      "Insulin": null,
+      "BMI": 33.6,
+      "BloodPressure": 72.0,
+      "Age": 50.0,
+      "Glucose": 148.0,
+      "SkinThickness": 35.0,
+      "DiabetesPedigreeFunction": 0.627,
+      "Pregnancies": 6.0
+    },
+    {
+      "patient_id": 5,
+      "Insulin": null,
+      "BMI": 25.6,
+      "BloodPressure": 74.0,
+      "Age": 30.0,
+      "Glucose": 116.0,
+      "SkinThickness": null,
+      "DiabetesPedigreeFunction": 0.201,
+      "Pregnancies": 5.0
+    }
+  ],
+  "matches_source_parquet": true,
+  "risk_probability": [
+    0.826,
+    0.2059
+  ]
+}

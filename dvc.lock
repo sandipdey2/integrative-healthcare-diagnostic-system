@@ -1,0 +1,257 @@
+schema: '2.0'
+stages:
+  prepare:
+    cmd: python -m ihds.mlops.prepare
+    deps:
+    - path: data/pima_diabetes.csv
+      hash: md5
+      md5: 60acca81995dc9744b499005ecfe6f2a
+      size: 23290
+    - path: ihds/data.py
+      hash: md5
+      md5: a2080a0a7d07c1426fa4a715d049971d
+      size: 1733
+    - path: ihds/mlops/prepare.py
+      hash: md5
+      md5: 6100fa6af4360b527c910f95f46856cc
+      size: 1734
+    params:
+      params.yaml:
+        prepare:
+          test_size: 0.2
+          seed: 42
+          feast_event_timestamp: '2026-01-01T00:00:00+00:00'
+    outs:
+    - path: data/processed/test.parquet
+      hash: md5
+      md5: 9ba5ab9c553667048fa087c7d7fa8016
+      size: 9363
+    - path: data/processed/train.parquet
+      hash: md5
+      md5: af932e307d4d6241c37b83af77782f21
+      size: 15102
+    - path: feature_repo/data/patient_features.parquet
+      hash: md5
+      md5: 79b303f6f51707a164947981061f928b
+      size: 22133
+  validate:
+    cmd: python -m ihds.mlops.validate
+    deps:
+    - path: data/pima_diabetes.csv
+      hash: md5
+      md5: 60acca81995dc9744b499005ecfe6f2a
+      size: 23290
+    - path: ihds/config.py
+      hash: md5
+      md5: 78a59192b29260c60d0761b50f3985b1
+      size: 1225
+    - path: ihds/mlops/validate.py
+      hash: md5
+      md5: ab943ee2fd02bee518936fe7e8534c7c
+      size: 4529
+    params:
+      params.yaml:
+        validate:
+          range_mostly: 0.99
+          min_rows: 700
+          max_rows: 1000
+    outs:
+    - path: reports/gx_suite.json
+      hash: md5
+      md5: b055860925e295cb838459ff7ce27877
+      size: 7040
+    - path: reports/validation.json
+      hash: md5
+      md5: fa8021172f77fc15d4a3f7a97bbf0e24
+      size: 161
+  train:
+    cmd: python -m ihds.mlops.train_tracked
+    deps:
+    - path: data/processed/test.parquet
+      hash: md5
+      md5: 9ba5ab9c553667048fa087c7d7fa8016
+      size: 9363
+    - path: data/processed/train.parquet
+      hash: md5
+      md5: af932e307d4d6241c37b83af77782f21
+      size: 15102
+    - path: ihds/mlops/train_tracked.py
+      hash: md5
+      md5: 33c94c92a2aea6f8875e7327d6449ee8
+      size: 4246
+    - path: ihds/model.py
+      hash: md5
+      md5: 9c6fbdd9ebb17caa65ed890394582a46
+      size: 3347
+    - path: reports/validation.json
+      hash: md5
+      md5: fa8021172f77fc15d4a3f7a97bbf0e24
+      size: 161
+    params:
+      params.yaml:
+        train:
+          C: 1.0
+          max_iter: 1000
+          class_weight: balanced
+          threshold: 0.5
+          experiment: ihds-risk-model
+    outs:
+    - path: models/risk_model.joblib
+      hash: md5
+      md5: 62c0e0b7094bc7c3c30012c6dd3be324
+      size: 2289
+    - path: reports/train_metrics.json
+      hash: md5
+      md5: ffab6577706c9142a60fbba19026647b
+      size: 405
+  evaluate:
+    cmd: python -m ihds.mlops.quality
+    deps:
+    - path: data/processed/test.parquet
+      hash: md5
+      md5: 9ba5ab9c553667048fa087c7d7fa8016
+      size: 9363
+    - path: data/processed/train.parquet
+      hash: md5
+      md5: af932e307d4d6241c37b83af77782f21
+      size: 15102
+    - path: ihds/mlops/quality.py
+      hash: md5
+      md5: ca0cdc018ba2ac369fa47803a79c47a2
+      size: 5442
+    - path: models/risk_model.joblib
+      hash: md5
+      md5: 62c0e0b7094bc7c3c30012c6dd3be324
+      size: 2289
+    params:
+      params.yaml:
+        evaluate:
+          critical_checks:
+          - Data Duplicates
+          - Mixed Nulls
+          - Conflicting Labels
+          - Train Test Samples Mix
+          - New Label Train Test
+          - Label Drift
+          - Feature Drift
+          - Prediction Drift
+          - Train Test Performance
+          min_test_roc_auc: 0.75
+    outs:
+    - path: reports/deepchecks
+      hash: md5
+      md5: 158200b2ac33927114c46f91009517eb.dir
+      size: 14178725
+      nfiles: 3
+    - path: reports/deepchecks_summary.json
+      hash: md5
+      md5: 600903d0fb8047edddd25ea55c646d23
+      size: 13269
+  explain:
+    cmd: python -m ihds.mlops.explain
+    deps:
+    - path: data/processed/test.parquet
+      hash: md5
+      md5: 9ba5ab9c553667048fa087c7d7fa8016
+      size: 9363
+    - path: data/processed/train.parquet
+      hash: md5
+      md5: af932e307d4d6241c37b83af77782f21
+      size: 15102
+    - path: ihds/mlops/explain.py
+      hash: md5
+      md5: 15efa8a12bac2979c0366fe5fd5d4b04
+      size: 6465
+    - path: models/risk_model.joblib
+      hash: md5
+      md5: 62c0e0b7094bc7c3c30012c6dd3be324
+      size: 2289
+    params:
+      params.yaml:
+        explain:
+          shap_background: 100
+          local_examples: 3
+          age_bins:
+          - 21
+          - 30
+          - 45
+          - 120
+          age_labels:
+          - 21-29
+          - 30-44
+          - 45+
+        train.threshold: 0.5
+    outs:
+    - path: reports/fairness.json
+      hash: md5
+      md5: d65d1be3f4f59f528185686065b7c1ff
+      size: 1222
+    - path: reports/shap_global.json
+      hash: md5
+      md5: 7605f6f3187671a477240857f6f1340c
+      size: 2232
+    - path: reports/shap_summary.png
+      hash: md5
+      md5: 3ef85bb19b701b5113d5030f7f01a3c7
+      size: 60564
+  drift:
+    cmd: python -m ihds.mlops.drift
+    deps:
+    - path: data/processed/test.parquet
+      hash: md5
+      md5: 9ba5ab9c553667048fa087c7d7fa8016
+      size: 9363
+    - path: data/processed/train.parquet
+      hash: md5
+      md5: af932e307d4d6241c37b83af77782f21
+      size: 15102
+    - path: ihds/mlops/drift.py
+      hash: md5
+      md5: f6bbf42789331fdefdd65cc66cb70fa3
+      size: 1404
+    - path: ihds/monitoring.py
+      hash: md5
+      md5: 33b77ee6395347ad78001ac1a6e097df
+      size: 14351
+    - path: models/risk_model.joblib
+      hash: md5
+      md5: 62c0e0b7094bc7c3c30012c6dd3be324
+      size: 2289
+    outs:
+    - path: reports/drift
+      hash: md5
+      md5: 6ceca0fcfe8f07b031e88edb22c51737.dir
+      size: 8241335
+      nfiles: 5
+    - path: reports/drift_summary.json
+      hash: md5
+      md5: ca733c1b3b80b1a0b2795c7d1d6818fe
+      size: 370
+  features:
+    cmd: python -m ihds.mlops.features --patient-id 0 --patient-id 5
+    deps:
+    - path: feature_repo/data/patient_features.parquet
+      hash: md5
+      md5: 79b303f6f51707a164947981061f928b
+      size: 22133
+    - path: feature_repo/feature_store.yaml
+      hash: md5
+      md5: 85f5551b9af09f42b8a865d8b057459a
+      size: 499
+    - path: feature_repo/features.py
+      hash: md5
+      md5: 00a5d1c6e1148ec248f3627379133965
+      size: 1821
+    - path: ihds/mlops/features.py
+      hash: md5
+      md5: f97e60cc52043d1f5f8cf76967e65d68
+      size: 3488
+    - path: models/risk_model.joblib
+      hash: md5
+      md5: 62c0e0b7094bc7c3c30012c6dd3be324
+      size: 2289
+    outs:
+    - path: reports/feast_online_sample.json
+      hash: md5
+      md5: 2056aab8a61367cec5e2ecb5c5e6ffbc
+      size: 741

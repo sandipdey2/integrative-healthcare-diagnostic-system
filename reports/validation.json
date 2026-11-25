@@ -1,0 +1,9 @@
+{
+  "suite": "pima_clinical_input",
+  "success": true,
+  "evaluated": 30,
+  "passed": 30,
+  "failed": 0,
+  "failures": [],
+  "source": "data/pima_diabetes.csv"
+}
