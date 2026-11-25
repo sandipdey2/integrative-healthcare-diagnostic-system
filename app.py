@@ -15,7 +15,7 @@ import time
 import pandas as pd
 import streamlit as st
 
-from ihds import agents, data, metrics_push, model, monitoring, stats_analysis, workflow
+from ihds import agents, data, metrics_push, model, monitoring, stats_analysis, tracing, workflow
 from ihds.config import FEATURES, LLM_MODEL, REPORTS_DIR, ROOT, TARGET, VALID_RANGES
 from ihds.pipeline import build_system
 
@@ -52,6 +52,26 @@ def _start_metrics_push():
 
 
 _start_metrics_push()
+
+
+def _start_tracing():
+    """Optional LangSmith tracing (on only with LANGSMITH_API_KEY in the env or a [langsmith] secrets table)."""
+    try:
+        try:
+            secrets = st.secrets if len(st.secrets) else None
+        except Exception:
+            secrets = None
+        return tracing.configure(secrets=secrets)
+    except Exception:
+        return None
+
+
+TRACING = _start_tracing()
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _langsmith_url(run_id: str):
+    return tracing.run_url(run_id)
 
 
 API_URL = os.environ.get("IHDS_API_URL", "").rstrip("/")
@@ -117,6 +137,8 @@ with st.sidebar:
                        f" (last {push['last_status']})")
         else:
             st.caption("Metrics push: off (no GRAFANA_RW_URL secret)")
+    st.caption(f"LangSmith tracing: on (project {TRACING['project']})" if TRACING
+               else "LangSmith tracing: off (no LANGSMITH_API_KEY)")
     st.divider()
     st.markdown("**Advisory system only** — clinician review required.")
 
@@ -179,7 +201,7 @@ with tabs[0]:
             st.warning(workflow.DISCLAIMER)
             with st.expander("Feature contributions (log-odds vs. training average)"):
                 st.dataframe(pd.DataFrame([c.__dict__ for c in res.contributions]).round(3), hide_index=True)
-            with st.expander("Retrieved evidence (evidence_agent)"):
+            with st.expander(f"Retrieved evidence (evidence_agent, retrieval: {res.retrieval or 'n/a'})"):
                 st.dataframe(pd.DataFrame(res.evidence), hide_index=True)
                 if res.population:
                     st.json(res.population[0])
@@ -190,7 +212,11 @@ with tabs[0]:
                 st.json(res.review)
             with st.expander("Agent trace (LangGraph node order) and tool-call log (audit)"):
                 st.caption(f"Workflow route: {'REST API ' + API_URL if API_URL else 'in-process LangGraph'} · "
-                           f"tool transport: {res.transport}")
+                           f"tool transport: {res.transport} · retrieval: {res.retrieval or 'n/a'}")
+                if res.langsmith_run_id:
+                    url = _langsmith_url(res.langsmith_run_id)
+                    st.markdown(f"LangSmith run `{res.langsmith_run_id}`" + (f" · [open trace]({url})" if url else
+                                f" (project {tracing.project()})"))
                 st.write(res.trace)
                 st.dataframe(pd.DataFrame(res.tool_calls), hide_index=True)
 

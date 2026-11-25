@@ -130,7 +130,10 @@ def test_push_sends_remote_write_with_dashboard_metric_names(receiver):
     assert headers["X-Prometheus-Remote-Write-Version"] == "0.1.0"
     assert headers["Authorization"] == "Basic " + base64.b64encode(b"123:secret").decode()
     got = {(lb["__name__"], tuple(sorted((k, v) for k, v in lb.items() if k not in
-            ("__name__", "service", "source", "instance")))): s[0][0] for lb, s in decode_write_request(snappy_decode(body))}
+            ("__name__", "service", "source", "instance")))): s[-1][0] for lb, s in decode_write_request(snappy_decode(body))}
+    first = {lb["__name__"] + str(sorted(lb.items())): s for lb, s in decode_write_request(snappy_decode(body))}
+    assess = [s for k, s in first.items() if k.startswith("ihds_assess_total")]
+    assert all(len(s) == 2 and s[0][0] == 0 and s[1][1] - s[0][1] == int(p.interval * 1000) for s in assess)  # zero sample first
     assert all(lb["service"] == "ihds-streamlit" for lb, _ in decode_write_request(snappy_decode(body)))
     assert got[("ihds_assess_total", (("draft_source", "template"), ("status", "ok")))] == 2
     assert got[("ihds_assess_total", (("draft_source", "refusal"), ("status", "blocked")))] == 1
@@ -142,6 +145,8 @@ def test_push_sends_remote_write_with_dashboard_metric_names(receiver):
     assert got[("ihds_assess_duration_seconds_bucket", (("le", "+Inf"),))] == 3
     assert got[("ihds_app_up", ())] == 1
     assert "secret" not in repr(p)
+    assert p.push_once()  # second push: counters already known, one sample each
+    assert all(len(s) == 1 for _, s in decode_write_request(snappy_decode(_Receiver.calls[1][1])))
 
 
 def test_push_failures_never_raise(receiver):

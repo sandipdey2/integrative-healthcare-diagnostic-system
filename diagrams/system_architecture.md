@@ -62,7 +62,7 @@ and append-only `trace` and `tool_calls` lists (reducer `operator.add`).
 | `refuse` | terminal | Returns the refusal text | — |
 | `supervisor` | router agent | Picks the next specialist from what is missing in state: risk → evidence → (uncertainty if 0.40 ≤ p < 0.60) → writer | rules |
 | `risk_agent` | specialist | Probability, band, per-feature log-odds contributions | `risk_score`, `explain_contributions` (LR pipeline) |
-| `evidence_agent` | specialist | Top-3 knowledge snippets + population statistics for the top driver | `rag_search` (TF-IDF), `population_context` (Welch results) |
+| `evidence_agent` | specialist | Top-3 knowledge snippets + population statistics for the top driver | `rag_search` (ChromaDB embeddings; TF-IDF keyword fallback), `population_context` (Welch results) |
 | `uncertainty_agent` | specialist | Probability spread over the 25 nearest GAN-generated profiles | `synthetic_neighbors` (GAN pool) |
 | `writer_agent` | generator | Advisory draft; uses reviewer feedback on revisions | gpt-4o-mini via `langchain-openai` if `OPENAI_API_KEY` is set (base URL from `OPENAI_API_BASE`, e.g. Vocareum), else deterministic template |
 | `reviewer` | critic agent | Disclaimer, `[K#]` citations of retrieved ids, exact probability, banned phrases, grounding ≥ 0.2 | rules (`workflow.review`) |

@@ -94,13 +94,24 @@ def input_guard(record: dict, question: str = "") -> GuardResult:
 
 # ---------------------------------------------------------------- retrieval tool
 class KnowledgeBase:
-    def __init__(self, path=KB_PATH):
+    """Evidence retrieval over data/clinical_knowledge.csv.
+
+    IHDS_RETRIEVAL: "auto" (default: ChromaDB embeddings, keyword fallback), "chroma" (same, fallback still
+    applies but is reported), or "keyword" (TF-IDF only, the original matcher). `last_method` records what
+    actually served the latest query ("chroma" or "keyword"); see ihds/vector_store.py.
+    """
+
+    def __init__(self, path=KB_PATH, method: str | None = None):
         self.df = pd.read_csv(path)
         self.corpus = (self.df["topic"] + " " + self.df["fact"]).tolist()
         self.vectorizer = TfidfVectorizer(stop_words="english")
         self.matrix = self.vectorizer.fit_transform(self.corpus)
+        self.method = (method or os.environ.get("IHDS_RETRIEVAL", "auto")).lower()
+        self._chroma = None
+        self.chroma_error: str | None = None
+        self.last_method = "keyword"
 
-    def search(self, query: str, k: int = 3) -> list[dict]:
+    def keyword_search(self, query: str, k: int = 3) -> list[dict]:
         scores = cosine_similarity(self.vectorizer.transform([query]), self.matrix).flatten()
         idx = scores.argsort()[::-1][:k]
         return [
@@ -113,6 +124,37 @@ class KnowledgeBase:
             for i in idx
             if scores[i] > 0
         ]
+
+    def _chroma_index(self):
+        if self._chroma is None and self.chroma_error is None:
+            try:
+                from .vector_store import ChromaIndex
+
+                self._chroma = ChromaIndex(self.df)
+            except Exception as exc:  # chromadb missing, model download failed, ...
+                self.chroma_error = f"{type(exc).__name__}: {exc}"[:200]
+        return self._chroma
+
+    @property
+    def embedding(self) -> str | None:
+        return self._chroma.embedding if self._chroma is not None else None
+
+    def retrieve(self, query: str, k: int = 3) -> tuple[list[dict], str]:
+        """Returns (evidence, method) with method "chroma" or "keyword"."""
+        if self.method != "keyword":
+            idx = self._chroma_index()
+            if idx is not None:
+                try:
+                    self.last_method = "chroma"
+                    return idx.search(query, k), "chroma"
+                except Exception as exc:
+                    self.chroma_error = f"{type(exc).__name__}: {exc}"[:200]
+                    self._chroma = None
+        self.last_method = "keyword"
+        return self.keyword_search(query, k), "keyword"
+
+    def search(self, query: str, k: int = 3) -> list[dict]:
+        return self.retrieve(query, k)[0]
 
 
 # ---------------------------------------------------------------- helpers

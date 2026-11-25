@@ -25,8 +25,10 @@ from fastapi.concurrency import run_in_threadpool
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 from pydantic import BaseModel, Field
 
-from ihds import agents, monitoring, workflow
+from ihds import agents, monitoring, tracing, workflow
 from ihds.config import FEATURES, LLM_MODEL, REPORTS_DIR
+
+tracing.configure()  # LangSmith tracing only when LANGSMITH_API_KEY is in the environment
 
 STATE: dict = {}
 
@@ -44,6 +46,11 @@ ASSESS_LATENCY = Histogram("ihds_assess_duration_seconds", "Agent workflow durat
 APP_UP = Gauge("ihds_app_up", "1 while this IHDS process is running (heartbeat; also pushed by the Streamlit app)")
 APP_START = Gauge("ihds_app_start_time_seconds", "Unix time this IHDS process started")
 APP_UP.set(1)
+# expose the common series at 0 from the start, so increase() in the dashboard counts the first event
+for _status, _src in (("ok", "template"), ("ok", "llm"), ("blocked", "refusal")):
+    ASSESS_STATUS.labels(_status, _src)
+for _band in ("low", "moderate", "high"):
+    PREDICTIONS.labels(_band)
 APP_START.set_to_current_time()
 
 
@@ -83,6 +90,8 @@ class AssessResponse(BaseModel):
     trace: list[str] = []
     tool_calls: list[dict] = []
     transport: str = ""
+    retrieval: str = ""
+    langsmith_run_id: str = ""
 
 
 def get_system():

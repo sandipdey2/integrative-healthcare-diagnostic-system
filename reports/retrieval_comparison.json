@@ -1,0 +1,625 @@
+{
+  "queries": [
+    {
+      "query": "glucose OGTT prediabetes impaired tolerance diabetes threshold BMI overweight obesity risk factor",
+      "keyword": [
+        [
+          "K4",
+          0.546
+        ],
+        [
+          "K2",
+          0.52
+        ],
+        [
+          "K1",
+          0.307
+        ]
+      ],
+      "chroma-onnx": [
+        [
+          "K2",
+          0.701
+        ],
+        [
+          "K1",
+          0.658
+        ],
+        [
+          "K4",
+          0.61
+        ]
+      ],
+      "chroma-openai": [
+        [
+          "K2",
+          0.828
+        ],
+        [
+          "K1",
+          0.761
+        ],
+        [
+          "K3",
+          0.664
+        ]
+      ]
+    },
+    {
+      "query": "glucose OGTT prediabetes impaired tolerance diabetes threshold age screening risk",
+      "keyword": [
+        [
+          "K2",
+          0.584
+        ],
+        [
+          "K5",
+          0.462
+        ],
+        [
+          "K1",
+          0.345
+        ]
+      ],
+      "chroma-onnx": [
+        [
+          "K2",
+          0.757
+        ],
+        [
+          "K1",
+          0.729
+        ],
+        [
+          "K5",
+          0.704
+        ]
+      ],
+      "chroma-openai": [
+        [
+          "K2",
+          0.824
+        ],
+        [
+          "K1",
+          0.756
+        ],
+        [
+          "K3",
+          0.651
+        ]
+      ]
+    },
+    {
+      "query": "BMI overweight obesity risk factor family history pedigree genetic risk",
+      "keyword": [
+        [
+          "K6",
+          0.582
+        ],
+        [
+          "K4",
+          0.568
+        ],
+        [
+          "K5",
+          0.215
+        ]
+      ],
+      "chroma-onnx": [
+        [
+          "K6",
+          0.694
+        ],
+        [
+          "K4",
+          0.633
+        ],
+        [
+          "K7",
+          0.391
+        ]
+      ],
+      "chroma-openai": [
+        [
+          "K6",
+          0.598
+        ],
+        [
+          "K4",
+          0.594
+        ],
+        [
+          "K5",
+          0.448
+        ]
+      ]
+    },
+    {
+      "query": "pregnancies gestational diabetes history glucose OGTT prediabetes impaired tolerance diabetes threshold",
+      "keyword": [
+        [
+          "K7",
+          0.574
+        ],
+        [
+          "K2",
+          0.528
+        ],
+        [
+          "K1",
+          0.346
+        ]
+      ],
+      "chroma-onnx": [
+        [
+          "K7",
+          0.767
+        ],
+        [
+          "K2",
+          0.55
+        ],
+        [
+          "K1",
+          0.505
+        ]
+      ],
+      "chroma-openai": [
+        [
+          "K2",
+          0.747
+        ],
+        [
+          "K1",
+          0.683
+        ],
+        [
+          "K7",
+          0.676
+        ]
+      ]
+    },
+    {
+      "query": "age screening risk blood pressure hypertension",
+      "keyword": [
+        [
+          "K8",
+          0.611
+        ],
+        [
+          "K5",
+          0.425
+        ],
+        [
+          "K4",
+          0.101
+        ]
+      ],
+      "chroma-onnx": [
+        [
+          "K5",
+          0.628
+        ],
+        [
+          "K8",
+          0.509
+        ],
+        [
+          "K4",
+          0.385
+        ]
+      ],
+      "chroma-openai": [
+        [
+          "K5",
+          0.601
+        ],
+        [
+          "K8",
+          0.533
+        ],
+        [
+          "K4",
+          0.451
+        ]
+      ]
+    },
+    {
+      "query": "insulin resistance serum insulin BMI obesity risk factor",
+      "keyword": [
+        [
+          "K9",
+          0.699
+        ],
+        [
+          "K4",
+          0.387
+        ],
+        [
+          "K5",
+          0.104
+        ]
+      ],
+      "chroma-onnx": [
+        [
+          "K4",
+          0.661
+        ],
+        [
+          "K9",
+          0.598
+        ],
+        [
+          "K6",
+          0.387
+        ]
+      ],
+      "chroma-openai": [
+        [
+          "K9",
+          0.666
+        ],
+        [
+          "K4",
+          0.572
+        ],
+        [
+          "K5",
+          0.437
+        ]
+      ]
+    },
+    {
+      "query": "glucose OGTT prediabetes impaired tolerance diabetes threshold BMI overweight obesity risk factor Which factors drive this score?",
+      "keyword": [
+        [
+          "K4",
+          0.544
+        ],
+        [
+          "K2",
+          0.468
+        ],
+        [
+          "K1",
+          0.276
+        ]
+      ],
+      "chroma-onnx": [
+        [
+          "K4",
+          0.665
+        ],
+        [
+          "K2",
+          0.611
+        ],
+        [
+          "K1",
+          0.599
+        ]
+      ],
+      "chroma-openai": [
+        [
+          "K2",
+          0.677
+        ],
+        [
+          "K1",
+          0.623
+        ],
+        [
+          "K3",
+          0.584
+        ]
+      ]
+    },
+    {
+      "query": "Is there a family history component?",
+      "keyword": [
+        [
+          "K6",
+          0.711
+        ],
+        [
+          "K7",
+          0.308
+        ]
+      ],
+      "chroma-onnx": [
+        [
+          "K6",
+          0.475
+        ],
+        [
+          "K7",
+          0.239
+        ],
+        [
+          "K10",
+          0.117
+        ]
+      ],
+      "chroma-openai": [
+        [
+          "K6",
+          0.529
+        ],
+        [
+          "K7",
+          0.31
+        ],
+        [
+          "K10",
+          0.298
+        ]
+      ]
+    },
+    {
+      "query": "What does an oral glucose tolerance result of 160 mean?",
+      "keyword": [
+        [
+          "K2",
+          0.625
+        ],
+        [
+          "K1",
+          0.441
+        ],
+        [
+          "K3",
+          0.127
+        ]
+      ],
+      "chroma-onnx": [
+        [
+          "K2",
+          0.725
+        ],
+        [
+          "K1",
+          0.696
+        ],
+        [
+          "K3",
+          0.459
+        ]
+      ],
+      "chroma-openai": [
+        [
+          "K2",
+          0.66
+        ],
+        [
+          "K1",
+          0.636
+        ],
+        [
+          "K3",
+          0.57
+        ]
+      ]
+    },
+    {
+      "query": "Should this patient be screened again?",
+      "keyword": [],
+      "chroma-onnx": [
+        [
+          "K5",
+          0.345
+        ],
+        [
+          "K11",
+          0.335
+        ],
+        [
+          "K12",
+          0.243
+        ]
+      ],
+      "chroma-openai": [
+        [
+          "K5",
+          0.392
+        ],
+        [
+          "K11",
+          0.333
+        ],
+        [
+          "K4",
+          0.328
+        ]
+      ]
+    },
+    {
+      "query": "How does blood pressure relate to diabetes risk?",
+      "keyword": [
+        [
+          "K8",
+          0.654
+        ],
+        [
+          "K5",
+          0.15
+        ],
+        [
+          "K6",
+          0.14
+        ]
+      ],
+      "chroma-onnx": [
+        [
+          "K8",
+          0.648
+        ],
+        [
+          "K6",
+          0.495
+        ],
+        [
+          "K4",
+          0.47
+        ]
+      ],
+      "chroma-openai": [
+        [
+          "K8",
+          0.614
+        ],
+        [
+          "K4",
+          0.462
+        ],
+        [
+          "K6",
+          0.459
+        ]
+      ]
+    }
+  ],
+  "overlap_at_3": {
+    "keyword~chroma-onnx": 0.788,
+    "keyword~chroma-openai": 0.758,
+    "chroma-onnx~chroma-openai": 0.818
+  },
+  "top1_agreement": {
+    "keyword~chroma-onnx": 0.636,
+    "keyword~chroma-openai": 0.545,
+    "chroma-onnx~chroma-openai": 0.727
+  },
+  "llm_eval": {
+    "model": "gpt-4o-mini (Vocareum)",
+    "cases_per_run": 30,
+    "repeats": [
+      {
+        "keyword": {
+          "runs": 30,
+          "retrieval_used": [
+            "keyword"
+          ],
+          "llm_drafts_final": 26,
+          "reviewer_approved_first_try": 0.733,
+          "reviewer_approved_final": 1.0,
+          "escalated": 4,
+          "mean_revisions": 0.6,
+          "mean_grounding": 0.331,
+          "min_grounding": 0.2,
+          "mean_latency_s": 4.92
+        },
+        "chroma": {
+          "runs": 30,
+          "retrieval_used": [
+            "chroma"
+          ],
+          "llm_drafts_final": 25,
+          "reviewer_approved_first_try": 0.6,
+          "reviewer_approved_final": 1.0,
+          "escalated": 5,
+          "mean_revisions": 0.8,
+          "mean_grounding": 0.308,
+          "min_grounding": 0.2,
+          "mean_latency_s": 5.27
+        }
+      },
+      {
+        "keyword": {
+          "runs": 30,
+          "retrieval_used": [
+            "keyword"
+          ],
+          "llm_drafts_final": 25,
+          "reviewer_approved_first_try": 0.733,
+          "reviewer_approved_final": 1.0,
+          "escalated": 5,
+          "mean_revisions": 0.633,
+          "mean_grounding": 0.346,
+          "min_grounding": 0.2,
+          "mean_latency_s": 4.67
+        },
+        "chroma": {
+          "runs": 30,
+          "retrieval_used": [
+            "chroma"
+          ],
+          "llm_drafts_final": 27,
+          "reviewer_approved_first_try": 0.733,
+          "reviewer_approved_final": 1.0,
+          "escalated": 3,
+          "mean_revisions": 0.5,
+          "mean_grounding": 0.294,
+          "min_grounding": 0.204,
+          "mean_latency_s": 4.41
+        }
+      },
+      {
+        "keyword": {
+          "runs": 30,
+          "retrieval_used": [
+            "keyword"
+          ],
+          "llm_drafts_final": 26,
+          "reviewer_approved_first_try": 0.667,
+          "reviewer_approved_final": 1.0,
+          "escalated": 4,
+          "mean_revisions": 0.7,
+          "mean_grounding": 0.346,
+          "min_grounding": 0.2,
+          "mean_latency_s": 5.07
+        },
+        "chroma": {
+          "runs": 30,
+          "retrieval_used": [
+            "chroma"
+          ],
+          "llm_drafts_final": 27,
+          "reviewer_approved_first_try": 0.733,
+          "reviewer_approved_final": 1.0,
+          "escalated": 3,
+          "mean_revisions": 0.533,
+          "mean_grounding": 0.286,
+          "min_grounding": 0.2,
+          "mean_latency_s": 4.73
+        }
+      }
+    ],
+    "aggregate": {
+      "keyword": {
+        "runs": 90,
+        "reviewer_approved_first_try_mean": 0.711,
+        "reviewer_approved_first_try_each": [
+          0.733,
+          0.733,
+          0.667
+        ],
+        "reviewer_approved_final_mean": 1.0,
+        "escalated_total": 13,
+        "mean_grounding_each": [
+          0.331,
+          0.346,
+          0.346
+        ],
+        "min_grounding": 0.2
+      },
+      "chroma": {
+        "runs": 90,
+        "reviewer_approved_first_try_mean": 0.689,
+        "reviewer_approved_first_try_each": [
+          0.6,
+          0.733,
+          0.733
+        ],
+        "reviewer_approved_final_mean": 1.0,
+        "escalated_total": 11,
+        "mean_grounding_each": [
+          0.308,
+          0.294,
+          0.286
+        ],
+        "min_grounding": 0.2
+      }
+    },
+    "note": "Same 30 held-out cases, in-process tools, LangSmith off; run 1 and runs 2-3 were separate invocations on 2026-11-25."
+  }
+}

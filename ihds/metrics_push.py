@@ -62,8 +62,9 @@ def encode_write_request(series: list[tuple[dict[str, str], float, int]]) -> byt
         ts = bytearray()
         for k in sorted(labels):
             ts += _field_bytes(1, _field_bytes(1, k.encode()) + _field_bytes(2, str(labels[k]).encode()))
-        sample = b"\x09" + struct.pack("<d", float(value)) + b"\x10" + _varint(int(ts_ms))
-        ts += _field_bytes(2, sample)
+        samples = value if isinstance(value, list) else [(value, ts_ms)]  # list = several (value, ts) samples
+        for v, t in samples:
+            ts += _field_bytes(2, b"\x09" + struct.pack("<d", float(v)) + b"\x10" + _varint(int(t)))
         out += _field_bytes(1, bytes(ts))
     return bytes(out)
 
@@ -89,6 +90,7 @@ class Registry:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self.counters: dict[tuple, float] = {}
+        self.new_keys: set[tuple] = set()
         self.hist_buckets: dict[float, int] = {b: 0 for b in ASSESS_BUCKETS}
         self.hist_count = 0
         self.hist_sum = 0.0
@@ -97,6 +99,8 @@ class Registry:
     def inc(self, name: str, labels: dict[str, str] | None = None, value: float = 1.0) -> None:
         key = (name, tuple(sorted((labels or {}).items())))
         with self._lock:
+            if key not in self.counters:
+                self.new_keys.add(key)  # first push also sends a 0 sample, so increase() counts the first event
             self.counters[key] = self.counters.get(key, 0.0) + value
 
     def observe(self, seconds: float) -> None:
@@ -117,9 +121,16 @@ class Registry:
         if seconds is not None:
             self.observe(seconds)
 
-    def snapshot(self, base: dict[str, str]) -> list[tuple[dict[str, str], float]]:
+    def snapshot(self, base: dict[str, str], ts_ms: int | None = None,
+                 zero_ts_ms: int | None = None) -> list[tuple[dict[str, str], float]]:
+        """With ts_ms, counters not yet delivered get [(0, zero_ts_ms), (value, ts_ms)]: an explicit 0 one push
+        interval earlier, so increase() counts the first event without distorting its extrapolation."""
         with self._lock:
-            rows = [({**base, **dict(lbl), "__name__": name}, v) for (name, lbl), v in self.counters.items()]
+            rows = []
+            for (name, lbl), v in self.counters.items():
+                fresh = ts_ms is not None and (name, lbl) in self.new_keys
+                rows.append(({**base, **dict(lbl), "__name__": name}, [(0.0, zero_ts_ms or ts_ms - 1), (v, ts_ms)] if fresh else v))
+
             name = "ihds_assess_duration_seconds"
             for b in ASSESS_BUCKETS:
                 rows.append(({**base, "__name__": f"{name}_bucket", "le": _fmt_le(b)}, self.hist_buckets[b]))
@@ -160,7 +171,9 @@ class Pusher:
     def push_once(self) -> bool:
         ts = max(int(time.time() * 1000), self._last_ts + 1)  # strictly increasing per series
         self._last_ts = ts
-        rows = self.registry.snapshot(self.labels)
+        with self.registry._lock:
+            fresh = set(self.registry.new_keys)
+        rows = self.registry.snapshot(self.labels, ts, ts - max(1, int(self.interval * 1000)))
         body = snappy_block(encode_write_request([(lbl, v, ts) for lbl, v in rows]))
         headers = {"Content-Type": "application/x-protobuf", "Content-Encoding": "snappy",
                    "X-Prometheus-Remote-Write-Version": "0.1.0", "User-Agent": "ihds-metrics-push/1"}
@@ -170,6 +183,8 @@ class Pusher:
             with urllib.request.urlopen(urllib.request.Request(self.url, data=body, headers=headers, method="POST"),
                                         timeout=self.timeout) as r:
                 self.last_status = r.status
+            with self.registry._lock:
+                self.registry.new_keys -= fresh  # zero samples delivered; retried on failure
             self.pushes_ok += 1
             return True
         except urllib.error.HTTPError as e:

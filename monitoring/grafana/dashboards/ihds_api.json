@@ -6,7 +6,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "refresh": "10s",
   "time": {
     "from": "now-30m",
@@ -16,7 +16,7 @@
     {
       "id": 1,
       "type": "stat",
-      "title": "Assessments (total)",
+      "title": "Assessments (in range)",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -63,14 +63,16 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(ihds_assess_total{service=~\"$service\"}) or vector(0)"
+          "expr": "round(sum(increase(ihds_assess_total{service=~\"$service\"}[$__range])) or vector(0))",
+          "instant": true
         }
-      ]
+      ],
+      "description": "Events in the selected time range: increase() over $__range, robust to counter resets when a process restarts."
     },
     {
       "id": 2,
       "type": "stat",
-      "title": "Escalations (total)",
+      "title": "Escalations (in range)",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -117,14 +119,16 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(ihds_escalations_total{service=~\"$service\"}) or vector(0)"
+          "expr": "round(sum(increase(ihds_escalations_total{service=~\"$service\"}[$__range])) or vector(0))",
+          "instant": true
         }
-      ]
+      ],
+      "description": "Events in the selected time range: increase() over $__range, robust to counter resets when a process restarts."
     },
     {
       "id": 3,
       "type": "stat",
-      "title": "High-risk predictions (total)",
+      "title": "High-risk predictions (in range)",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -171,14 +175,16 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(ihds_predictions_total{service=~\"$service\",band=\"high\"}) or vector(0)"
+          "expr": "round(sum(increase(ihds_predictions_total{service=~\"$service\",band=\"high\"}[$__range])) or vector(0))",
+          "instant": true
         }
-      ]
+      ],
+      "description": "Events in the selected time range: increase() over $__range, robust to counter resets when a process restarts."
     },
     {
       "id": 4,
       "type": "stat",
-      "title": "Blocked by safety guard (total)",
+      "title": "Blocked by safety guard (in range)",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -225,9 +231,11 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(ihds_assess_total{service=~\"$service\",status=\"blocked\"}) or vector(0)"
+          "expr": "round(sum(increase(ihds_assess_total{service=~\"$service\",status=\"blocked\"}[$__range])) or vector(0))",
+          "instant": true
         }
-      ]
+      ],
+      "description": "Events in the selected time range: increase() over $__range, robust to counter resets when a process restarts."
     },
     {
       "id": 5,
@@ -561,5 +569,5 @@
   "annotations": {
     "list": []
   },
-  "description": "IHDS metrics from the FastAPI /metrics endpoint (service=\"ihds\": local Prometheus or the Container Apps agent) and from the Streamlit app's direct push (service=\"ihds-streamlit\", ihds/metrics_push.py). Pick the Prometheus datasource (e.g. grafanacloud-*-prom) and the service at the top. Totals are since each process started."
+  "description": "IHDS metrics from the FastAPI /metrics endpoint (service=\"ihds\": local Prometheus or the Container Apps agent) and from the Streamlit app's direct push (service=\"ihds-streamlit\", ihds/metrics_push.py). Pick the Prometheus datasource (e.g. grafanacloud-*-prom) and the service at the top. Stat panels count events in the selected time range (increase over $__range)."
 }

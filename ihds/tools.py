@@ -40,8 +40,15 @@ def make_tool_functions(pipe, kb, welch: pd.DataFrame, synthetic_pool: pd.DataFr
         return {"contributions": [c.__dict__ for c in risk_model.contributions(pipe, clean)]}
 
     def rag_search(query: str, k: int = 3) -> dict:
-        """Retrieve up to k clinical knowledge snippets by TF-IDF cosine similarity (Project 6 agentic-rag-system method)."""
-        return {"evidence": kb.search(query, int(k))}
+        """Retrieve up to k clinical knowledge snippets: ChromaDB embedding search, with the TF-IDF keyword matcher
+        (Project 6 agentic-rag-system method) as fallback. `method` says which one answered."""
+        evidence, method = kb.retrieve(query, int(k))
+        out = {"evidence": evidence, "method": method}
+        if method == "chroma":
+            out["embedding"] = kb.embedding
+        elif kb.method != "keyword" and kb.chroma_error:
+            out["fallback_reason"] = kb.chroma_error
+        return out
 
     def population_context(feature: str) -> dict:
         """Welch t-test of one feature, diabetic vs non-diabetic patients (Project 2 statistical-analysis-project method)."""

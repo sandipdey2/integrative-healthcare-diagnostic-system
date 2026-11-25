@@ -256,7 +256,9 @@ The Streamlit Cloud push (below) uses the same names.
 
 The dashboard `monitoring/grafana/dashboards/ihds_api.json` has 10 panels:
 
-- totals: assessments, escalations, high-risk predictions, blocked;
+- stat panels for assessments, escalations, high-risk predictions and blocked. Each one counts events in the
+  selected time range with `round(sum(increase(...[$__range])))`, which survives counter resets when a process
+  restarts. Dashboard version 3: re-import the JSON if you imported an earlier version;
 - API request rate per route;
 - assessment latency p50 / p95;
 - predictions per band;
@@ -508,9 +510,18 @@ The Streamlit Cloud app (https://ihds-diabetes-advisor.streamlit.app) runs the L
 - `ihds_app_up` (heartbeat)
 - `ihds_app_start_time_seconds`
 
+New counter series are pushed with an explicit 0 sample one push interval before their first value. Without
+it, `increase()` would miss the first event of a new label combination. The API pre-creates its common label
+combinations at 0 for the same reason. Checked on a local receiver: 5 assessments across a simulated process
+restart gave stat panels of 5 / 0 / 3 / 1. The old raw-counter expression showed 3.
+
+Earlier test pushes to the real stack are labelled `deployment="local-box"`, `local-box-server`, or
+`service="ihds-pytest"` / `ihds-push-probe`. They count only inside a time range that includes them. Select
+`service=ihds-streamlit` and a range after 2026-11-25 08:00 UTC to exclude them.
+
 Labels: `service="ihds-streamlit"`, `source="streamlit"`, `job="ihds-streamlit"`,
 `deployment=IHDS_METRICS_DEPLOYMENT` (default `streamlit-cloud`) and `instance=<hostname>`. Counters start at 0
-when the process starts. `increase()` and `rate()` handle restarts, and the stat panels show totals since start.
+when the process starts. `increase()` and `rate()` handle restarts, and the stat panels use `increase()` over the dashboard range.
 
 **Dashboard:** `monitoring/grafana/dashboards/ihds_api.json`, now "IHDS (API + Streamlit)", has 10 panels and two
 variables:
@@ -563,6 +574,110 @@ The latency panel now uses `ihds_assess_duration_seconds`, which the API also re
   design. Latency p50 0.03 s, p95 0.085 s; heartbeat 0.2 s.
 - **Dashboard (Grafana Cloud):** not imported through the API. That needs the stack URL and a Grafana service
   account token, and the write token cannot list stacks.
+
+## Evidence retrieval: ChromaDB with a keyword fallback
+
+`rag_search` (used by `evidence_agent`) now retrieves from a ChromaDB index of the 14 evidence cards (K1–K14
+in `data/clinical_knowledge.csv`). The original TF-IDF keyword matcher is the fallback.
+
+**Code:** `ihds/workflow.py` (`KnowledgeBase.retrieve`) and `ihds/vector_store.py`.
+
+**Settings:**
+
+- **`IHDS_RETRIEVAL`:** `auto` (default) or `chroma` uses Chroma; `keyword` uses TF-IDF only.
+- **Fallback:** if `chromadb` is missing, the model cannot load, or a query raises an error, the query is
+  answered by keywords and the reason is kept.
+- **Embeddings (`IHDS_EMBEDDINGS=onnx`, the default):** chromadb's bundled all-MiniLM-L6-v2 model, run locally
+  with onnxruntime. It needs no key; the ~80 MB model is downloaded once to `~/.cache/chroma` (167 MB on disk).
+  The Docker image bakes it in.
+- **`IHDS_EMBEDDINGS=openai`:** `text-embedding-3-small` through Vocareum. It was tested and works (1536
+  dimensions), but only in a process that has `OPENAI_API_KEY`. The MCP tool server, where `rag_search` runs,
+  deliberately has no key, so there it falls back to ONNX. It is used in the comparison below.
+- **Client:** in-memory `EphemeralClient` by default. Set `IHDS_CHROMA_DIR=.chroma` (gitignored) for a
+  `PersistentClient`. The collection name includes a hash of the cards and the model.
+- **Cache:** query results are cached, because workflow queries repeat. An uncached MiniLM query takes about
+  0.13 s on the box.
+
+**Where it shows:**
+
+- The tool returns `{"evidence", "method", "embedding"}`.
+- The trace shows `evidence_agent: [retrieval: chroma (onnx-all-MiniLM-L6-v2)] ['K4', 'K2', 'K1']; ...`.
+- `AdvisoryResult.retrieval` and the API response carry `chroma` or `keyword`.
+- The UI's evidence and trace panels show the method.
+
+**Install cost:** chromadb 1.5.9 plus onnxruntime 1.32.0 add 33 packages and about 281 MB installed on Python
+3.14 (849 → 1130 MB). The pinned `requirements.txt` resolves on 3.11–3.14 from binary wheels, and `uv pip check`
+reports no conflicts on 3.14. The Docker image (Python 3.11) builds, and its container answered `/assess` with
+`retrieval: chroma` over `mcp-http`, with no model download at run time.
+
+**Comparison, `python scripts/compare_retrieval.py --llm 30 --repeats 2`:** results are in
+`reports/retrieval_comparison.json`, with top-3 for 11 queries per method.
+
+- **Overlap@3:** keyword vs Chroma-ONNX 0.788; keyword vs Chroma-OpenAI 0.758; ONNX vs OpenAI 0.818.
+- **Top-1 agreement:** 0.636 / 0.545 / 0.727.
+- **"Should this patient be screened again?":** keyword returns nothing; Chroma returns K5, K11, K12.
+- **"Is there a family history component?":** all methods put K6 first.
+- **Glucose + BMI query:** keyword gives K4, K2, K1; ONNX gives K2, K1, K4; OpenAI gives K2, K1, K3.
+
+**Live gpt-4o-mini review:** 3 runs × 30 held-out cases per retriever, in-process tools.
+
+| | Approved first try (each run) | Mean | Final approval | Escalated (of 90) | Mean grounding |
+|---|---|---|---|---|---|
+| keyword | 0.733 / 0.733 / 0.667 | 0.711 | 1.0 | 13 | 0.33–0.35 |
+| chroma (ONNX) | 0.600 / 0.733 / 0.733 | 0.689 | 1.0 | 11 | 0.29–0.31 |
+
+The approval rate did not collapse: the difference is within the run-to-run spread. Mean grounding is about
+0.04 lower with Chroma, and every run stayed at or above the reviewer's 0.2 threshold (minimum 0.2). The committed
+`monitoring/reports/llm_eval_summary.json` (keyword era, first try 0.767) was not regenerated.
+
+## LangSmith tracing (optional)
+
+`ihds/tracing.py` turns tracing on only when a key is present: `LANGSMITH_API_KEY` (or `LANGCHAIN_API_KEY`) in
+the environment, or `LANGSMITH_API_KEY` in a `[langsmith]` secrets table. It then:
+
+- sets `LANGSMITH_TRACING` and `LANGCHAIN_TRACING_V2` to `true`, unless one is explicitly `false`;
+- sets the project (`LANGSMITH_PROJECT` / `LANGCHAIN_PROJECT`, default `ihds`).
+
+**What a run looks like:** each `agents.run()` is one root run, `ihds-assessment`.
+
+- **Children:** LangGraph, every node, the `ChatOpenAI` call and the four tool calls.
+- **Tool nesting:** the MCP tool coroutine runs on the client's own event-loop thread, so `MCPToolBackend.call`
+  passes the caller's runnable config explicitly. Without that, the tool runs would become separate root
+  traces.
+- **Tags:** `ihds`, `band:<band>`, `status:<status>`, `draft:<source>`, `retrieval:<method>`.
+- **Metadata:** `risk_band`, `final_status`, `draft_source`, `retrieval`, `escalated`, `revisions`,
+  `probability`, `tool_transport`, `approved`.
+- **Run ID:** stored in `AdvisoryResult.langsmith_run_id`. The trace panel shows it with an "open trace" link,
+  and the sidebar says `LangSmith tracing: on (project ihds)` or off.
+
+**Keeping the key out of other processes:**
+
+- The MCP stdio child env is an allow-list (PATH, PYTHONPATH, HOME, IHDS_* retrieval settings), so the key
+  never reaches the tool server.
+- `scripts/start_all.sh` unsets it for the MCP HTTP server.
+
+**Streamlit Cloud secrets:** go to share.streamlit.io, open the app's **⋮ → Settings → Secrets**, add this and
+save:
+
+```toml
+[langsmith]
+LANGSMITH_API_KEY = "lsv2_<your LangSmith API key>"
+LANGSMITH_PROJECT = "ihds"
+```
+
+**Verified on the box (2026-11-25):** one assessment through MCP stdio tools with gpt-4o-mini, then the
+langsmith client API.
+
+- **Root run:** `ihds-assessment` with tags `ihds, band:high, status:ok, draft:llm, retrieval:chroma` and
+  metadata `risk_band=high, final_status=ok, draft_source=llm, retrieval=chroma, tool_transport=mcp-stdio`.
+- **Runs in the trace:** 21: 16 chain, 1 llm, 4 tool. They were `ihds-assessment`, `LangGraph`, `safety_guard`,
+  `route_after_guard`, `supervisor` ×3, `route_from_supervisor` ×3, `risk_agent`, `risk_score`,
+  `explain_contributions`, `evidence_agent`, `rag_search`, `population_context`, `writer_agent`, `ChatOpenAI`,
+  `reviewer`, `route_after_review` and `finalize`.
+- **Stray root runs:** none. No other root runs appeared in the project in that window, so the tools did not
+  leak out as separate traces.
+- **Link:** `tracing.run_url` returned a link.
+- **Live test:** `tests/test_tracing.py::test_live_run_is_traced_with_tags_and_metadata` passed with the key.
 
 ## GitHub Actions (CI/CD) — how to turn it on
 

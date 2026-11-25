@@ -39,7 +39,7 @@ graph-level test below also exercises MCP.
 | `tests/test_data_stats.py` | 4 | dataset shape (768×9, 268 positive), impossible-zero cleaning, stratified split (614/154), Welch t-test ranking | 4 passed |
 | `tests/test_model.py` | 4 | test ROC-AUC > 0.78 and recall > 0.6, monotonic in glucose, contributions sum exactly to the logit, imputation of missing optional values | 4 passed |
 | `tests/test_gan.py` | 3 | hand-written backprop vs finite differences, valid/finite/non-collapsed samples, glucose mean within 10 mg/dL after training | 3 passed |
-| `tests/test_workflow.py` | 9 | guard (ranges, required fields, injection, dosing, documented paraphrase gap), zero normalisation, TF-IDF retrieval, grounding score, template passes review, reviewer rejects unsafe text | 9 passed |
+| `tests/test_workflow.py` | 9 | guard (ranges, required fields, injection, dosing, documented paraphrase gap), zero normalisation, retrieval (Chroma, or TF-IDF when unavailable), grounding score, template passes review, reviewer rejects unsafe text | 9 passed |
 | `tests/test_agents.py` | 20 | **graph structure** equals the exported `docs/architecture.mmd`; **routing** functions and supervisor order; non-borderline, borderline (uncertainty agent) and blocked paths; **revision loop cap** (3 writer attempts → escalation); loop recovery after one rejection; LLM error fallback; gpt-4o-mini selection and `OPENAI_API_BASE` (Vocareum) honored; **each agent node** (safety_guard, risk, evidence, uncertainty, writer, reviewer, finalize) | 20 passed |
 | `tests/test_monitoring.py` | 1 | Evidently holdout/shifted/synthetic reports written (HTML+JSON); no drift on holdout; Glucose drift and lower precision on the shifted set | 1 passed |
 | `tests/test_mcp_api.py` | 9 | **real MCP server** subprocess over stdio: `list_tools` = 5 tools, `call_tool` results match the model; **streamable HTTP** server: every tool over MCP returns the same JSON as in-process; **graph via MCP** = in-process on 10 records, transport in trace and tool log; unreachable MCP → labelled `inprocess-fallback` in auto mode, error in `IHDS_TOOLS=mcp`; **FastAPI** `/health`, `/assess` (ok, unsafe question blocked, missing Glucose blocked), 422 on bad types, 400 for `use_llm` without key, `/monitoring/summary`; **Streamlit with `IHDS_API_URL`** calls `POST /assess` | 9 passed |
@@ -137,7 +137,7 @@ Full commands and results are in [`docs/MLOPS.md`](docs/MLOPS.md).
 
 | Environment | Command | Result |
 |---|---|---|
-| Runtime (`requirements-dev.txt` + prometheus-client) | `pytest -q -rs` | **63 passed, 13 skipped**: the earlier 56 (still 56 passed, 11 skipped with `--ignore tests/test_metrics_agent.py --ignore tests/test_metrics_push.py`) + 3 in `test_metrics_agent.py` + 4 in `test_metrics_push.py`. Skips: 4 live `vocareum` tests, 7 MLOps tests whose tools are not installed, the promtool check, and the live Grafana Cloud push (needs `GRAFANA_RW_*` in the env; it passed when run with the real credentials) |
+| Runtime (`requirements.txt` + dev deps, now with chromadb/onnxruntime/langsmith) | `pytest -q -rs` | **72 passed, 14 skipped** without a LangSmith key. The original 56 still give 56 passed, 11 skipped with the new test files ignored (`test_metrics_agent.py`, `test_metrics_push.py`, `test_retrieval.py`, `test_tracing.py`). New tests: 3 agent + 4 push + 5 retrieval + 4 tracing. Skips: 4 live `vocareum`, 7 MLOps tools not installed, promtool, live Grafana push, live LangSmith. With `LANGSMITH_API_KEY` set, `tests/test_tracing.py` gives 5 passed (live test included) |
 | MLOps (`requirements-mlops.txt`, separate venv) | `pytest -q tests/test_mlops.py tests/test_metrics_agent.py tests/test_metrics_push.py` | **17 passed, 2 skipped** (promtool not on PATH; live Grafana test without creds) |
 | MLOps | `pip install -r requirements-mlops.txt` in a fresh venv, then `pip check` | installs with pip; "No broken requirements found" |
 | Both | `ruff check .` (`ruff.toml`: E, F, W; E501/E702 ignored) | All checks passed. Fixing it removed 9 unused imports and invalid escapes from existing files; there were no behaviour changes |
@@ -160,6 +160,25 @@ What `tests/test_mlops.py` checks:
 - **Fairlearn:** the group counts sum to n, and DP diff = max − min selection rate.
 - **Feast:** apply, materialize and online fetch in a temp repo; raw 0 Insulin comes back as missing.
 - **Prefect:** the flow completes in task order, and a failed GX result stops it at `validate` (`Failed`).
+
+What `tests/test_retrieval.py` checks:
+
+- `keyword` mode is the original TF-IDF matcher (K1/K2/K4 for the glucose + BMI query);
+- with `chromadb` unimportable, or a failing Chroma query, retrieval falls back to keyword and records the
+  reason;
+- Chroma (ONNX MiniLM) returns K1 and K2 for the glucose query and K6 first for family history, and returns 3
+  cards for a question the keyword matcher misses entirely;
+- a template draft built from Chroma evidence still passes the reviewer, including grounding;
+- `rag_search` returns `method`, and the `evidence_agent` trace line contains `[retrieval: <method>`.
+
+What `tests/test_tracing.py` checks:
+
+- tracing is off without a key;
+- a `[langsmith]` secrets table turns it on with project `ihds` and both tracing variables;
+- an explicit `LANGSMITH_TRACING=false` is respected;
+- the MCP stdio child env is an allow-list without the LangSmith or OpenAI keys;
+- live (key only): the run is read back through the langsmith client with the band, status and draft tags and
+  the metadata.
 
 What `tests/test_metrics_push.py` checks (stdlib only):
 
@@ -197,6 +216,11 @@ End-to-end runs on the box:
 | Metrics push (Grafana Cloud path) | `deploy/monitoring/docker-compose.push-test.yml` (same image, local receiver in place of Grafana Cloud), 31 `/assess` calls | agent log line present; token absent from config and from the agent, uvicorn and Streamlit environments; token file 600; receiver had `ihds_predictions_total{band="high",service="ihds",deployment="local-push-test"}` 30 and `ihds_assess_total` ok 30 / blocked 1; only `ihds_*` + `up` names; all 8 panels (dashboard version at the time) had data in the option B Grafana image |
 | Streamlit → Grafana Cloud | `app.py` through `streamlit.testing.v1.AppTest` with the real credentials in `st.secrets`, 12 assessments; plus `streamlit run` with a user-level `secrets.toml` outside the repo, 3 clicks in headless Chrome | 11 ok, 1 blocked; high 5, low 4, moderate 2; 5 pushes HTTP 200, 0 failed; the server log showed the push line and no failures; no `GRAFANA_RW_*` in the Streamlit or MCP process environments. Wrong token gave 401; malformed body, bad metric name and future timestamp gave 400, so 200 means validated. **Read-back not possible:** the token lacks read scope (`/api/v1/query` gave 401 `invalid scope requested`) |
 | Dashboard with both sources | `ihds_api.json` imported via `/api/dashboards/import` into Grafana 12.1, fed by `metrics_push` → local Prometheus receiver (40 synthetic assessments) | import OK; `service` variable = `ihds-streamlit`; 9/10 panels with data (the API-only request-rate panel was empty as expected); p50 0.03 s, p95 0.085 s |
+| ChromaDB retrieval vs keyword | `scripts/compare_retrieval.py --llm 30 --repeats 2` (and one earlier `--llm 30` run) | 11 queries: overlap@3 keyword~ONNX 0.788, keyword~OpenAI embeddings 0.758, ONNX~OpenAI 0.818; top-1 agreement 0.636 / 0.545 / 0.727. Live gpt-4o-mini, 3 runs × 30 cases: first-try approval keyword 0.733 / 0.733 / 0.667 vs chroma 0.600 / 0.733 / 0.733; final approval 1.0 for both; escalated 13 vs 11 of 90; mean grounding 0.33–0.35 vs 0.29–0.31 (min 0.2). Results in `reports/retrieval_comparison.json` |
+| Chroma on Python 3.14 | fresh `uv` venv, `pip install -r requirements.txt`; tests for retrieval, tracing, push, MCP and the Streamlit app | `uv pip check` clean (158 packages); 24 passed, 2 skipped; chroma answered with ONNX MiniLM |
+| Docker image | `docker build` (ONNX model baked in as `appuser`), `/assess` on the container | image 2.9 GB; `retrieval: chroma (onnx-all-MiniLM-L6-v2)` over `mcp-http`; no model download at run time; Streamlit health `ok` |
+| LangSmith | one MCP-stdio assessment with gpt-4o-mini and tracing on, then `Client.list_runs(project_name="ihds", trace_id=...)` | root `ihds-assessment` with tags `band:high, status:ok, draft:llm, retrieval:chroma` and matching metadata; 21 runs in the trace (16 chain, 1 llm, 4 tool); no orphan root runs; run link resolved |
+| Grafana stat panels (v3) | dashboard imported into Grafana 12.1; 5 assessments pushed by `metrics_push` across a simulated process restart | stat panels 5 / 0 / 3 / 1 (assessments / escalations / high / blocked), exact; the old `sum(ihds_assess_total)` showed 3 |
 | Agent off | `docker run ihds:local` with no `GRAFANA_RW_URL` | only MCP, uvicorn and Streamlit running; no `/tmp/ihds-agent` |
 | Config lint | `promtool check config` (3.5.0) on `monitoring/prometheus/prometheus.yml`, `deploy/monitoring/prometheus/prometheus.yml` and the rendered agent config (`--agent`); `docker compose config -q` on both compose files; Grafana 12.1 started with the provisioning | all SUCCESS; Grafana logged no provisioning errors and listed the `ihds-api` dashboard; `ihds_api.json` imported through `/api/dashboards/import` into a Grafana whose datasource has another uid |
 

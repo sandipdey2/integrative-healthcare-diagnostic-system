@@ -1,5 +1,7 @@
 # Runtime (Streamlit app, LangGraph agents, MCP tool server, FastAPI service + Prometheus /metrics, Evidently monitoring).
 # The optional MLOps toolchain (MLflow, DVC, GX, Feast, Prefect, Deepchecks, SHAP, Fairlearn) is in requirements-mlops.txt.
+# chromadb + onnxruntime: vector retrieval of the evidence cards (ihds/vector_store.py; keyword fallback if
+# unavailable); the ONNX MiniLM model (~80 MB) is downloaded on first use. langsmith: optional tracing.
 # All pins install from binary wheels on Python 3.11, 3.12, 3.13 and 3.14 (Streamlit Community Cloud uses 3.14).
 streamlit==1.67.0
 evidently==0.7.23
@@ -19,3 +21,6 @@ fastapi==0.165.0
 uvicorn==0.54.0
 httpx==0.28.1
 prometheus-client==0.24.1
+chromadb==1.5.9
+onnxruntime==1.32.0
+langsmith==0.16.2

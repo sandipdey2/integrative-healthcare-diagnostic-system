@@ -54,10 +54,13 @@ def _parse(result: Any):
 
 
 def stdio_connection(gan_steps: int | None = None) -> dict:
-    """Spawn `python -m mcp_server.server` (stdio). Only PATH/PYTHONPATH/HOME are passed: no API keys."""
+    """Spawn `python -m mcp_server.server` (stdio). Only PATH/PYTHONPATH/HOME and the IHDS_RETRIEVAL/EMBEDDINGS/CHROMA_DIR settings are passed: no API keys."""
     env = {"PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(ROOT), "HOME": os.environ.get("HOME", "/tmp")}
     if gan_steps is not None:
         env["IHDS_GAN_STEPS"] = str(gan_steps)
+    for k in ("IHDS_RETRIEVAL", "IHDS_EMBEDDINGS", "IHDS_CHROMA_DIR"):  # retrieval settings (no secrets)
+        if os.environ.get(k):
+            env[k] = os.environ[k]
     return {"transport": "stdio", "command": sys.executable, "args": ["-m", "mcp_server.server"],
             "cwd": str(ROOT), "env": env}
 
@@ -104,7 +107,11 @@ class MCPToolBackend:
                 raise
 
     def call(self, name: str, **args):
-        fut = asyncio.run_coroutine_threadsafe(self.tools[name].ainvoke(args), self.loop)
+        from langchain_core.runnables.config import ensure_config
+
+        # the tool coroutine runs on the MCP client's own event-loop thread; pass the caller's runnable config
+        # (callbacks) explicitly so LangSmith nests the tool run under the current graph node
+        fut = asyncio.run_coroutine_threadsafe(self.tools[name].ainvoke(args, config=ensure_config()), self.loop)
         result = _parse(fut.result(timeout=60))
         return result, _log(name, args, result, self.transport)
 

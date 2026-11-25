@@ -16,7 +16,7 @@ Agents (graph nodes) and the LangChain tools they call:
                         the shared state; sends borderline cases to the uncertainty agent.
   * risk_agent        - tools `risk_score`, `explain_contributions` (logistic regression,
                         breast-cancer-classification method).
-  * evidence_agent    - tools `rag_search` (TF-IDF retrieval, agentic-rag-system method) and
+  * evidence_agent    - tools `rag_search` (ChromaDB embeddings, TF-IDF keyword fallback) and
                         `population_context` (Welch t-test results, statistical-analysis-project method).
   * uncertainty_agent - tool `synthetic_neighbors`: nearest GAN-generated rows (generative-mnist method)
                         around the patient and the spread of model probabilities over them.
@@ -57,6 +57,7 @@ class AgentState(TypedDict, total=False):
     borderline: bool
     contributions: list
     evidence: Optional[list]
+    retrieval: str                    # "chroma" | "keyword" (which retriever answered rag_search)
     population: Optional[list]
     uncertainty: Optional[dict]
     draft: str
@@ -145,9 +146,12 @@ def make_nodes(tools, llm=None) -> dict:
         query = wf.build_query(top, state.get("question", ""))
         r1, l1 = _call("evidence_agent", "rag_search", query=query, k=3)
         ev = r1["evidence"]
+        method = r1.get("method", "keyword")
+        how = f"{method} ({r1['embedding']})" if r1.get("embedding") else method
         pop, l2 = _call("evidence_agent", "population_context", feature=top[0].feature)
-        return {"evidence": ev, "population": [pop], "tool_calls": [l1, l2],
-                "trace": [f"evidence_agent: {[e['id'] for e in ev]}; population context for {top[0].feature}"]}
+        return {"evidence": ev, "population": [pop], "tool_calls": [l1, l2], "retrieval": method,
+                "trace": [f"evidence_agent: [retrieval: {how}] {[e['id'] for e in ev]}; "
+                          f"population context for {top[0].feature}"]}
 
     def uncertainty_agent(state: AgentState):
         u, l1 = _call("uncertainty_agent", "synthetic_neighbors", record=_clean_record(state), k=25)
@@ -286,9 +290,49 @@ class AdvisoryResult:
     trace: list = field(default_factory=list)
     tool_calls: list = field(default_factory=list)
     transport: str = ""
+    retrieval: str = ""            # "chroma" | "keyword"
+    langsmith_run_id: str = ""     # set when LangSmith tracing is on (ihds/tracing.py)
 
 
 def run(graph, record: dict, question: str = "") -> AdvisoryResult:
+    """Run the graph once. With LangSmith tracing on, the run is one root trace "ihds-assessment"."""
+    from . import tracing
+
+    if tracing.enabled():
+        try:
+            return _run_traced(graph, record, question)
+        except ImportError:
+            pass
+    return _run(graph, record, question)
+
+
+def _run_traced(graph, record: dict, question: str) -> AdvisoryResult:
+    from langsmith import traceable
+    from langsmith.run_helpers import get_current_run_tree
+
+    def _summary(res):
+        return {"status": res.status, "band": res.band, "probability": res.probability,
+                "draft_source": res.draft_source, "retrieval": res.retrieval, "draft": res.draft,
+                "review": res.review, "trace": res.trace}
+
+    @traceable(name="ihds-assessment", run_type="chain", tags=["ihds"], process_outputs=_summary)
+    def ihds_assessment(record: dict, question: str = ""):
+        res = _run(graph, record, question)
+        rt = get_current_run_tree()
+        if rt is not None:
+            rt.add_tags([f"band:{res.band or 'none'}", f"status:{res.status}", f"draft:{res.draft_source or 'none'}",
+                         f"retrieval:{res.retrieval or 'none'}"])
+            rt.add_metadata({"risk_band": res.band, "final_status": res.status, "draft_source": res.draft_source,
+                             "retrieval": res.retrieval, "escalated": res.escalated, "revisions": res.revisions,
+                             "probability": res.probability, "tool_transport": res.transport,
+                             "approved": bool(res.review.get("approved")) if res.review else None})
+            res.langsmith_run_id = str(rt.id)
+        return res
+
+    return ihds_assessment(dict(record), question or "")
+
+
+def _run(graph, record: dict, question: str = "") -> AdvisoryResult:
     s = graph.invoke({"record": dict(record), "question": question or "", "trace": [], "tool_calls": []},
                      config={"recursion_limit": RECURSION_LIMIT})
     return AdvisoryResult(
@@ -301,4 +345,5 @@ def run(graph, record: dict, question: str = "") -> AdvisoryResult:
         guard_reasons=s.get("guard_reasons", []), imputed=s.get("imputed", []),
         trace=s["trace"], tool_calls=s["tool_calls"],
         transport=(s["tool_calls"][0].get("transport", "") if s["tool_calls"] else getattr(graph, "ihds_transport", "")),
+        retrieval=s.get("retrieval") or "",
     )

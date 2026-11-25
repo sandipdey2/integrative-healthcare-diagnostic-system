@@ -19,10 +19,13 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 COPY . .
 
 # Pre-generate the Evidently reports so the Monitoring tab has content on first load.
-RUN python -m ihds.pipeline
 
 RUN useradd --create-home appuser && chown -R appuser /app
 USER appuser
+RUN python -m ihds.pipeline
+# Bake chromadb's all-MiniLM-L6-v2 ONNX model (~80 MB) into the image for the evidence retriever, so the
+# container does not download it at start (it lands in /home/appuser/.cache/chroma).
+RUN python -c "from chromadb.utils.embedding_functions import DefaultEmbeddingFunction as E; E()(['warm-up'])"
 
 EXPOSE 8501 8000
 
