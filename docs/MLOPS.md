@@ -618,6 +618,18 @@ Streamlit Community Cloud runs only `streamlit run app.py`, so `ihds/embedded_ap
   with a 0 sample first, then 1. No push sent duplicate series.
 - Only one MCP child ran.
 
+**Checked live on Streamlit Cloud** (2026-11-25 ~01:25 PT, commit f62f13c, headless Chrome):
+
+- The sidebar showed `Workflow via REST API http://127.0.0.1:34797 · tools: mcp-stdio`, `REST API embedded in this
+  process (started in 0.2 s)`, `LLM key configured on the API server` and `Metrics push: on → <stack host> · 16 ok /
+  0 failed (last 200) · incl. API metrics` (the count had been 2 when the page first loaded).
+- One gpt-4o-mini assessment returned 60 %, high, approved, with draft source `llm` and 1 reviewer revision.
+- The trace showed `Workflow route: REST API http://127.0.0.1:34797 (embedded) · retrieval: chroma` and
+  `evidence_agent: [retrieval: chroma (onnx-all-MiniLM-L6-v2)]`.
+- Not seen in Grafana Cloud: the write-only token cannot read data back, so look for
+  `ihds_http_requests_total{service="ihds-streamlit"}` in Explore.
+- LangSmith showed `off (no LANGSMITH_API_KEY)` because the Cloud app has no `[langsmith]` secret yet.
+
 Tests: `tests/test_embedded_api.py` covers the gate, `/health` and `/assess` on the shared `System`, the pushed
 API series (labels, zero-first, no duplicates, no `_created`), and the Streamlit app routed through the embedded
 API (AppTest).
