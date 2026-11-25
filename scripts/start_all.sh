@@ -27,7 +27,7 @@ sys.exit(f"timed out waiting for {url}")
 PY
 }
 
-env -u OPENAI_API_KEY -u GRAFANA_RW_TOKEN -u LANGSMITH_API_KEY -u LANGCHAIN_API_KEY python -m mcp_server.server --transport streamable-http --host 127.0.0.1 --port "$MCP_PORT" &
+env -u OPENAI_API_KEY -u GRAFANA_RW_TOKEN -u LANGSMITH_API_KEY -u LANGCHAIN_API_KEY -u DATABASE_URL python -m mcp_server.server --transport streamable-http --host 127.0.0.1 --port "$MCP_PORT" &
 wait_for "http://127.0.0.1:$MCP_PORT/mcp" 180
 
 IHDS_MCP_URL="http://127.0.0.1:$MCP_PORT/mcp" IHDS_TOOLS=mcp \

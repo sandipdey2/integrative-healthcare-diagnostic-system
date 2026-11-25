@@ -36,6 +36,7 @@ class EmbeddedAPI:
         from api import main as api_main
 
         api_main.STATE["system"] = system  # share the app's System (lifespan's get_system() returns it)
+        api_main.WORKFLOW_ROUTE = "embedded-api"
         self.port = port or free_port(host)
         self.url = f"http://{host}:{self.port}"
         cfg = uvicorn.Config(api_main.app, host=host, port=self.port, log_level="warning", access_log=False,

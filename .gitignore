@@ -18,3 +18,5 @@ reports/deepchecks/
 reports/drift/
 # ChromaDB persistent index (only when IHDS_CHROMA_DIR=.chroma; default is in-memory)
 .chroma/
+# Assessment audit log (local SQLite fallback when DATABASE_URL is unset)
+data/audit.db

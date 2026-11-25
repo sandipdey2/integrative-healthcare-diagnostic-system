@@ -826,6 +826,54 @@ langsmith client API.
   that every LLM run in the trace is `writer_llm` with tokens, that the root's total covers them, and that the
   metadata `llm_total_tokens` matches.
 
+## Assessment audit log (Postgres / SQLite)
+
+`ihds/audit_log.py` writes one row per completed assessment so runs can be listed later. It uses SQLAlchemy 2
+with the psycopg 3 driver. The table is `assessments`:
+
+- `id`, `created_at`
+- `risk_probability`, `risk_band`, `reviewer_status`, `draft_source`, `revisions`, `escalated`, `blocked`
+- `retrieval_method`, `workflow_route`, `langsmith_run_id` (nullable)
+- `features` (JSONB): the eight model inputs only. The clinician question and the draft text are not stored.
+
+**Where it writes**
+
+1. `DATABASE_URL` in the environment, or
+2. the Streamlit secret `[database] url`, or
+3. if neither is set, a local SQLite file at `data/audit.db` (or `IHDS_AUDIT_SQLITE`; git-ignored).
+
+The table is created on startup. A failed write is logged with credentials redacted, counted on
+`ihds_audit_writes_total{result="ok"|"failed"}`, and never raised into the assessment path. The sidebar shows
+`Audit log: postgres (neon) · N rows` when the host is Neon, `postgres` for any other Postgres URL, or
+`sqlite (local)`. The **Audit log** tab lists the last 20 rows. `GET /assessments/recent?limit=` returns the same
+rows as JSON. `POST /assess` writes the row (so the embedded Streamlit API and the Docker/Azure API both log).
+The in-process Streamlit fallback also writes, with `workflow_route=in-process`.
+
+The database URL from a Streamlit secret is not copied into `os.environ`, so the MCP stdio child does not inherit
+it. `scripts/start_all.sh` unsets `DATABASE_URL` for the MCP HTTP server.
+
+**Local Postgres:** `docker-compose.monitoring.yml` starts `postgres:17` (volume `ihds-pgdata`, healthcheck,
+port `127.0.0.1:5432`) and sets the API service's `DATABASE_URL` to `postgresql://ihds:ihds@postgres:5432/ihds`
+(local-only credentials, not for production). The API waits until Postgres is healthy.
+
+**Streamlit Community Cloud:** add this in **⋮ → Settings → Secrets** (paste the pooled URL from the Neon
+console, project `ihds` → Connect) and reboot the app. Until the secret is set, the Cloud app uses ephemeral
+SQLite, which does not survive a reboot.
+
+```toml
+[database]
+url = "postgresql://USER:PASSWORD@HOST/ihds?sslmode=require"
+```
+
+`.env.example` has the same placeholder for a local `DATABASE_URL`. Never commit a real connection string.
+
+**Verified on the box (2026-11-25):** SQLite unit tests in `tests/test_audit_log.py` passed. The Neon project
+`ihds` (Postgres 17, aws-us-west-2, database `ihds`, role `ihds_app`) responded through the Neon API
+(`SELECT current_database()`). A direct `psycopg` connection from this box to Neon on port 5432 timed out
+during the TLS handshake (TCP was accepted by a 198.18.0.0/15 intercept), so no audit row was written from
+here. The connection string is not in the repo. Streamlit Cloud uses Neon only after the `[database]` secret
+is added.
+
 ## GitHub Actions (CI/CD) — how to turn it on
 
 `docs/ci.yml.example` defines the workflow `ci-cd`:

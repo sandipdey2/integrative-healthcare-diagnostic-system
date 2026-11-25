@@ -3,10 +3,11 @@
 #   API http://127.0.0.1:8000/docs   metrics http://127.0.0.1:8000/metrics
 #   Prometheus http://127.0.0.1:9090  Grafana http://127.0.0.1:3000 (dashboard "IHDS API", anonymous viewer)
 #   docker compose -f docker-compose.monitoring.yml down
-# All three services share the user-defined bridge network `ihds-monitoring`; Prometheus scrapes the API by
-# service name (api:8000). Host ports bind to 127.0.0.1 only. The api service reuses the app image and runs just
-# the FastAPI layer on 0.0.0.0:8000 inside the container (tools via an MCP stdio subprocess); no OPENAI_API_KEY is
-# passed, so the writer uses the template.
+# Services share the user-defined bridge network `ihds-monitoring`; Prometheus scrapes the API by service name
+# (api:8000). Host ports bind to 127.0.0.1 only. The api service reuses the app image and runs just the FastAPI
+# layer on 0.0.0.0:8000 inside the container (tools via an MCP stdio subprocess); no OPENAI_API_KEY is passed,
+# so the writer uses the template. A Postgres 17 service holds the assessment audit log (DATABASE_URL on the api
+# service; local credentials ihds/ihds, not for production).
 # If containers cannot reach each other on a host whose kernel runs BOTH iptables-legacy and nftables rules,
 # see scripts/fix_docker_bridge_forward.sh.
 name: ihds-monitoring
@@ -16,15 +17,36 @@ networks:
     driver: bridge
 
 services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ihds
+      POSTGRES_PASSWORD: ihds
+      POSTGRES_DB: ihds
+    volumes:
+      - ihds-pgdata:/var/lib/postgresql/data
+    networks: [ihds-monitoring]
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ihds -d ihds"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   api:
     build: .
     image: ihds:local
     command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
     environment:
       IHDS_METRICS: "1"
+      DATABASE_URL: "postgresql://ihds:ihds@postgres:5432/ihds"
     networks: [ihds-monitoring]
     ports:
       - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"]
       interval: 10s

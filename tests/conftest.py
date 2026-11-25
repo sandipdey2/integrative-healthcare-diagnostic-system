@@ -36,3 +36,24 @@ def system():
     from ihds.pipeline import build_system
 
     return build_system(gan_steps=800)
+
+
+@pytest.fixture(autouse=True)
+def isolate_audit_log(tmp_path, monkeypatch, request):
+    """Point the audit log at a per-test SQLite file so tests never touch Neon or data/audit.db.
+
+    Tests marked `postgres` keep the caller's DATABASE_URL (the live integration test).
+    """
+    from ihds import audit_log
+
+    if request.node.get_closest_marker("postgres"):
+        audit_log.reset()
+        yield
+        audit_log.reset()
+        return
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("IHDS_AUDIT_SQLITE", str(tmp_path / "audit.db"))
+    audit_log.reset()
+    yield
+    audit_log.reset()
+

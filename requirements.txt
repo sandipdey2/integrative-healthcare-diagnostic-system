@@ -24,3 +24,6 @@ prometheus-client==0.24.1
 chromadb==1.5.9
 onnxruntime==1.32.0
 langsmith==0.16.2
+# Assessment audit log (ihds/audit_log.py): Postgres when DATABASE_URL is set, otherwise local SQLite.
+sqlalchemy==2.1.9
+psycopg[binary]==3.3.9

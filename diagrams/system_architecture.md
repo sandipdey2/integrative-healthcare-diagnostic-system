@@ -94,14 +94,17 @@ Outputs: `monitoring/reports/*_report.{html,json}`, `summary.json`, `agent_eval_
   single-tenant and unauthenticated: run it on localhost or a private network only. The API has no
   authentication either.
 - The agent graph itself (supervisor, specialists, writer, reviewer) runs in one Python process (the API or
-  the Streamlit process) and shares one state object; there is no message bus or memory store beyond the
-  per-request state (no cross-session memory).
+  the Streamlit process) and shares one state object; there is no message bus. Graph state is per-request.
+  Completed assessments are also written to an audit log (`ihds/audit_log.py`): Postgres when `DATABASE_URL`
+  or the Streamlit `[database] url` secret is set, otherwise a local SQLite file. Each row stores the eight
+  model input features and run metadata; the clinician question and the draft text are not stored.
 - The MCP server, the API and the Streamlit app each train their own copy of the model/GAN at start-up
   (deterministic seeds, so results are identical; costs about 20–30 s and ~0.8 GB RAM in total in Docker).
 - Without an API key the writer is a template, so offline runs never take the revision loop. With the live
   gpt-4o-mini writer the loop fires naturally (11 grounding rejections in a 30-case live run, 2 escalations);
   tests also exercise it with an offline stand-in model.
-- No EHR integration, authentication, or storage of patient inputs.
+- No EHR integration or user authentication. The audit log stores the eight model input features and run
+  metadata for completed assessments (not the question or draft).
 
 ## Assumptions
 

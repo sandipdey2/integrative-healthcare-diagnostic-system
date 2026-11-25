@@ -137,7 +137,7 @@ Full commands and results are in [`docs/MLOPS.md`](docs/MLOPS.md).
 
 | Environment | Command | Result |
 |---|---|---|
-| Runtime (`requirements.txt` + dev deps, now with chromadb/onnxruntime/langsmith) | `pytest -q -rs` | **80 passed, 15 skipped** with no LangSmith or OpenAI key. With both keys (Vocareum gpt-4o-mini and LangSmith): **86 passed, 9 skipped** (skips are the MLOps tools not installed, promtool and the live Grafana push). The original 56 tests all still pass. Run with the new test files ignored (`test_metrics_agent.py`, `test_metrics_push.py`, `test_retrieval.py`, `test_tracing.py`, `test_embedded_api.py`), the subset gives 57 passed, 11 skipped: the 56 plus the new grounding test in `test_workflow.py`. `test_e2e.py`'s AppTest goes through the embedded API. Since this change: 1 grounding test in `test_workflow.py`, 4 tracing tests in `test_tracing.py` (1 of them live) and 1 LangSmith-link test in `test_embedded_api.py`. |
+| Runtime (`requirements.txt` + dev deps, now with chromadb/onnxruntime/langsmith/sqlalchemy/psycopg) | `pytest -q -rs` | After the grounding/tracing change: **80 passed, 15 skipped** with no LangSmith or OpenAI key; **86 passed, 9 skipped** with both keys (skips: MLOps tools not installed, promtool, live Grafana). The audit log adds **7 SQLite tests** in `tests/test_audit_log.py` plus 1 live Postgres test skipped unless `DATABASE_URL` is set (and skipped if this host cannot reach Postgres). Measured on this box after the rebase: **88 passed, 15 skipped** without running the live Vocareum, live Postgres, or live LangSmith+LLM tests (10 other skips + 4 vocareum + 1 postgres). The original 56 tests all still pass. Run with the new test files ignored (`test_metrics_agent.py`, `test_metrics_push.py`, `test_retrieval.py`, `test_tracing.py`, `test_embedded_api.py`, `test_audit_log.py`), the subset gives 57 passed, 11 skipped: the 56 plus the new grounding test in `test_workflow.py`. `test_e2e.py`'s AppTest goes through the embedded API. Since the grounding/tracing change: 1 grounding test in `test_workflow.py`, 4 tracing tests in `test_tracing.py` (1 of them live) and 1 LangSmith-link test in `test_embedded_api.py`. |
 | MLOps (`requirements-mlops.txt`, separate venv) | `pytest -q tests/test_mlops.py tests/test_metrics_agent.py tests/test_metrics_push.py` | **17 passed, 2 skipped** (promtool not on PATH; live Grafana test without creds) |
 | MLOps | `pip install -r requirements-mlops.txt` in a fresh venv, then `pip check` | installs with pip; "No broken requirements found" |
 | Both | `ruff check .` (`ruff.toml`: E, F, W; E501/E702 ignored) | All checks passed. Fixing it removed 9 unused imports and invalid escapes from existing files; there were no behaviour changes |
@@ -199,6 +199,21 @@ What `tests/test_metrics_push.py` checks (stdlib only):
   and heartbeat values with `service="ihds-streamlit"`, and that `repr()` hides the token;
 - HTTP 500 and connection-refused errors return `False` and never raise;
 - live (only with `GRAFANA_RW_*` in the env): Grafana Cloud accepts a push.
+
+What `tests/test_audit_log.py` checks:
+
+- with no `DATABASE_URL`, the log is a local SQLite file; `configure()` creates the table; a write stores the
+  eight model features, risk band, reviewer status, draft source and route, and does not store the clinician
+  question or the draft text;
+- blocked runs are stored with `reviewer_status=n/a`, and rejected runs with the LangSmith run id when present;
+  `recent()` returns newest first;
+- a write failure is counted and does not raise;
+- credentials are redacted from log strings, and a Neon host is labelled `postgres (neon)`;
+- a Streamlit-style `[database] url` secret is read without being copied into `os.environ`;
+- `POST /assess` writes a row, `GET /assessments/recent` returns it, and `/metrics` includes
+  `ihds_audit_writes_total`;
+- live (only with `DATABASE_URL`): a write/read against that Postgres. If this host cannot reach it, the
+  test is skipped (on this box, Neon :5432 TLS timed out; the project itself responded through the Neon API).
 
 What `tests/test_embedded_api.py` checks (FastAPI inside the Streamlit process):
 

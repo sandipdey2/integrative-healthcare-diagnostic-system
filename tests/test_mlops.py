@@ -63,10 +63,13 @@ def test_prometheus_grafana_configs_reference_real_metrics():
     prom = yaml.safe_load((ROOT / "monitoring/prometheus/prometheus.yml").read_text())
     assert prom["scrape_configs"][0]["static_configs"][0]["targets"] == ["api:8000"]
     compose = yaml.safe_load((ROOT / "docker-compose.monitoring.yml").read_text())
-    assert set(compose["services"]) == {"api", "prometheus", "grafana"}
+    assert set(compose["services"]) == {"api", "prometheus", "grafana", "postgres"}
     assert all(p.startswith("127.0.0.1:") for s in compose["services"].values() for p in s.get("ports", []))
     assert all(s["networks"] == ["ihds-monitoring"] for s in compose["services"].values())
     assert compose["services"]["prometheus"]["depends_on"]["api"]["condition"] == "service_healthy"
+    assert compose["services"]["api"]["depends_on"]["postgres"]["condition"] == "service_healthy"
+    assert compose["services"]["postgres"]["image"].startswith("postgres:17")
+    assert "postgres:5432" in compose["services"]["api"]["environment"]["DATABASE_URL"]
     assert "0.0.0.0" in compose["services"]["api"]["command"]
     ds = yaml.safe_load((ROOT / "monitoring/grafana/provisioning/datasources/prometheus.yml").read_text())
     assert ds["datasources"][0]["url"] == "${PROMETHEUS_URL}"

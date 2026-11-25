@@ -3,8 +3,9 @@
     uvicorn api.main:app --port 8000
 
 POST /assess runs the LangGraph multi-agent workflow (tools via the MCP server by default) and returns the
-advisory draft, review, trace and the tool transport used. GET /health and GET /monitoring/summary are
-read-only. Set IHDS_MCP_URL to use a running MCP HTTP server instead of a stdio subprocess.
+advisory draft, review, trace and the tool transport used. Each completed assessment is also written to the
+audit log (ihds/audit_log.py; Postgres when DATABASE_URL is set, otherwise local SQLite). GET /health,
+GET /assessments/recent and GET /monitoring/summary are read-only. Set IHDS_MCP_URL to use a running MCP HTTP server instead of a stdio subprocess.
 
 GET /metrics serves Prometheus metrics (prometheus_client): request count and latency per route, /assess
 outcomes by risk band and status, and escalations. Scraped by docker-compose.monitoring.yml (local only);
@@ -25,12 +26,13 @@ from fastapi.concurrency import run_in_threadpool
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 from pydantic import BaseModel, Field
 
-from ihds import agents, monitoring, tracing, workflow
+from ihds import agents, audit_log, monitoring, tracing, workflow
 from ihds.config import FEATURES, LLM_MODEL, REPORTS_DIR
 
 tracing.configure()  # LangSmith tracing only when LANGSMITH_API_KEY is in the environment
 
 STATE: dict = {}
+WORKFLOW_ROUTE = "rest-api"  # set to "embedded-api" by ihds/embedded_api.py
 
 # Prometheus metrics (default process-wide registry).
 REQUESTS = Counter("ihds_http_requests_total", "HTTP requests", ["method", "route", "status"])
@@ -119,6 +121,7 @@ def get_graph(use_llm: bool):
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     await run_in_threadpool(get_system)
+    await run_in_threadpool(audit_log.configure)
     yield
     S = STATE.pop("system", None)
     if S is not None:
@@ -177,9 +180,17 @@ def assess(req: AssessRequest):
     t0 = time.perf_counter()
     res = agents.run(get_graph(req.use_llm), req.record.model_dump(), req.question)
     record_assessment(res, time.perf_counter() - t0)
+    audit_log.record(res, req.record.model_dump(), workflow_route=WORKFLOW_ROUTE)
     out = asdict(res)
     out["transport"] = res.transport or get_system().tools.transport
     return out
+
+
+@app.get("/assessments/recent")
+def assessments_recent(limit: int = 20):
+    """Newest audit-log rows (metadata + the eight model features; no draft or question text)."""
+    limit = max(1, min(int(limit), 100))
+    return {"backend": audit_log.status()["backend"], "count": audit_log.count(), "items": audit_log.recent(limit)}
 
 
 @app.get("/monitoring/summary")

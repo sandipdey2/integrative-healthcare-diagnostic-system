@@ -46,9 +46,10 @@ modelling (GAN), generative AI (optional gpt-4o-mini writer), agentic systems (L
 |---|---|---|
 | MCP tool server | `mcp_server/server.py` (`mcp` 1.30 FastMCP) | Serves `risk_score`, `explain_contributions`, `rag_search`, `population_context`, `synthetic_neighbors` over stdio or streamable HTTP (`/mcp`). Builds the same seeded model/GAN at start-up. |
 | Agents → MCP | `ihds/tool_backends.py` | `langchain-mcp-adapters` loads the MCP tools into the LangGraph agents over one persistent session: a stdio subprocess by default, or `IHDS_MCP_URL` for HTTP. If the server cannot start, an in-process fallback is used and labelled `inprocess-fallback` (`IHDS_TOOLS=mcp` disables the fallback). The transport is written in the trace (`risk_agent: [tools via mcp-stdio] ...`) and in every tool-call log entry. |
-| REST API | `api/main.py` (FastAPI + pydantic) | `POST /assess` (record + question + `use_llm` → draft, review, trace, tool log, transport), `GET /health`, `GET /monitoring/summary`, `GET /schema/features`, `GET /metrics` (Prometheus); OpenAPI docs at `/docs`. |
+| REST API | `api/main.py` (FastAPI + pydantic) | `POST /assess` (record + question + `use_llm` → draft, review, trace, tool log, transport), `GET /health`, `GET /assessments/recent`, `GET /monitoring/summary`, `GET /schema/features`, `GET /metrics` (Prometheus); OpenAPI docs at `/docs`. |
 | Evidence retrieval | `ihds/vector_store.py`, `ihds/workflow.py` | ChromaDB index of the 14 evidence cards with local ONNX MiniLM embeddings; the TF-IDF keyword matcher is the fallback (`IHDS_RETRIEVAL=keyword` forces it). The trace records `retrieval: chroma` or `keyword`. Comparison: `scripts/compare_retrieval.py` ([results](docs/MLOPS.md#evidence-retrieval-chromadb-with-a-keyword-fallback)) |
 | Tracing (optional) | `ihds/tracing.py` | LangSmith tracing when `LANGSMITH_API_KEY` is set (env or the `[langsmith]` Streamlit secret): project `ihds`, one `ihds-assessment` trace per run with tags and metadata (band, status, draft source, retrieval, LLM tokens); each gpt-4o-mini call is a child `writer_llm` run with token usage. The trace panel shows a **View trace in LangSmith** link (also through the REST API, which returns `langsmith_url`) |
+| Audit log | `ihds/audit_log.py` | One row per completed assessment (the eight model features as JSONB, risk band, reviewer status, draft source, revisions, escalation, retrieval, workflow route, optional LangSmith run id). Postgres when `DATABASE_URL` or the `[database] url` Streamlit secret is set (Neon in production); otherwise a local SQLite file at `data/audit.db`. Writes never fail an assessment. `GET /assessments/recent` lists recent rows; the Streamlit **Audit log** tab and sidebar show the backend and count. |
 | UI | `app.py` (Streamlit) | Calls `POST /assess` on `IHDS_API_URL` when set (Docker/Azure). Otherwise it starts the FastAPI app inside its own process on 127.0.0.1 (`ihds/embedded_api.py`, `IHDS_EMBED_API=0` to disable) and calls that, falling back to the in-process graph if it cannot (tools via MCP stdio). |
 
 ![service view exported from code](docs/deployment.png)
@@ -126,6 +127,8 @@ streamlit run app.py --server.headless true        # sidebar shows "LLM key dete
 
 For Streamlit, the same two values can go in `.streamlit/secrets.toml` (git-ignored; see
 `.streamlit/secrets.toml.example`). Without a key everything runs with the template writer.
+Optional `[database] url` (or `DATABASE_URL`) points the audit log at Postgres (for Streamlit Cloud,
+paste the Neon pooled URL). Without it the log is local SQLite (`data/audit.db`, git-ignored).
 
 ## Live demo
 
@@ -156,9 +159,9 @@ Both deployments serve the `main` branch. LLM drafts vary from run to run.
 | Path | Content |
 |---|---|
 | `mcp_server/` | MCP server exposing the five tools (stdio / streamable HTTP) |
-| `api/` | FastAPI service (`/assess`, `/health`, `/monitoring/summary`, Prometheus `/metrics`) |
-| `app.py` | Streamlit UI (risk assessment, model & data, synthetic stress test, monitoring, architecture, limits) |
-| `ihds/` | `agents.py` (LangGraph), `tools.py` (the five tool functions), `tool_backends.py` (MCP client / fallback), `workflow.py` (guard/RAG/reviewer blocks), `model.py`, `gan.py`, `stats_analysis.py`, `data.py`, `monitoring.py`, `pipeline.py` |
+| `api/` | FastAPI service (`/assess`, `/health`, `/assessments/recent`, `/monitoring/summary`, Prometheus `/metrics`) |
+| `app.py` | Streamlit UI (risk assessment, model & data, synthetic stress test, monitoring, architecture, limits, audit log) |
+| `ihds/` | `agents.py` (LangGraph), `tools.py` (the five tool functions), `tool_backends.py` (MCP client / fallback), `workflow.py` (guard/RAG/reviewer blocks), `model.py`, `gan.py`, `stats_analysis.py`, `data.py`, `monitoring.py`, `pipeline.py`, `audit_log.py` (Postgres/SQLite assessment log) |
 | `data/` | Pima CSV, clinical knowledge base, data card |
 | `notebooks/integrated_diagnostic_system.ipynb` | Executed walkthrough of the same code |
 | `tests/` | 52 original offline pytest tests (units, every agent node, routing, loop cap, Evidently, end-to-end, Streamlit AppTest, real MCP server over stdio and HTTP, FastAPI), 1 `/metrics` test, 4 live `vocareum` tests, and `test_mlops.py` (10 tests: 3 config checks that run everywhere, 7 that skip unless the MLOps tools are installed) |
@@ -166,7 +169,7 @@ Both deployments serve the `main` branch. LLM drafts vary from run to run.
 | `scripts/` | `export_graph.py` (diagrams from code), `start_all.sh` (MCP + API + UI), `run_llm_eval.py` (live LLM vs template, Evidently) |
 | `monitoring/reports/` | Evidently HTML/JSON reports |
 | `ihds/mlops/`, `dvc.yaml`, `params.yaml`, `feature_repo/`, `reports/` | Optional MLOps layer (GX, MLflow, DVC, Deepchecks, SHAP/Fairlearn, Feast, Prefect) and its committed JSON results — see `docs/MLOPS.md` |
-| `docker-compose.monitoring.yml`, `monitoring/prometheus/`, `monitoring/grafana/` | Local Prometheus + Grafana stack (provisioned datasource; dashboard JSON also importable into Grafana Cloud) |
+| `docker-compose.monitoring.yml`, `monitoring/prometheus/`, `monitoring/grafana/` | Local Prometheus + Grafana stack plus a Postgres 17 service for the assessment audit log (provisioned datasource; dashboard JSON also importable into Grafana Cloud) |
 | `ihds/metrics_push.py` | Streamlit → Grafana Cloud metrics push (Prometheus remote write, background thread) |
 | `scripts/metrics_agent.py`, `deploy/azure/enable_metrics_push.sh`, `deploy/monitoring/` | Optional metrics push from Azure Container Apps (Grafana Cloud, or self-hosted option B via `deploy/azure/deploy_monitoring_aca.sh`) |
 | `requirements-mlops.txt`, `ruff.toml`, `docs/ci.yml.example` | MLOps environment, lint config, GitHub Actions CI/CD workflow (to be added via the web UI) |

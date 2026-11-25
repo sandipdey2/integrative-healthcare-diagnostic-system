@@ -15,7 +15,7 @@ import time
 import pandas as pd
 import streamlit as st
 
-from ihds import agents, data, embedded_api, metrics_push, model, monitoring, stats_analysis, tracing, workflow
+from ihds import agents, audit_log, data, embedded_api, metrics_push, model, monitoring, stats_analysis, tracing, workflow
 from ihds.config import FEATURES, LLM_MODEL, REPORTS_DIR, ROOT, TARGET, VALID_RANGES
 from ihds.pipeline import build_system
 
@@ -67,6 +67,21 @@ def _start_tracing():
 
 
 TRACING = _start_tracing()
+
+
+def _start_audit_log():
+    """Optional Postgres audit log (Neon or DATABASE_URL); otherwise a local SQLite file."""
+    try:
+        try:
+            secrets = st.secrets if len(st.secrets) else None
+        except Exception:
+            secrets = None
+        return audit_log.configure(secrets=secrets)
+    except Exception:
+        return audit_log.status()
+
+
+_start_audit_log()
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -172,10 +187,15 @@ with st.sidebar:
             st.caption("Metrics push: off (no GRAFANA_RW_URL secret)")
     st.caption(f"LangSmith tracing: on (project {TRACING['project']})" if TRACING
                else "LangSmith tracing: off (no LANGSMITH_API_KEY)")
+    try:
+        info = audit_log.status()
+        st.caption(f"Audit log: {info['backend']} · {info['rows']} rows")
+    except Exception:
+        st.caption("Audit log: unavailable")
     st.divider()
     st.markdown("**Advisory system only** — clinician review required.")
 
-tabs = st.tabs(["Risk assessment", "Model & data", "Synthetic stress test", "Monitoring (Evidently)", "Architecture", "About & limits"])
+tabs = st.tabs(["Risk assessment", "Model & data", "Synthetic stress test", "Monitoring (Evidently)", "Architecture", "About & limits", "Audit log"])
 
 # ------------------------------------------------------------------ Risk assessment
 with tabs[0]:
@@ -226,6 +246,7 @@ with tabs[0]:
                 api_record(res, time.perf_counter() - t0)
             else:
                 metrics_push.record_assessment(res, time.perf_counter() - t0)  # no-op when the push is off
+            audit_log.record(res, record, workflow_route="in-process")
         if res.status == "blocked":
             st.error(res.draft)
         else:
@@ -371,3 +392,43 @@ with tabs[5]:
   calibration shift lowers precision. See TESTING.md and evaluation/results.json.
 """
     )
+
+
+# ------------------------------------------------------------------ Audit log
+with tabs[6]:
+    st.subheader("Assessment audit log")
+    st.caption(
+        "One row per completed assessment: the eight model input features, risk band, reviewer status, "
+        "draft source, revisions, escalation, retrieval method and workflow route. The clinician question "
+        "and the draft text are not stored."
+    )
+    info = audit_log.status()
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Backend", info["backend"])
+    c2.metric("Rows", info["rows"])
+    c3.metric("Write failures", info["writes_failed"])
+    rows = audit_log.recent(20)
+    if not rows:
+        st.info("No assessments logged yet in this process.")
+    else:
+        view = []
+        for r in rows:
+            feat = r.get("features") or {}
+            view.append({
+                "id": r["id"],
+                "created_at": r["created_at"],
+                "band": r["risk_band"],
+                "probability": r["risk_probability"],
+                "reviewer": r["reviewer_status"],
+                "draft": r["draft_source"],
+                "revisions": r["revisions"],
+                "escalated": r["escalated"],
+                "blocked": r["blocked"],
+                "retrieval": r["retrieval_method"],
+                "route": r["workflow_route"],
+                "langsmith_run_id": r["langsmith_run_id"] or "",
+                **{k: feat.get(k) for k in ("Glucose", "BMI", "Age")},
+            })
+        st.dataframe(pd.DataFrame(view), hide_index=True)
+        with st.expander("Raw rows (last 20)"):
+            st.json(rows)
