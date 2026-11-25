@@ -390,7 +390,7 @@ receiver standing in for Grafana Cloud):
   Grafana whose Prometheus datasource has a different uid succeeded. That version of the dashboard had 8 panels, all bound to
   `${datasource}`.
 
-**Not verified:** a push to a real Grafana Cloud stack, and any Azure deployment. Neither has been run.
+**Not verified:** this agent push on a real Container Apps revision. (The direct push from the Streamlit Cloud app to Grafana Cloud *was* verified, see below. The Azure Container App itself is offline since the Vocareum lab reset.)
 
 #### Option A: Grafana Cloud (recommended)
 

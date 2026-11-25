@@ -47,8 +47,26 @@ for a in sorted({a for a, _ in edges}):
     lines.append(f'    {a}["{a}"]')
 lines += ["  end", f'  subgraph MCP["MCP server mcp_server/server.py ({S.tools.transport} here; streamable HTTP :8765 in Docker)"]']
 lines += [f'    T_{t}["{t}"]' for t in tools]
-lines += ["  end", '  UI -- "IHDS_API_URL (optional)" --> API', '  UI -. "otherwise in-process" .-> G', "  API --> G"]
+lines += ["  end", '  UI -- "IHDS_API_URL (Docker/Azure) or embedded on 127.0.0.1 (ihds/embedded_api.py)" --> API',
+          '  UI -. "fallback: in-process" .-> G', "  API --> G"]
 lines += [f"  {a} -- MCP --> T_{t}" for a, t in sorted(edges)]
+# Optional external services, each wired in code: the writer LLM (ihds/agents.py default_llm), the Chroma index
+# behind rag_search (ihds/vector_store.py), the audit log (ihds/audit_log.py), LangSmith (ihds/tracing.py) and
+# metrics (api/main.py /metrics scraped by Prometheus in Docker; ihds/metrics_push.py remote write from Streamlit).
+lines += [
+    '  subgraph EXT["Optional services (on only when configured)"]',
+    '    LLM["gpt-4o-mini writer (OPENAI_API_KEY; template otherwise)"]',
+    '    DB[("Audit log: Postgres/Neon (DATABASE_URL) or SQLite")]',
+    '    LS["LangSmith traces (LANGSMITH_API_KEY)"]',
+    '    GR["Grafana Cloud remote write (GRAFANA_RW_*) / Prometheus scrape (Docker)"]',
+    "  end",
+    '  CH[("ChromaDB in-memory index, ONNX MiniLM (TF-IDF fallback)")]',
+    "  T_rag_search --> CH",
+    "  G -- writer_agent --> LLM",
+    '  API -- "POST /assess row" --> DB',
+    '  G -. "ihds-assessment run + writer_llm child" .-> LS',
+    '  API -. "ihds_* metrics" .-> GR',
+]
 mmd = "\n".join(lines) + "\n"
 (docs / "deployment.mmd").write_text(mmd)
 print("wrote docs/deployment.mmd; tools listed over MCP:", tools, "routes:", routes)

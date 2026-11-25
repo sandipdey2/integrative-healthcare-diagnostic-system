@@ -1,10 +1,12 @@
 flowchart LR
   UI["Streamlit app.py<br/>:8501"]
   subgraph API["FastAPI api/main.py :8000"]
-    R0["GET /health"]
-    R1["GET /monitoring/summary"]
-    R2["GET /schema/features"]
-    R3["POST /assess"]
+    R0["GET /assessments/recent"]
+    R1["GET /health"]
+    R2["GET /metrics"]
+    R3["GET /monitoring/summary"]
+    R4["GET /schema/features"]
+    R5["POST /assess"]
   end
   subgraph G["LangGraph StateGraph (ihds/agents.py)"]
     evidence_agent["evidence_agent"]
@@ -18,11 +20,23 @@ flowchart LR
     T_risk_score["risk_score"]
     T_synthetic_neighbors["synthetic_neighbors"]
   end
-  UI -- "IHDS_API_URL (optional)" --> API
-  UI -. "otherwise in-process" .-> G
+  UI -- "IHDS_API_URL (Docker/Azure) or embedded on 127.0.0.1 (ihds/embedded_api.py)" --> API
+  UI -. "fallback: in-process" .-> G
   API --> G
   evidence_agent -- MCP --> T_population_context
   evidence_agent -- MCP --> T_rag_search
   risk_agent -- MCP --> T_explain_contributions
   risk_agent -- MCP --> T_risk_score
   uncertainty_agent -- MCP --> T_synthetic_neighbors
+  subgraph EXT["Optional services (on only when configured)"]
+    LLM["gpt-4o-mini writer (OPENAI_API_KEY; template otherwise)"]
+    DB[("Audit log: Postgres/Neon (DATABASE_URL) or SQLite")]
+    LS["LangSmith traces (LANGSMITH_API_KEY)"]
+    GR["Grafana Cloud remote write (GRAFANA_RW_*) / Prometheus scrape (Docker)"]
+  end
+  CH[("ChromaDB in-memory index, ONNX MiniLM (TF-IDF fallback)")]
+  T_rag_search --> CH
+  G -- writer_agent --> LLM
+  API -- "POST /assess row" --> DB
+  G -. "ihds-assessment run + writer_llm child" .-> LS
+  API -. "ihds_* metrics" .-> GR

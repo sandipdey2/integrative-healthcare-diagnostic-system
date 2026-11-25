@@ -1,6 +1,8 @@
 # Project 7 — Integrative Industry Synthesis
 ## Healthcare AI Diagnostic Support: multi-agent diabetes-risk advisory system (advisory only)
 
+> **Graders:** live links, how to run, secrets (placeholders), rubric-to-evidence map and limitations are in [`docs/SUBMISSION.md`](docs/SUBMISSION.md). The Streamlit Cloud app is live. The Azure Container App was deployed but is offline since the Vocareum lab reset.
+
 A LangGraph multi-agent system that turns eight routine measurements into an **advisory draft for a
 clinician**: a calibrated risk probability, the factors driving it, cited guideline snippets, a robustness
 check for borderline cases, and a full audit trace. Evidently AI monitors both the input data and the
@@ -96,7 +98,7 @@ runtime does not install or import them, apart from `prometheus-client`, which s
 ```bash
 python3 -m venv .venv          # Python 3.11–3.14 && source .venv/bin/activate
 pip install -r requirements-dev.txt
-pytest -q                                   # 56 offline tests pass (+4 live tests and 7 MLOps tests skipped)
+pytest -q                                   # 89 passed, 16 skipped without any keys (live LLM/LangSmith/Grafana/Postgres tests and MLOps tools skip)
 python -m ihds.pipeline                     # evaluation + Evidently reports
 streamlit run app.py --server.headless true # http://localhost:8501 (embedded REST API on 127.0.0.1, tools via MCP stdio)
 ```
@@ -132,10 +134,10 @@ paste the Neon pooled URL). Without it the log is local SQLite (`data/audit.db`,
 
 ## Live demo
 
-Both deployments serve the `main` branch. LLM drafts vary from run to run.
+Streamlit Community Cloud serves the `main` branch. LLM drafts vary from run to run.
 
-- **Streamlit Community Cloud:** [ihds-diabetes-advisor.streamlit.app](https://ihds-diabetes-advisor.streamlit.app/). The app starts the FastAPI app inside its process (embedded REST API on 127.0.0.1, see docs/MLOPS.md) and spawns the MCP server over stdio (labelled in-process fallback only if the server cannot start). Optional secrets: `OPENAI_API_KEY` and `OPENAI_API_BASE`. A live gpt-4o-mini run (default inputs) rejected the first draft for grounding (0.19) and approved the second (0.207); draft source `llm`.
-- **Azure Container Apps** (West US): [ihds-app.bluebay-94b3aae3.westus.azurecontainerapps.io](https://ihds-app.bluebay-94b3aae3.westus.azurecontainerapps.io). The Docker image runs `scripts/start_all.sh` (MCP HTTP on `127.0.0.1:8765` → FastAPI on `8000` → Streamlit on `8501`). Public ingress is port 8501; the UI calls the in-container API at `http://127.0.0.1:8000`. Verified 2026-11-25: `GET /_stcore/health` returned `ok` (HTTP 200). On the default record the sidebar showed `Workflow via REST API http://127.0.0.1:8000 · tools: mcp-http` and `LLM key configured on the API server`; risk p = 0.604 (high band, top driver Glucose); evidence K7, K2, K1; tools `risk_score`, `explain_contributions`, `rag_search` and `population_context` over `mcp-http`. The writer produced three gpt-4o-mini drafts; the reviewer rejected all three for grounding (0.185, 0.182, 0.185). The revision cap was reached, so `finalize` released the template draft (page grounding 0.703) and marked the case escalated to human review.
+- **Streamlit Community Cloud:** [ihds-diabetes-advisor.streamlit.app](https://ihds-diabetes-advisor.streamlit.app/). The app starts the FastAPI app inside its process (embedded REST API on 127.0.0.1, see docs/MLOPS.md) and spawns the MCP server over stdio (labelled in-process fallback only if the server cannot start). Optional secrets: `OPENAI_API_KEY`/`OPENAI_API_BASE`, `[langsmith]`, `[grafana]` and `[database]` (see [`docs/SUBMISSION.md`](docs/SUBMISSION.md)). Live check on 2026-11-25 (~03:08 PST, commit c20199d, default inputs, gpt-4o-mini): the sidebar showed `Workflow via REST API http://127.0.0.1:<port> · tools: mcp-stdio`, LangSmith tracing on, the metrics push to Grafana Cloud with `incl. API metrics`, and `Audit log: postgres (neon)`. The first LLM draft was approved (grounding 0.814, 601 tokens) with retrieval `chroma`. The trace panel showed a direct **View trace in LangSmith** link, and the audit count went from 1 to 2 rows after the run. Through the LangSmith API, the run was an `ihds-assessment` root with one `writer_llm` child (601 tokens).
+- **Azure Container Apps** (West US), **deployed 2026-11-25 and now offline**: `ihds-app.bluebay-94b3aae3.westus.azurecontainerapps.io` was served from the Vocareum Azure lab (revision `ihds-app--0000002`, which also served `/metrics` inside the container). The lab has since reset. On 2026-11-25 at 03:28 PST, public DNS returned NXDOMAIN for that hostname, so the URL no longer responds. The evidence below and the screenshots are from when it was live. The Docker image runs `scripts/start_all.sh` (MCP HTTP on `127.0.0.1:8765` → FastAPI on `8000` → Streamlit on `8501`). Public ingress is port 8501; the UI calls the in-container API at `http://127.0.0.1:8000`. Verified 2026-11-25: `GET /_stcore/health` returned `ok` (HTTP 200). On the default record the sidebar showed `Workflow via REST API http://127.0.0.1:8000 · tools: mcp-http` and `LLM key configured on the API server`; risk p = 0.604 (high band, top driver Glucose); evidence K7, K2, K1; tools `risk_score`, `explain_contributions`, `rag_search` and `population_context` over `mcp-http`. The writer produced three gpt-4o-mini drafts; the reviewer rejected all three for grounding (0.185, 0.182, 0.185). The revision cap was reached, so `finalize` released the template draft (page grounding 0.703) and marked the case escalated to human review.
 
 ![Azure Container Apps — risk assessment result (template released after three rejected LLM drafts)](docs/screenshots/08_azure_container_app.png)
 
@@ -145,8 +147,8 @@ Both deployments serve the `main` branch. LLM drafts vary from run to run.
 
 - **Streamlit Community Cloud:** repo `sandipdey2/integrative-healthcare-diagnostic-system`, branch `main`,
   main file `app.py`, any Python 3.11–3.14 (Cloud's default 3.14 works; all pins have 3.14 wheels). The app spawns
-  the MCP server as a stdio subprocess (falls back to labelled in-process tools if it cannot). Secrets (optional, TOML):
-  `OPENAI_API_KEY = "voc-..."` and `OPENAI_API_BASE = "https://openai.vocareum.com/v1"`. Live URL in [Live demo](#live-demo).
+  the MCP server as a stdio subprocess (falls back to labelled in-process tools if it cannot) and embeds the FastAPI app. Secrets (optional, TOML):
+  `OPENAI_API_KEY = "voc-..."` and `OPENAI_API_BASE = "https://openai.vocareum.com/v1"`, plus the `[langsmith]`, `[grafana]` and `[database]` tables in [`docs/SUBMISSION.md`](docs/SUBMISSION.md). Live URL in [Live demo](#live-demo). After a push, the app rebuilds its cached model and embedded API when the project code changes, so no manual reboot is needed.
 - **Docker:** `docker build -t ihds . && docker run -p 8501:8501 -p 8000:8000 ihds` runs `scripts/start_all.sh`
   (MCP HTTP server on 127.0.0.1:8765 → FastAPI on 8000 → Streamlit on 8501, health-checked).
 - **Azure Container Apps:** the same image (public port 8501; ACI also exposes 8000, with Prometheus `/metrics` switched off by `IHDS_METRICS=0`) + [`deploy/azure/README.md`](deploy/azure/README.md)
@@ -161,12 +163,12 @@ Both deployments serve the `main` branch. LLM drafts vary from run to run.
 | `mcp_server/` | MCP server exposing the five tools (stdio / streamable HTTP) |
 | `api/` | FastAPI service (`/assess`, `/health`, `/assessments/recent`, `/monitoring/summary`, Prometheus `/metrics`) |
 | `app.py` | Streamlit UI (risk assessment, model & data, synthetic stress test, monitoring, architecture, limits, audit log) |
-| `ihds/` | `agents.py` (LangGraph), `tools.py` (the five tool functions), `tool_backends.py` (MCP client / fallback), `workflow.py` (guard/RAG/reviewer blocks), `model.py`, `gan.py`, `stats_analysis.py`, `data.py`, `monitoring.py`, `pipeline.py`, `audit_log.py` (Postgres/SQLite assessment log) |
+| `ihds/` | `agents.py` (LangGraph), `tools.py` (the five tool functions), `tool_backends.py` (MCP client / fallback), `workflow.py` (guard/RAG/reviewer blocks), `vector_store.py` (ChromaDB), `tracing.py` (LangSmith), `embedded_api.py` (FastAPI inside Streamlit), `metrics_push.py` (Grafana Cloud remote write), `audit_log.py` (Postgres/SQLite assessment log), `model.py`, `gan.py`, `stats_analysis.py`, `data.py`, `monitoring.py`, `pipeline.py` |
 | `data/` | Pima CSV, clinical knowledge base, data card |
 | `notebooks/integrated_diagnostic_system.ipynb` | Executed walkthrough of the same code |
-| `tests/` | 52 original offline pytest tests (units, every agent node, routing, loop cap, Evidently, end-to-end, Streamlit AppTest, real MCP server over stdio and HTTP, FastAPI), 1 `/metrics` test, 4 live `vocareum` tests, and `test_mlops.py` (10 tests: 3 config checks that run everywhere, 7 that skip unless the MLOps tools are installed) |
+| `tests/` | 105 pytest tests: the original 56 (units, every agent node, routing, loop cap, Evidently, end-to-end, Streamlit AppTest, real MCP server over stdio and HTTP, FastAPI, 4 live `vocareum`) plus retrieval, tracing, metrics push/agent, embedded API, audit log, grounding and `test_mlops.py`. Without keys: 89 passed, 16 skipped |
 | `agentic_system.ipynb` | Live run of the multi-agent graph (low / borderline / high risk, refusal, revision loop) with traces |
-| `scripts/` | `export_graph.py` (diagrams from code), `start_all.sh` (MCP + API + UI), `run_llm_eval.py` (live LLM vs template, Evidently) |
+| `scripts/` | `export_graph.py` (diagrams from code), `start_all.sh` (MCP + API + UI), `run_llm_eval.py` (live LLM vs template, Evidently), `eval_grounding.py` (reviewer grounding batch), `compare_retrieval.py` (Chroma vs keyword) |
 | `monitoring/reports/` | Evidently HTML/JSON reports |
 | `ihds/mlops/`, `dvc.yaml`, `params.yaml`, `feature_repo/`, `reports/` | Optional MLOps layer (GX, MLflow, DVC, Deepchecks, SHAP/Fairlearn, Feast, Prefect) and its committed JSON results — see `docs/MLOPS.md` |
 | `docker-compose.monitoring.yml`, `monitoring/prometheus/`, `monitoring/grafana/` | Local Prometheus + Grafana stack plus a Postgres 17 service for the assessment audit log (provisioned datasource; dashboard JSON also importable into Grafana Cloud) |
@@ -179,6 +181,12 @@ Both deployments serve the `main` branch. LLM drafts vary from run to run.
 
 ## Limitations
 
-Single public dataset from one population; small hand-written knowledge base; keyword guard can be bypassed by
-paraphrase; GAN does not reproduce imputation-heavy features; live LLM drafts are less grounded than template
-drafts, and the reviewer cannot detect a valid citation attached to the wrong claim. See `TESTING.md`.
+- **Data:** a single public dataset from one population (Pima women aged 21 and over); a small hand-written knowledge base of 14 cards.
+- **Safety guard:** a keyword guard, which a paraphrase can bypass (one miss among 19 labelled cases).
+- **GAN:** does not reproduce the imputation-heavy features, so synthetic rows are used only for stress tests.
+- **Grounding check:** token overlap with the evidence cards and case data, not semantic entailment. It cannot detect a valid citation attached to the wrong claim. The 0.4 threshold was calibrated on one 15-case batch per retriever and a few hand-written invented drafts.
+- **Deployments:** the Azure deployment is offline since the lab reset. On Streamlit Cloud, the first load after a push retrains the model.
+- **Services:** the MCP server and the API have no authentication (localhost or private network only). The Grafana token is write-only, so pushed data was not read back.
+- **Scope:** batch-only data pipeline (no streaming, no lakehouse).
+
+See `TESTING.md` and [`docs/SUBMISSION.md`](docs/SUBMISSION.md).
