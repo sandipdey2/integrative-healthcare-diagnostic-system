@@ -465,11 +465,13 @@ with tabs[5]:
 - **Data:** Pima Indians Diabetes Database (Smith et al., 1988) via OpenML #37 — 768 females aged 21+ of Pima heritage.
   Results may not transfer to other populations.
 - **What is real code:** a LangGraph `StateGraph` with 7 agent nodes (safety guard, supervisor, risk, evidence,
-  uncertainty, writer, reviewer) plus refuse/finalize nodes; LangChain tools wrapping the logistic-regression model,
-  Welch t-test results, TF-IDF retrieval and the NumPy GAN; a reviewer→writer revision loop capped at 2 revisions;
+  uncertainty, writer, reviewer) plus refuse/finalize nodes; five tools wrapping the logistic-regression model,
+  Welch t-test results, retrieval (ChromaDB embeddings, TF-IDF keyword fallback) and the NumPy GAN, served by an
+  MCP server (`mcp_server/server.py`, FastMCP) over stdio by default or streamable HTTP (`IHDS_MCP_URL`), with
+  an in-process fallback that is labelled in the trace; a reviewer→writer revision loop capped at 2 revisions;
   Evidently reports on data and on agent outputs.
-- **What is not built:** the supervisor routes by rules (the LLM only writes the draft); no MCP server;
-  no EHR integration; no user accounts.
+- **What is not built:** the supervisor routes by rules (the LLM only writes the draft); no EHR integration;
+  no user accounts; no authentication on the API.
 - **Human-in-the-loop:** every output is an advisory draft; the clinician decides.
 - **Known gaps found in evaluation:** keyword guard missed a paraphrased medication question; the GAN does
   not match the Insulin / SkinThickness distributions well (imputation spikes); a +25 mg/dL glucose

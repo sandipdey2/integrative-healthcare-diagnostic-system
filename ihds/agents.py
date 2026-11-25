@@ -26,8 +26,11 @@ Agents (graph nodes) and the LangChain tools they call:
   * finalize          - packages the result; if the revision cap is hit, swaps in the template draft
                         and marks the case `escalated` for mandatory human review.
 
-Honest scope notes: routing is rule-based (the LLM only writes text); tools are in-process LangChain
-tools, not an MCP server; all agents share one process and one typed state.
+Honest scope notes: routing is rule-based (the LLM only writes text). The five tools are served by a real MCP
+server (mcp_server/server.py, FastMCP) and reached through ihds/tool_backends.py: by default a stdio child
+process started without API keys, or streamable HTTP when IHDS_MCP_URL is set. IHDS_TOOLS=inprocess (or "auto"
+mode when the server cannot start, labelled "inprocess-fallback") calls the same functions in this process.
+All agents share one process and one typed state; only the tool server can run separately.
 """
 from __future__ import annotations
 

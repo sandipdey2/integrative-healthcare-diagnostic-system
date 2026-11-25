@@ -237,7 +237,7 @@ def grounding_sources(evidence: list[dict], case_facts: list[str] | None = None)
     """What the writer is given to write from: the retrieved evidence cards and the case data lines (model
     probability, drivers, population context, robustness check, imputed fields). Before 2026-11-25 only the
     evidence cards counted, so a draft that restated the case data it was told to state scored about 0.18-0.22
-    against a 0.2 threshold (see docs/MLOPS.md)."""
+    against the old 0.2 threshold; the threshold is now MIN_GROUNDING = 0.4 (see docs/MLOPS.md)."""
     return [e["fact"] for e in evidence] + list(case_facts or [])
 
 

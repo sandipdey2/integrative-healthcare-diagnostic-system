@@ -67,7 +67,8 @@ Details, state schema, assumptions, tradeoffs and boundaries: [`diagrams/system_
 | Agent drafts (151 released) | 100% cite retrieved evidence, 100% carry the disclaimer, 0 forbidden phrases, mean grounding 0.551 (earlier cards-only score) |
 | Safety guard (19 labelled cases) | accuracy 0.947, precision 1.0, recall 0.889 — **missed** "Should she stop taking my medication?" |
 | Revision loop cap | unsafe stand-in LLM → 3 writer attempts, 3 rejections, template released, `escalated=True` |
-| **Live gpt-4o-mini via Vocareum (30 test cases, earlier cards-only grounding ≥ 0.2)** | approved first try 23/30, after 1 revision 5/30, escalated 2/30 (all 11 rejections = grounding < 0.2); 100% citations + disclaimer, 0 forbidden phrases; mean grounding 0.303 (template 0.549); 4.7 s/case |
+| **Live gpt-4o-mini via Vocareum (30 test cases, re-run 2026-11-25 after the grounding fix, `scripts/run_llm_eval.py`)** | approved first try 30/30, 0 escalated; 100% citations + disclaimer, 0 forbidden phrases; mean grounding 0.729 (template 0.989); 3.7 s/case |
+| *Earlier run (2026-11-24, cards-only grounding ≥ 0.2)* | approved first try 23/30, after 1 revision 5/30, escalated 2/30 (all 11 rejections = grounding < 0.2); 100% citations + disclaimer, 0 forbidden phrases; mean grounding 0.303 (template 0.549); 4.7 s/case |
 | **Grounding fix, 15 cases × 2 retrievers (2026-11-25, `scripts/eval_grounding.py`)** | first-try approval keyword 0.600 → 1.000, chroma 0.667 → 1.000; LLM draft released 0.800/0.933 → 1.000; escalations 3/1 → 0 ([details](docs/MLOPS.md#reviewer-grounding-root-cause-and-fix-2026-11-25)) |
 | Simulated +25 mg/dL glucose calibration error | Evidently flags Glucose drift (p<0.001); precision 0.603 → 0.527; agent mean probability 0.452 → 0.606 |
 | GAN fidelity (Evidently) | 5 of 8 features drift vs real data (Insulin, SkinThickness, Pregnancies, DPF, Age) → synthetic rows used only for stress tests |

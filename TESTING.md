@@ -76,22 +76,28 @@ Offline, the LLM writer path is also covered with LangChain's `FakeListChatModel
 Same 30 held-out cases (first 30 with Glucose and BMI present), run through the graph twice: live LLM writer and template writer.
 Evidently `TextEvals` report: `monitoring/reports/llm_vs_template_report.html`; per-case drafts and traces: `evaluation/llm_eval_cases.csv`.
 
+Re-run on 2026-11-25 after the grounding fix (commit 0919e9c: `MIN_GROUNDING` 0.4, scored against evidence cards
+plus case data, disclaimer removed), with Chroma retrieval and tools via MCP stdio:
+
 | Metric | gpt-4o-mini | template |
 |---|---|---|
-| Released LLM draft | 28/30 (2 escalated → template) | n/a |
-| Reviewer approved on first draft | 23/30 (76.7%) | 30/30 |
-| Approved after 1 revision | 5/30 | — |
-| Reviewer rejections (all for grounding < 0.2) | 11 | 0 |
+| Released LLM draft | 30/30 (0 escalated) | n/a |
+| Reviewer approved on first draft | 30/30 | 30/30 |
+| Reviewer rejections | 0 | 0 |
 | Final approved | 30/30 | 30/30 |
 | Drafts with `[K#]` citation / disclaimer / no forbidden phrases | 100% / 100% / 100% | 100% / 100% / 100% |
-| Mean citations per draft | 2.7 | 3.0 |
-| Mean grounding (min) | 0.303 (0.200) | 0.549 (0.392) |
-| Mean length / sentences | 771 chars / 6.6 | 1001 chars / 8.8 |
-| Mean latency per case | 4.7 s | 0.01 s |
+| Mean citations per draft | 2.07 | 3.0 |
+| Mean grounding (min) | 0.729 (0.581) | 0.989 (0.879) |
+| Mean length / sentences | 721 chars / 6.8 | 1003 chars / 8.8 |
+| Mean latency per case | 3.7 s | 0.15 s |
 
 Evidently drift test LLM vs template: grounding score and citation count distributions differ (p < 0.001).
-Observation: one live draft cited [K4] (BMI guidance) for the pregnancies driver — a valid id on the wrong claim,
-which the reviewer's checks cannot detect.
+This is a single 30-case run; LLM output varies run to run.
+
+*History (2026-11-24, earlier cards-only score with the 0.2 threshold):* first-draft approval 23/30, 5 approved after
+1 revision, 2 escalated (11 rejections, all grounding < 0.2); mean grounding 0.303 (min 0.200) vs template 0.549;
+4.7 s vs 0.01 s per case. In that run one live draft cited [K4] (BMI guidance) for the pregnancies driver — a valid id
+on the wrong claim, which the reviewer's checks cannot detect.
 
 ## 3. Evidently AI results (`monitoring/reports/`)
 

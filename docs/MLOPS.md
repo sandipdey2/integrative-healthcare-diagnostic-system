@@ -710,7 +710,8 @@ reports no conflicts on 3.14. The Docker image (Python 3.11) builds, and its con
 
 The approval rate did not collapse: the difference is within the run-to-run spread. Mean grounding is about
 0.04 lower with Chroma, and every run stayed at or above the reviewer's 0.2 threshold (minimum 0.2). The committed
-`monitoring/reports/llm_eval_summary.json` (keyword era, first try 0.767) was not regenerated.
+`monitoring/reports/llm_eval_summary.json` was regenerated on 2026-11-25 after the grounding fix below (see the
+note at the end of that section).
 
 ## Reviewer grounding: root cause and fix (2026-11-25)
 
@@ -771,8 +772,12 @@ the default case and the first 14 held-out cases with glucose and BMI. Results a
 - **Margin:** after the change, the lowest reviewer score of any LLM draft is 0.633, against the 0.4
   threshold.
 - **Caveat:** LLM output varies from run to run, and this is a single 15-case batch per retriever.
-- **Older numbers:** the 30-case evaluations elsewhere in this repo (`scripts/run_llm_eval.py`,
-  `scripts/compare_retrieval.py`) used the earlier cards-only score with the 0.2 threshold and were not rerun.
+- **30-case re-run:** `scripts/run_llm_eval.py --n 30` was re-run after the fix (gpt-4o-mini, Chroma, tools via
+  MCP stdio). `monitoring/reports/llm_eval_summary.json` now shows first-try approval 30/30, 0 escalations and mean
+  grounding 0.729 (minimum 0.581) for the LLM, against 0.989 for the template. The earlier run (2026-11-24,
+  cards-only score, 0.2 threshold) had 23/30 first try and 2 escalations. Single run; output varies.
+- **Older numbers:** the retrieval comparison (`scripts/compare_retrieval.py`) used the earlier cards-only score
+  with the 0.2 threshold and was not rerun.
 
 ## LangSmith tracing (optional)
 

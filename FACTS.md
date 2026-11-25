@@ -75,9 +75,10 @@ all 8 features p < 1e-5.
 
 ## Live LLM (gpt-4o-mini-2024-07-18 via Vocareum, 2026-11-24)
 - Live tests (`pytest -m vocareum`): 4/4 passed — ping, full graph with LLM writer approved + disclaimer, unsafe request refused before LLM.
-- 30 held-out cases (scripts/run_llm_eval.py): first-draft approval 23/30 (76.7%); 5 approved after 1 revision; 2 escalated after 3 rejected drafts (template released); 11 rejections, all grounding < 0.2; final approval 30/30.
+- 30 held-out cases (scripts/run_llm_eval.py), re-run 2026-11-25 after the grounding fix (0919e9c; MIN_GROUNDING 0.4; Chroma; tools via mcp-stdio): first-draft approval 30/30, 0 revisions, 0 escalated; mean grounding LLM 0.729 (min 0.581) vs template 0.989 (min 0.879); citations 2.07 vs 3.0; length 721 vs 1003 chars; latency 3.7 s vs 0.15 s; drift test on grounding & citations p < 0.001. Single run; output varies.
+- History, 2026-11-24 run (cards-only score, 0.2 threshold): first-draft approval 23/30 (76.7%); 5 approved after 1 revision; 2 escalated after 3 rejected drafts (template released); 11 rejections, all grounding < 0.2; final approval 30/30.
 - Evidently TextEvals: citation 100%, disclaimer 100%, forbidden phrases 0 (LLM and template).
-- Mean grounding LLM 0.303 (min 0.200) vs template 0.549 (min 0.392); citations 2.7 vs 3.0; length 771 vs 1001 chars; latency 4.7 s vs 0.01 s per case; drift test LLM vs template on grounding & citations p < 0.001.
+- 2026-11-24 run: mean grounding LLM 0.303 (min 0.200) vs template 0.549 (min 0.392); citations 2.7 vs 3.0; length 771 vs 1001 chars; latency 4.7 s vs 0.01 s per case; drift test LLM vs template on grounding & citations p < 0.001.
 - Notebook agentic_system.ipynb re-executed live with tools via mcp-stdio: low (#8, p=0.132, approved), borderline (#2, p=0.439, uncertainty agent range 0.208–0.699; this run 3 grounding rejections → escalated), high (#7, p=0.962, approved), refusal (metformin dose), #1 approved first try this run (1 revision in the earlier run), cap (#3: 3 rejections → escalated). LLM output varies run to run.
 - Failure insight: one live draft cited [K4] (BMI) for the pregnancies driver — valid id, wrong claim; reviewer can't detect.
 
