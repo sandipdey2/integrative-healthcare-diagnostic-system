@@ -65,6 +65,7 @@ def test_writer_llm_call_is_a_named_child_run_with_token_usage():
     the graph run, and its usage metadata is summed into AdvisoryResult.llm_tokens."""
     from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
     from langchain_core.messages import AIMessage
+    from langsmith.run_helpers import tracing_context
     from langchain_core.callbacks import BaseCallbackHandler
 
     from ihds import agents
@@ -79,7 +80,8 @@ def test_writer_llm_call_is_a_named_child_run_with_token_usage():
             + " ".join(f"{e['fact']} [{e['id']}]" for e in base.evidence) + " " + DISCLAIMER)
     usage = {"input_tokens": 300, "output_tokens": 120, "total_tokens": 420}
     llm = GenericFakeChatModel(messages=iter([AIMessage(content=text, usage_metadata=usage)]))
-    res = agents._run(s.graph_with_llm(llm), rec)
+    with tracing_context(enabled=False):  # offline test: never send these fake runs to LangSmith
+        res = agents._run(s.graph_with_llm(llm), rec)
     assert res.draft_source == "llm" and res.review["approved"] and res.llm_tokens == 420
 
     class Recorder(BaseCallbackHandler):
@@ -94,8 +96,9 @@ def test_writer_llm_call_is_a_named_child_run_with_token_usage():
 
     rec_cb = Recorder()
     llm = GenericFakeChatModel(messages=iter([AIMessage(content=text, usage_metadata=usage)]))
-    s.graph_with_llm(llm).invoke({"record": rec, "question": "", "trace": [], "tool_calls": [], "llm_usage": []},
-                                 config={"callbacks": [rec_cb]})
+    with tracing_context(enabled=False):
+        s.graph_with_llm(llm).invoke({"record": rec, "question": "", "trace": [], "tool_calls": [], "llm_usage": []},
+                                     config={"callbacks": [rec_cb]})
     assert len(rec_cb.llms) == 1
     name, parent, tags = rec_cb.llms[0]
     assert name == "writer_llm" and "attempt:1" in tags

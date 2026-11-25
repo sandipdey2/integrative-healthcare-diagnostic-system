@@ -603,6 +603,21 @@ Streamlit Community Cloud runs only `streamlit run app.py`, so `ihds/embedded_ap
   MCP child: on the box its environment had only HOME, LOGNAME, PATH, TERM, USER, PYTHONPATH and IHDS_GAN_STEPS.
 - **Startup:** about 0.2 s on the box, because the `System` is already built. The first page load still pays for
   the model and Chroma build (and the ONNX download on Streamlit Cloud).
+- **Code updates (git push):** Streamlit Cloud applies a push by rerunning `app.py` and reloading only the
+  modules that changed, while `st.cache_resource` keeps the System and the embedded API built from the old
+  code.
+  - Seen on 2026-11-25 after commit 0919e9c: the page showed the new "View trace in LangSmith" link, but the
+    API on the same port still ran the old reviewer (grounding 0.185, rejected three times). The sidebar had
+    also lost "incl. API metrics".
+  - `app.py` now hashes `ihds/`, `api/` and `mcp_server/`. When the hash changes, it drops every project module
+    except the metrics pusher and imports them again.
+  - It then rebuilds the System, the LLM graph and the embedded API (the caches are keyed by the hash, with
+    `max_entries=1`). It stops the old uvicorn server and closes the old MCP stdio child.
+  - It re-enables the API-metrics push on every rerun. `api/main.py` reuses its Prometheus collectors when
+    imported again.
+  - Checked locally: after a source change and a page reload, the API moved to a new port, the old port was
+    closed, and one MCP child remained. The push went on every 5 s with one pusher and "incl. API metrics".
+  - The first page load after a push retrains the model (as on a cold start).
 - **Caveats:**
   - The API has no authentication. It listens only on 127.0.0.1 inside the app container.
   - `/metrics` is not reachable from outside; the push is the only way out.

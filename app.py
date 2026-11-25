@@ -9,15 +9,49 @@ served by the MCP server (mcp_server/server.py, stdio subprocess or IHDS_MCP_URL
 """
 from __future__ import annotations
 
+import hashlib
 import os
+import sys
 import time
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
-from ihds import agents, audit_log, data, embedded_api, metrics_push, model, monitoring, stats_analysis, tracing, workflow
-from ihds.config import FEATURES, LLM_MODEL, REPORTS_DIR, ROOT, TARGET, VALID_RANGES
-from ihds.pipeline import build_system
+_PROJECT_PACKAGES = ("ihds", "api", "mcp_server")
+
+
+def _code_version() -> str:
+    """Hash of the project's Python sources (ihds/, api/, mcp_server/)."""
+    h = hashlib.sha1()
+    root = Path(__file__).resolve().parent
+    for pkg in _PROJECT_PACKAGES:
+        for p in sorted((root / pkg).glob("*.py")):
+            h.update(p.name.encode() + p.read_bytes())
+    return h.hexdigest()[:12]
+
+
+@st.cache_resource(show_spinner=False)
+def _live() -> dict:
+    """Process-wide holder that survives Streamlit's hot reload (its source never changes): the code version and
+    the System / embedded API / metrics pusher built from it, so the old ones can be shut down."""
+    return {}
+
+
+CODE_VERSION = _code_version()
+if _live().get("version") not in (None, CODE_VERSION):
+    # Streamlit Cloud applies a git push by rerunning this script with only the changed modules reloaded. Unchanged
+    # modules would keep references to the old ones, so drop every project module (except the metrics pusher,
+    # whose thread keeps running) and import them again; the cached System and API are rebuilt below.
+    for _name in [m for m in sys.modules if m.split(".")[0] in _PROJECT_PACKAGES and m != "ihds.metrics_push"]:
+        del sys.modules[_name]
+_live()["version"] = CODE_VERSION
+
+from ihds import (  # noqa: E402
+    agents, audit_log, data, embedded_api, metrics_push, model, monitoring, stats_analysis, tracing, workflow,
+)
+from ihds.config import FEATURES, LLM_MODEL, REPORTS_DIR, ROOT, TARGET, VALID_RANGES  # noqa: E402
+from ihds.pipeline import build_system  # noqa: E402
 
 st.set_page_config(page_title="Healthcare AI Diagnostic Support", page_icon="🩺", layout="wide")
 
@@ -51,7 +85,10 @@ def _start_metrics_push():
         return None
 
 
-_start_metrics_push()
+_pusher = _start_metrics_push()
+if _live().get("pusher") not in (None, _pusher):  # ihds.metrics_push itself was reloaded: one pusher only
+    _live()["pusher"].stop()
+_live()["pusher"] = _pusher
 
 
 def _start_tracing():
@@ -104,11 +141,17 @@ def _langsmith_link(res) -> None:
 EXTERNAL_API = os.environ.get("IHDS_API_URL", "").rstrip("/")
 
 
-@st.cache_resource(show_spinner="Training risk model and GAN (first load only)...")
-def get_system():
+@st.cache_resource(show_spinner="Training risk model and GAN (first load or new code only)...", max_entries=1)
+def get_system(code_version: str):
     # With an external API (Docker/Azure) the graph runs there; the local system only feeds the other tabs.
-    # Otherwise this System (MCP stdio tools) is shared with the embedded API below.
-    return build_system(tools_mode="inprocess" if EXTERNAL_API else None)
+    # Otherwise this System (MCP stdio tools) is shared with the embedded API below. Keyed by the code version,
+    # so a pushed change rebuilds it; the previous one is closed once nothing serves it any more.
+    s = build_system(tools_mode="inprocess" if EXTERNAL_API else None)
+    old = _live().get("system")
+    if old is not None:
+        _live()["retired"] = old
+    _live()["system"] = s
+    return s
 
 
 def run_via_api(record: dict, question: str, use_llm: bool) -> agents.AdvisoryResult:
@@ -122,26 +165,39 @@ def run_via_api(record: dict, question: str, use_llm: bool) -> agents.AdvisoryRe
     return agents.AdvisoryResult(**d)
 
 
-S = get_system()
+S = get_system(CODE_VERSION)
 
 
-@st.cache_resource(show_spinner="Starting the embedded REST API (first load only)...")
-def get_embedded_api():
-    """Once per process: FastAPI on 127.0.0.1:<free port> in a daemon thread (ihds/embedded_api.py)."""
+@st.cache_resource(show_spinner="Starting the embedded REST API (first load or new code only)...", max_entries=1)
+def get_embedded_api(code_version: str):
+    """Once per process and code version: FastAPI on 127.0.0.1:<free port> in a daemon thread
+    (ihds/embedded_api.py). A previous API (older code) is stopped first."""
+    old = _live().pop("api", None)
+    if old is not None:
+        old.stop()
     try:
         api = embedded_api.EmbeddedAPI(S)
-        metrics_push.include_api_metrics(True)  # push the API's ihds_http_* etc. with service=ihds-streamlit
-        return {"url": api.url, "error": None, "startup_s": api.startup_s}
+        _live()["api"] = api
+        return {"url": api.url, "error": None, "startup_s": api.startup_s, "code_version": code_version}
     except Exception as exc:
-        return {"url": "", "error": f"{type(exc).__name__}: {exc}"[:200], "startup_s": None}
+        return {"url": "", "error": f"{type(exc).__name__}: {exc}"[:200], "startup_s": None,
+                "code_version": code_version}
 
 
-EMBEDDED = get_embedded_api() if (not EXTERNAL_API and embedded_api.enabled()) else None
+EMBEDDED = get_embedded_api(CODE_VERSION) if (not EXTERNAL_API and embedded_api.enabled()) else None
 API_URL = EXTERNAL_API or (EMBEDDED["url"] if EMBEDDED else "")
+if EMBEDDED and EMBEDDED["url"]:
+    metrics_push.include_api_metrics(True)  # every run: also after the pusher was recreated by a reload
+_retired = _live().pop("retired", None)
+if _retired is not None:  # its API is stopped, so close its MCP stdio child
+    try:
+        _retired.tools.close()
+    except Exception:
+        pass
 
 
-@st.cache_resource(show_spinner=False)
-def get_llm_graph():
+@st.cache_resource(show_spinner=False, max_entries=1)
+def get_llm_graph(code_version: str):
     return S.graph_with_llm(agents.default_llm())
 
 st.title("Healthcare AI Diagnostic Support — Diabetes Risk (advisory only)")
@@ -238,7 +294,7 @@ with tabs[0]:
                     raise
                 st.warning(f"Embedded REST API call failed ({type(exc).__name__}); ran the workflow in-process.")
         if res is None:
-            graph = get_llm_graph() if (use_llm and has_key) else S.graph
+            graph = get_llm_graph(CODE_VERSION) if (use_llm and has_key) else S.graph
             t0 = time.perf_counter()
             res = agents.run(graph, record, question)
             if API_URL:  # embedded API fallback: count it in the API's metrics, which the pusher already sends

@@ -23,7 +23,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
+from prometheus_client import CONTENT_TYPE_LATEST, REGISTRY, Counter, Gauge, Histogram, generate_latest
 from pydantic import BaseModel, Field
 
 from ihds import agents, audit_log, monitoring, tracing, workflow
@@ -35,25 +35,36 @@ STATE: dict = {}
 WORKFLOW_ROUTE = "rest-api"  # set to "embedded-api" by ihds/embedded_api.py
 
 # Prometheus metrics (default process-wide registry).
-REQUESTS = Counter("ihds_http_requests_total", "HTTP requests", ["method", "route", "status"])
-LATENCY = Histogram("ihds_http_request_duration_seconds", "HTTP request latency", ["method", "route"],
-                    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30))
-PREDICTIONS = Counter("ihds_predictions_total", "Completed /assess runs by risk band", ["band"])
-ASSESS_STATUS = Counter("ihds_assess_total", "/assess runs by workflow status and draft source",
+
+
+def _metric(cls, name: str, doc: str, labels=(), **kw):
+    """Create a metric, or reuse it if this module is imported again in the same process (the Streamlit app
+    re-imports project modules after a code change); registering the same name twice would raise."""
+    existing = REGISTRY._names_to_collectors.get(name)
+    return existing if existing is not None else cls(name, doc, labels, **kw)
+
+
+_FIRST_IMPORT = "ihds_app_start_time_seconds" not in REGISTRY._names_to_collectors
+REQUESTS = _metric(Counter, "ihds_http_requests_total", "HTTP requests", ["method", "route", "status"])
+LATENCY = _metric(Histogram, "ihds_http_request_duration_seconds", "HTTP request latency", ["method", "route"],
+                  buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30))
+PREDICTIONS = _metric(Counter, "ihds_predictions_total", "Completed /assess runs by risk band", ["band"])
+ASSESS_STATUS = _metric(Counter, "ihds_assess_total", "/assess runs by workflow status and draft source",
                         ["status", "draft_source"])
-ESCALATIONS = Counter("ihds_escalations_total", "/assess runs escalated to a clinician")
-REVISIONS = Counter("ihds_reviewer_revisions_total", "Reviewer-requested LLM redrafts across /assess runs")
-ASSESS_LATENCY = Histogram("ihds_assess_duration_seconds", "Agent workflow duration per /assess run",
-                           buckets=(0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60))
-APP_UP = Gauge("ihds_app_up", "1 while this IHDS process is running (heartbeat; also pushed by the Streamlit app)")
-APP_START = Gauge("ihds_app_start_time_seconds", "Unix time this IHDS process started")
+ESCALATIONS = _metric(Counter, "ihds_escalations_total", "/assess runs escalated to a clinician")
+REVISIONS = _metric(Counter, "ihds_reviewer_revisions_total", "Reviewer-requested LLM redrafts across /assess runs")
+ASSESS_LATENCY = _metric(Histogram, "ihds_assess_duration_seconds", "Agent workflow duration per /assess run",
+                         buckets=(0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60))
+APP_UP = _metric(Gauge, "ihds_app_up", "1 while this IHDS process is running (heartbeat; also pushed by the Streamlit app)")
+APP_START = _metric(Gauge, "ihds_app_start_time_seconds", "Unix time this IHDS process started")
 APP_UP.set(1)
 # expose the common series at 0 from the start, so increase() in the dashboard counts the first event
 for _status, _src in (("ok", "template"), ("ok", "llm"), ("blocked", "refusal")):
     ASSESS_STATUS.labels(_status, _src)
 for _band in ("low", "moderate", "high"):
     PREDICTIONS.labels(_band)
-APP_START.set_to_current_time()
+if _FIRST_IMPORT:
+    APP_START.set_to_current_time()
 
 
 class PatientRecord(BaseModel):
