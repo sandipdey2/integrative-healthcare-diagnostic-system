@@ -137,8 +137,8 @@ Full commands and results are in [`docs/MLOPS.md`](docs/MLOPS.md).
 
 | Environment | Command | Result |
 |---|---|---|
-| Runtime (`requirements-dev.txt` + prometheus-client) | `pytest -q -rs` | **59 passed, 12 skipped**: the earlier 56 (still 56 passed, 11 skipped with `--ignore tests/test_metrics_agent.py`) + 3 in `tests/test_metrics_agent.py`. Skips: 4 live `vocareum` tests, 7 MLOps tests whose tools are not installed, and the promtool check when `promtool` is not on PATH. With promtool 3.5.0 on PATH: 60 passed, 11 skipped |
-| MLOps (`requirements-mlops.txt`, separate venv) | `pytest -q tests/test_mlops.py tests/test_metrics_agent.py` | **13 passed, 1 skipped** (promtool not on PATH) |
+| Runtime (`requirements-dev.txt` + prometheus-client) | `pytest -q -rs` | **63 passed, 13 skipped**: the earlier 56 (still 56 passed, 11 skipped with `--ignore tests/test_metrics_agent.py --ignore tests/test_metrics_push.py`) + 3 in `test_metrics_agent.py` + 4 in `test_metrics_push.py`. Skips: 4 live `vocareum` tests, 7 MLOps tests whose tools are not installed, the promtool check, and the live Grafana Cloud push (needs `GRAFANA_RW_*` in the env; it passed when run with the real credentials) |
+| MLOps (`requirements-mlops.txt`, separate venv) | `pytest -q tests/test_mlops.py tests/test_metrics_agent.py tests/test_metrics_push.py` | **17 passed, 2 skipped** (promtool not on PATH; live Grafana test without creds) |
 | MLOps | `pip install -r requirements-mlops.txt` in a fresh venv, then `pip check` | installs with pip; "No broken requirements found" |
 | Both | `ruff check .` (`ruff.toml`: E, F, W; E501/E702 ignored) | All checks passed. Fixing it removed 9 unused imports and invalid escapes from existing files; there were no behaviour changes |
 
@@ -160,6 +160,16 @@ What `tests/test_mlops.py` checks:
 - **Fairlearn:** the group counts sum to n, and DP diff = max − min selection rate.
 - **Feast:** apply, materialize and online fetch in a temp repo; raw 0 Insulin comes back as missing.
 - **Prefect:** the flow completes in task order, and a failed GX result stops it at `validate` (`Failed`).
+
+What `tests/test_metrics_push.py` checks (stdlib only):
+
+- the hand-written protobuf and snappy round-trip through reference decoders (and `cramjam` when installed);
+- the push is off without `GRAFANA_RW_URL` or with a user but no token, and `record_assessment` is then a no-op;
+- a `[grafana]` secrets table is read, and credentials are refused over plain `http://`;
+- against a local HTTP receiver, it checks the remote-write headers and basic auth, the exact counter, histogram
+  and heartbeat values with `service="ihds-streamlit"`, and that `repr()` hides the token;
+- HTTP 500 and connection-refused errors return `False` and never raise;
+- live (only with `GRAFANA_RW_*` in the env): Grafana Cloud accepts a push.
 
 What `tests/test_metrics_agent.py` checks (stdlib only, so it runs in the runtime venv):
 
@@ -184,7 +194,9 @@ End-to-end runs on the box:
 | Docker | `docker compose -f docker-compose.monitoring.yml build`, then `docker run --network host ihds:local` (default CMD = `scripts/start_all.sh`) | image built; Streamlit `/_stcore/health` `ok`; API `/health` showed `tools_transport: mcp-http`; `/metrics` served 18 `ihds_` lines; container healthcheck `healthy`; `mlflow` is not in the image |
 | Prometheus + Grafana | unmodified `docker-compose.monitoring.yml` on a bridge network (after `scripts/fix_docker_bridge_forward.sh`, box only), 104 `/assess` calls | `ihds-api up http://api:8000/metrics`; ok 95, blocked 9; high 35, low 33, moderate 27; escalations 0; p95 0.0486 s; Grafana datasource health OK; every panel returned series; `docs/screenshots/10_grafana_dashboard.png` |
 | CI `monitoring-stack` job (by hand) | the job's steps from `docs/ci.yml.example` | `compose config -q` and `promtool check config` OK; `up --wait` with 3/3 healthy; targets `{'ihds-api': 'up', 'prometheus': 'up'}`; `sum(ihds_predictions_total)` = 20; Grafana health, datasource health and dashboard search OK |
-| Metrics push (Grafana Cloud path) | `deploy/monitoring/docker-compose.push-test.yml` (same image, local receiver in place of Grafana Cloud), 31 `/assess` calls | agent log line present; token absent from config and from the agent, uvicorn and Streamlit environments; token file 600; receiver had `ihds_predictions_total{band="high",service="ihds",deployment="local-push-test"}` 30 and `ihds_assess_total` ok 30 / blocked 1; only `ihds_*` + `up` names; all 8 panels had data in the option B Grafana image |
+| Metrics push (Grafana Cloud path) | `deploy/monitoring/docker-compose.push-test.yml` (same image, local receiver in place of Grafana Cloud), 31 `/assess` calls | agent log line present; token absent from config and from the agent, uvicorn and Streamlit environments; token file 600; receiver had `ihds_predictions_total{band="high",service="ihds",deployment="local-push-test"}` 30 and `ihds_assess_total` ok 30 / blocked 1; only `ihds_*` + `up` names; all 8 panels (dashboard version at the time) had data in the option B Grafana image |
+| Streamlit → Grafana Cloud | `app.py` through `streamlit.testing.v1.AppTest` with the real credentials in `st.secrets`, 12 assessments; plus `streamlit run` with a user-level `secrets.toml` outside the repo, 3 clicks in headless Chrome | 11 ok, 1 blocked; high 5, low 4, moderate 2; 5 pushes HTTP 200, 0 failed; the server log showed the push line and no failures; no `GRAFANA_RW_*` in the Streamlit or MCP process environments. Wrong token gave 401; malformed body, bad metric name and future timestamp gave 400, so 200 means validated. **Read-back not possible:** the token lacks read scope (`/api/v1/query` gave 401 `invalid scope requested`) |
+| Dashboard with both sources | `ihds_api.json` imported via `/api/dashboards/import` into Grafana 12.1, fed by `metrics_push` → local Prometheus receiver (40 synthetic assessments) | import OK; `service` variable = `ihds-streamlit`; 9/10 panels with data (the API-only request-rate panel was empty as expected); p50 0.03 s, p95 0.085 s |
 | Agent off | `docker run ihds:local` with no `GRAFANA_RW_URL` | only MCP, uvicorn and Streamlit running; no `/tmp/ihds-agent` |
 | Config lint | `promtool check config` (3.5.0) on `monitoring/prometheus/prometheus.yml`, `deploy/monitoring/prometheus/prometheus.yml` and the rendered agent config (`--agent`); `docker compose config -q` on both compose files; Grafana 12.1 started with the provisioning | all SUCCESS; Grafana logged no provisioning errors and listed the `ihds-api` dashboard; `ihds_api.json` imported through `/api/dashboards/import` into a Grafana whose datasource has another uid |
 

@@ -10,11 +10,12 @@ served by the MCP server (mcp_server/server.py, stdio subprocess or IHDS_MCP_URL
 from __future__ import annotations
 
 import os
+import time
 
 import pandas as pd
 import streamlit as st
 
-from ihds import agents, data, model, monitoring, stats_analysis, workflow
+from ihds import agents, data, metrics_push, model, monitoring, stats_analysis, workflow
 from ihds.config import FEATURES, LLM_MODEL, REPORTS_DIR, ROOT, TARGET, VALID_RANGES
 from ihds.pipeline import build_system
 
@@ -35,6 +36,22 @@ def _load_secret_key() -> None:
 
 
 _load_secret_key()
+
+
+def _start_metrics_push():
+    """Optional push of ihds_* metrics to Grafana Cloud (off unless GRAFANA_RW_URL is in st.secrets or the env).
+    The values stay inside ihds.metrics_push: they are not copied into os.environ or shown anywhere."""
+    try:
+        try:
+            secrets = st.secrets if len(st.secrets) else None
+        except Exception:  # no secrets file
+            secrets = None
+        return metrics_push.start(secrets=secrets)
+    except Exception:
+        return None
+
+
+_start_metrics_push()
 
 
 API_URL = os.environ.get("IHDS_API_URL", "").rstrip("/")
@@ -93,6 +110,13 @@ with st.sidebar:
         st.write(f"Workflow via REST API {API_URL} · tools: {api_health.get('tools_transport', api_health.get('error'))}")
     else:
         st.write(f"Workflow in-process · agent tools via {S.tools.transport}")
+        push = metrics_push.status()
+        if push:
+            host = push["url"].split("/")[2]
+            st.caption(f"Metrics push: on → {host} · {push['ok']} ok / {push['failed']} failed"
+                       f" (last {push['last_status']})")
+        else:
+            st.caption("Metrics push: off (no GRAFANA_RW_URL secret)")
     st.divider()
     st.markdown("**Advisory system only** — clinician review required.")
 
@@ -131,10 +155,12 @@ with tabs[0]:
 
     if st.button("Run advisory workflow", type="primary"):
         if API_URL:
-            res = run_via_api(record, question, bool(use_llm))
+            res = run_via_api(record, question, bool(use_llm))  # the API service counts it in its own /metrics
         else:
             graph = get_llm_graph() if (use_llm and has_key) else S.graph
+            t0 = time.perf_counter()
             res = agents.run(graph, record, question)
+            metrics_push.record_assessment(res, time.perf_counter() - t0)  # no-op when the push is off
         if res.status == "blocked":
             st.error(res.draft)
         else:

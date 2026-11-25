@@ -108,6 +108,7 @@ all 8 features p < 1e-5.
 - Prometheus/Grafana: `/metrics` plus the compose stack.
   - Box result (unmodified compose, bridge network): 104 /assess calls → ok 95, blocked 9; high 35, low 33, moderate 27; escalations 0; p95 0.0486 s; target `ihds-api up`.
   - Box bridge failure root cause: stale iptables-legacy FORWARD policy DROP (no br-* rules). The box-only fix is scripts/fix_docker_bridge_forward.sh (not persistent).
+  - Streamlit Cloud: ihds/metrics_push.py pushes ihds_* (service=ihds-streamlit) to Grafana Cloud via remote write (hand-encoded protobuf + literal snappy, urllib, no new deps); off unless [grafana] GRAFANA_RW_* secrets set. Box test against the real stack: all pushes HTTP 200, 0 failures; token is write-only so not read back from Grafana Cloud. Dashboard has datasource + service variables (10 panels).
   - Azure: optional in-container Prometheus agent pushes ihds_* via remote_write when GRAFANA_RW_URL/USER/TOKEN (ACA secrets) are set (deploy/azure/enable_metrics_push.sh). Verified locally against a local receiver; NOT deployed and NOT tested against real Grafana Cloud. Option B (self-hosted ACA Prometheus+Grafana) is scripted, not deployed. ACI sets IHDS_METRICS=0.
 - GitHub Actions: docs/ci.yml.example (lint/test/data-validation/docker/monitoring-stack/optional deploy). Active as .github/workflows/ci.yml (890ddc9, added via web UI); run 45556540515 passed lint/test/data-validation/docker, deploy skipped. monitoring-stack job only in the example until the workflow file is updated via the web UI.
 

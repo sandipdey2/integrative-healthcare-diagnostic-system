@@ -19,7 +19,7 @@ every run.
 | FastAPI | Model-serving API | `api/main.py` | Already existed; unchanged apart from `/metrics` |
 | Docker | Container image | `Dockerfile`, `scripts/start_all.sh` | Already existed; unchanged; rebuilt and smoke-tested |
 | Deepchecks 0.19.1 | Model-quality testing with a pass/fail gate | `ihds/mlops/quality.py` | Implemented |
-| Prometheus + Grafana | API metrics and dashboard | `api/main.py` (`/metrics`), `docker-compose.monitoring.yml`, `monitoring/prometheus/`, `monitoring/grafana/` | Local stack verified on a bridge network; Azure push (Grafana Cloud) implemented and verified locally, not deployed |
+| Prometheus + Grafana | API metrics and dashboard | `api/main.py` (`/metrics`), `docker-compose.monitoring.yml`, `monitoring/prometheus/`, `monitoring/grafana/` | Local stack verified on a bridge network; Streamlit → Grafana Cloud push sent to the real stack (HTTP 200; read-back needs a read token); Azure push implemented, not deployed |
 | Evidently 0.7 | Drift detection | `ihds/monitoring.py` (existing), `ihds/mlops/drift.py` | Already existed; also run as a pipeline stage |
 | SHAP 0.51 + Fairlearn 0.15 | Explainability and a fairness audit | `ihds/mlops/explain.py` | Implemented |
 
@@ -248,17 +248,27 @@ template, and `/metrics` itself is not counted. The series are:
 - `ihds_predictions_total{band}` (low / moderate / high)
 - `ihds_assess_total{status,draft_source}`
 - `ihds_escalations_total`
+- `ihds_reviewer_revisions_total`
+- `ihds_assess_duration_seconds` (workflow duration histogram)
+- `ihds_app_up`, `ihds_app_start_time_seconds`
 
-The dashboard `monitoring/grafana/dashboards/ihds_api.json` has 8 panels:
+The Streamlit Cloud push (below) uses the same names.
+
+The dashboard `monitoring/grafana/dashboards/ihds_api.json` has 10 panels:
 
 - totals: assessments, escalations, high-risk predictions, blocked;
-- request rate per route;
-- p50 / p95 latency;
+- API request rate per route;
+- assessment latency p50 / p95;
 - predictions per band;
-- outcomes and escalations.
+- outcomes and escalations;
+- draft source and reviewer revisions;
+- push heartbeat.
 
-Its datasource is a dashboard variable (`${datasource}`, type Prometheus), not a hard-coded uid, so the same file
-works with the provisioned local datasource and can be imported into Grafana Cloud.
+Its datasource is a dashboard variable (`${datasource}`, type Prometheus), not a hard-coded uid. A `service`
+variable selects the API (`ihds`), Streamlit (`ihds-streamlit`) or both. The same file therefore works with the
+provisioned local datasource and can be imported into Grafana Cloud.
+
+The 104-call results below were measured before the latency panel moved to `ihds_assess_duration_seconds`.
 
 ### Local stack (`docker-compose.monitoring.yml`)
 
@@ -370,11 +380,11 @@ receiver standing in for Grafana Cloud):
   = 30, and `ihds_assess_total` ok 30, blocked 1.
 - Pushed metric names were only `ihds_*` and `up`. No `python_*` or `process_*` series arrived, and no new
   `*_created` samples after the drop rule.
-- Grafana (the option B image) showed data in all 8 panels.
+- Grafana (the option B image) showed data in all 8 panels of the dashboard version at that time.
 - **Agent off:** with no `GRAFANA_RW_URL`, the image started MCP, uvicorn and Streamlit only, with no agent
   process and no `/tmp/ihds-agent`.
 - **Grafana Cloud import:** importing `ihds_api.json` through Grafana 12.1's `/api/dashboards/import` into a
-  Grafana whose Prometheus datasource has a different uid succeeded. The dashboard had 8 panels, all bound to
+  Grafana whose Prometheus datasource has a different uid succeeded. That version of the dashboard had 8 panels, all bound to
   `${datasource}`.
 
 **Not verified:** a push to a real Grafana Cloud stack, and any Azure deployment. Neither has been run.
@@ -455,6 +465,104 @@ bash deploy/azure/deploy_monitoring_aca.sh    # prompts for a Grafana admin pass
 - The admin password applies only on Grafana's first start.
 
 **Verified:** both images were built and run locally (push-test above). They have not been deployed to Azure.
+
+### Streamlit Community Cloud → Grafana Cloud (direct push)
+
+The Streamlit Cloud app (https://ihds-diabetes-advisor.streamlit.app) runs the LangGraph workflow in-process
+(tools over `mcp-stdio`, no FastAPI). It cannot run a Prometheus binary or expose `/metrics`, so
+`ihds/metrics_push.py` pushes from the Streamlit process itself.
+
+**How the push works:**
+
+- **Protocol:** Prometheus remote write 1.0 to Grafana Cloud's `/api/prom/push`, with HTTP basic auth (instance
+  ID and an access-policy token with `metrics:write`).
+- **No new dependencies:**
+  - The protobuf `WriteRequest` is three tiny messages, encoded by hand.
+  - The snappy block uses literal-only encoding, which is valid snappy that any decoder accepts.
+  - HTTP uses `urllib`.
+  - `requirements.txt` is unchanged.
+  - The encoder's bytes are identical to `protobuf`'s own serialization, and its snappy output decodes with
+    `cramjam` (both checked on the box).
+  - Influx line protocol and OTLP were not used: they rename or retype metrics, or need an SDK.
+- **Delivery:** a daemon thread pushes every 15 s (`IHDS_PUSH_INTERVAL`) with a 5 s timeout.
+- **Failure handling:** errors are counted and logged without credentials, and retried on the next tick. They
+  never raise into the app. `record_assessment` is a no-op when the push is off.
+- **Off by default:** nothing starts unless `GRAFANA_RW_URL` is configured, either in `st.secrets` (top level or
+  a `[grafana]` table) or in the environment.
+- **Token handling:**
+  - The token stays inside the module. It is not copied to `os.environ`, and the MCP stdio server starts with
+    the MCP SDK's minimal default environment.
+  - Use the `[grafana]` table: Streamlit exports only root-level secrets as environment variables.
+  - Checked on the box: neither the Streamlit nor the MCP process had any `GRAFANA_RW_*` variable.
+- **Sidebar:** shows `Metrics push: on → <host> · N ok / M failed` or `Metrics push: off`.
+- **API mode:** when the app calls the REST API (`IHDS_API_URL`), Streamlit does not count, because the API
+  already does.
+
+**Series:** the names are shared with `api/main.py`, so one dashboard covers both:
+
+- `ihds_assess_total{status,draft_source}`
+- `ihds_predictions_total{band}`
+- `ihds_escalations_total`
+- `ihds_reviewer_revisions_total`
+- `ihds_assess_duration_seconds` (histogram, 0.05–60 s)
+- `ihds_app_up` (heartbeat)
+- `ihds_app_start_time_seconds`
+
+Labels: `service="ihds-streamlit"`, `source="streamlit"`, `job="ihds-streamlit"`,
+`deployment=IHDS_METRICS_DEPLOYMENT` (default `streamlit-cloud`) and `instance=<hostname>`. Counters start at 0
+when the process starts. `increase()` and `rate()` handle restarts, and the stat panels show totals since start.
+
+**Dashboard:** `monitoring/grafana/dashboards/ihds_api.json`, now "IHDS (API + Streamlit)", has 10 panels and two
+variables:
+
+- `datasource`: type Prometheus;
+- `service`: `label_values(ihds_assess_total, service)`, multi-select, with All. The local Prometheus and the
+  Container Apps agent label the API `service="ihds"`.
+
+The latency panel now uses `ihds_assess_duration_seconds`, which the API also records. Two panels are new:
+
+- draft source and reviewer revisions;
+- push heartbeat: seconds since the newest `ihds_app_up` sample.
+
+**Streamlit Cloud setup:**
+
+1. Go to share.streamlit.io, find **ihds-diabetes-advisor**, then choose **⋮ → Settings → Secrets**.
+2. Add the following, keeping any existing `OPENAI_*` lines, then **Save**:
+
+   ```toml
+   [grafana]
+   GRAFANA_RW_URL = "https://prometheus-prod-XX-prod-REGION.grafana.net/api/prom/push"
+   GRAFANA_RW_USER = "<Grafana Cloud Prometheus instance ID>"
+   GRAFANA_RW_TOKEN = "glc_<paste the metrics:write token here>"
+   ```
+
+3. Streamlit restarts the app. Open it: the sidebar should say `Metrics push: on`.
+4. In Grafana Cloud, go to **Dashboards → New → Import → Upload dashboard JSON file**, choose `ihds_api.json`,
+   then **Import**. Pick `grafanacloud-<stack>-prom` in **Data source**, then save.
+
+**Verified on the box, 2026-11-25, against the real Grafana Cloud stack:**
+
+- **AppTest run:** `app.py` ran through `streamlit.testing.v1.AppTest` with the credentials in `st.secrets`, and
+  12 assessments were run (11 ok, 1 blocked dosing question; high 5, low 4, moderate 2). The pusher made 5
+  pushes, all HTTP 200, 0 failed.
+- **Server run:** `streamlit run` with the credentials in a user-level `secrets.toml` outside the repo, and 3
+  button clicks in headless Chrome. The log showed `metrics push: sending ihds_* series to https://…/api/prom/push`,
+  with 0 push failures.
+- **Endpoint checks:** the same endpoint rejected bad input synchronously, so a 200 means the payload was decoded
+  and validated:
+  - a wrong token gave 401;
+  - a non-snappy body gave 400 `snappy: corrupt input`;
+  - an invalid metric name gave 400 `err-mimir-metric-name-invalid`;
+  - a timestamp 2 h ahead gave 400 `err-mimir-too-far-in-future`.
+- **Not verified: reading the data back from Grafana Cloud.** The token is write-only: `/api/prom/api/v1/query`
+  returned 401 `invalid scope requested`. To confirm, query `ihds_assess_total{service="ihds-streamlit"}` in
+  Grafana Cloud **Explore**, or use a token with `metrics:read`.
+- **Dashboard (local):** imported into a local Grafana 12.1 whose datasource has another uid. It was fed by
+  `metrics_push` through a local Prometheus remote-write receiver (40 synthetic assessments). The `service`
+  variable resolved to `ihds-streamlit`, and 9 of 10 panels returned data. The API request-rate panel is empty by
+  design. Latency p50 0.03 s, p95 0.085 s; heartbeat 0.2 s.
+- **Dashboard (Grafana Cloud):** not imported through the API. That needs the stack URL and a Grafana service
+  account token, and the write token cannot list stacks.
 
 ## GitHub Actions (CI/CD) — how to turn it on
 

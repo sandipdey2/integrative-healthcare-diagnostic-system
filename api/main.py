@@ -22,7 +22,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 from pydantic import BaseModel, Field
 
 from ihds import agents, monitoring, workflow
@@ -38,6 +38,13 @@ PREDICTIONS = Counter("ihds_predictions_total", "Completed /assess runs by risk 
 ASSESS_STATUS = Counter("ihds_assess_total", "/assess runs by workflow status and draft source",
                         ["status", "draft_source"])
 ESCALATIONS = Counter("ihds_escalations_total", "/assess runs escalated to a clinician")
+REVISIONS = Counter("ihds_reviewer_revisions_total", "Reviewer-requested LLM redrafts across /assess runs")
+ASSESS_LATENCY = Histogram("ihds_assess_duration_seconds", "Agent workflow duration per /assess run",
+                           buckets=(0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60))
+APP_UP = Gauge("ihds_app_up", "1 while this IHDS process is running (heartbeat; also pushed by the Streamlit app)")
+APP_START = Gauge("ihds_app_start_time_seconds", "Unix time this IHDS process started")
+APP_UP.set(1)
+APP_START.set_to_current_time()
 
 
 class PatientRecord(BaseModel):
@@ -126,12 +133,17 @@ async def prometheus_middleware(request: Request, call_next):
             REQUESTS.labels(request.method, path, str(status)).inc()
 
 
-def record_assessment(res) -> None:
+def record_assessment(res, seconds: float | None = None) -> None:
+    # same names and labels as ihds/metrics_push.py (Streamlit -> Grafana Cloud), so one dashboard covers both
     ASSESS_STATUS.labels(res.status or "unknown", res.draft_source or "none").inc()
     if res.band:
         PREDICTIONS.labels(res.band).inc()
     if res.escalated:
         ESCALATIONS.inc()
+    if res.revisions:
+        REVISIONS.inc(res.revisions)
+    if seconds is not None:
+        ASSESS_LATENCY.observe(seconds)
 
 
 @app.get("/metrics", include_in_schema=False)
@@ -150,8 +162,9 @@ def health():
 
 @app.post("/assess", response_model=AssessResponse)
 def assess(req: AssessRequest):
+    t0 = time.perf_counter()
     res = agents.run(get_graph(req.use_llm), req.record.model_dump(), req.question)
-    record_assessment(res)
+    record_assessment(res, time.perf_counter() - t0)
     out = asdict(res)
     out["transport"] = res.transport or get_system().tools.transport
     return out

@@ -1,12 +1,12 @@
 {
   "uid": "ihds-api",
-  "title": "IHDS API (FastAPI /metrics)",
+  "title": "IHDS (API + Streamlit)",
   "tags": [
     "ihds"
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "10s",
   "time": {
     "from": "now-30m",
@@ -63,7 +63,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(ihds_assess_total) or vector(0)"
+          "expr": "sum(ihds_assess_total{service=~\"$service\"}) or vector(0)"
         }
       ]
     },
@@ -117,7 +117,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(ihds_escalations_total) or vector(0)"
+          "expr": "sum(ihds_escalations_total{service=~\"$service\"}) or vector(0)"
         }
       ]
     },
@@ -171,7 +171,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(ihds_predictions_total{band=\"high\"}) or vector(0)"
+          "expr": "sum(ihds_predictions_total{service=~\"$service\",band=\"high\"}) or vector(0)"
         }
       ]
     },
@@ -225,14 +225,14 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(ihds_assess_total{status=\"blocked\"}) or vector(0)"
+          "expr": "sum(ihds_assess_total{service=~\"$service\",status=\"blocked\"}) or vector(0)"
         }
       ]
     },
     {
       "id": 5,
       "type": "timeseries",
-      "title": "Request rate by route (req/s)",
+      "title": "API request rate by route (req/s, API only)",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -262,7 +262,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (route, status) (rate(ihds_http_requests_total[5m]))",
+          "expr": "sum by (route, status) (rate(ihds_http_requests_total{service=~\"$service\"}[5m]))",
           "legendFormat": "{{route}} {{status}}"
         }
       ]
@@ -270,7 +270,7 @@
     {
       "id": 6,
       "type": "timeseries",
-      "title": "Request latency p50 / p95 (s)",
+      "title": "Assessment latency p50 / p95 (s)",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -296,21 +296,21 @@
       "targets": [
         {
           "refId": "A",
+          "expr": "histogram_quantile(0.5, sum by (le, service) (rate(ihds_assess_duration_seconds_bucket{service=~\"$service\"}[5m])))",
+          "legendFormat": "p50 {{service}}",
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
-          },
-          "expr": "histogram_quantile(0.5, sum by (le, route) (rate(ihds_http_request_duration_seconds_bucket[5m])))",
-          "legendFormat": "p50 {{route}}"
+          }
         },
         {
           "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le, service) (rate(ihds_assess_duration_seconds_bucket{service=~\"$service\"}[5m])))",
+          "legendFormat": "p95 {{service}}",
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
-          },
-          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(ihds_http_request_duration_seconds_bucket[5m])))",
-          "legendFormat": "p95 {{route}}"
+          }
         }
       ]
     },
@@ -347,8 +347,8 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (band) (increase(ihds_predictions_total[5m]))",
-          "legendFormat": "{{band}}"
+          "expr": "sum by (service, band) (increase(ihds_predictions_total{service=~\"$service\"}[5m]))",
+          "legendFormat": "{{service}} {{band}}"
         }
       ]
     },
@@ -385,7 +385,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(ihds_escalations_total[5m]))",
+          "expr": "sum(increase(ihds_escalations_total{service=~\"$service\"}[5m]))",
           "legendFormat": "escalated"
         },
         {
@@ -394,8 +394,119 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (status, draft_source) (increase(ihds_assess_total[5m]))",
-          "legendFormat": "{{status}} / {{draft_source}}"
+          "expr": "sum by (service, status, draft_source) (increase(ihds_assess_total{service=~\"$service\"}[5m]))",
+          "legendFormat": "{{service}} {{status}} / {{draft_source}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Draft source and reviewer revisions (per 5m)",
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (service, draft_source) (increase(ihds_assess_total{service=~\"$service\"}[5m]))",
+          "legendFormat": "{{service}} draft {{draft_source}}"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (service) (increase(ihds_reviewer_revisions_total{service=~\"$service\"}[5m]))",
+          "legendFormat": "{{service}} reviewer revisions"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Push heartbeat (s since last ihds_app_up sample)",
+      "gridPos": {
+        "x": 12,
+        "y": 20,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Age of the newest ihds_app_up sample per instance (the Streamlit push sends it every 15 s). No value = no pushing process in range.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 60
+              },
+              {
+                "color": "red",
+                "value": 300
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "instant": true,
+          "expr": "time() - max by (service, instance) (timestamp(ihds_app_up{service=~\"$service\"}))",
+          "legendFormat": "{{service}} {{instance}}"
         }
       ]
     }
@@ -413,11 +524,42 @@
         "regex": "",
         "includeAll": false,
         "multi": false
+      },
+      {
+        "name": "service",
+        "label": "Service",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(ihds_assess_total, service)",
+        "query": {
+          "query": "label_values(ihds_assess_total, service)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery",
+          "qryType": 1
+        },
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "hide": 0,
+        "regex": "",
+        "sort": 1
       }
     ]
   },
   "annotations": {
     "list": []
   },
-  "description": "IHDS FastAPI /metrics. Pick the Prometheus datasource at the top (local Prometheus, the self-hosted ACA Prometheus, or Grafana Cloud's grafanacloud-*-prom)."
+  "description": "IHDS metrics from the FastAPI /metrics endpoint (service=\"ihds\": local Prometheus or the Container Apps agent) and from the Streamlit app's direct push (service=\"ihds-streamlit\", ihds/metrics_push.py). Pick the Prometheus datasource (e.g. grafanacloud-*-prom) and the service at the top. Totals are since each process started."
 }

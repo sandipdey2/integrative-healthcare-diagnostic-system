@@ -78,8 +78,10 @@ def test_prometheus_grafana_configs_reference_real_metrics():
     assert all(p["datasource"]["uid"] == "${datasource}" for p in dash["panels"])
     assert all(t["datasource"]["uid"] == "${datasource}" for p in dash["panels"] for t in p["targets"])
     used = set(re.findall(r"ihds_[a-z_]+", " ".join(exprs)))
-    defined = {"ihds_http_requests_total", "ihds_http_request_duration_seconds_bucket", "ihds_predictions_total",
-               "ihds_assess_total", "ihds_escalations_total"}
+    defined = {"ihds_http_requests_total", "ihds_predictions_total", "ihds_assess_total", "ihds_escalations_total",
+               "ihds_reviewer_revisions_total", "ihds_assess_duration_seconds_bucket", "ihds_app_up"}
+    assert [v["name"] for v in dash["templating"]["list"]] == ["datasource", "service"]
+    assert all('service=~"$service"' in e for e in exprs)
     assert used and used <= defined
     if _has("prometheus_client") and _has("fastapi") and _has("langgraph"):  # runtime env only
         import api.main as api_main  # noqa: F401  (registers the metrics)
@@ -91,7 +93,8 @@ def test_prometheus_grafana_configs_reference_real_metrics():
         for name in used:
             base = re.sub(r"_(total|bucket)$", "", name)
             assert base in families, name
-            assert families[base] == ("histogram" if name.endswith("_bucket") else "counter"), name
+            kind = "histogram" if name.endswith("_bucket") else "gauge" if name == "ihds_app_up" else "counter"
+            assert families[base] == kind, name
 
 
 def test_ci_workflow_example_has_required_jobs():
