@@ -36,7 +36,8 @@ modelling (GAN), generative AI (optional gpt-4o-mini writer), agentic systems (L
 2. `supervisor` (rule-based router) sends the case to `risk_agent`, then `evidence_agent`, then — only for
    borderline probabilities (0.40–0.60) — `uncertainty_agent`; each returns to the supervisor.
 3. `writer_agent` drafts the note (gpt-4o-mini when `OPENAI_API_KEY` is set — via `OPENAI_API_BASE`, e.g. Vocareum — otherwise a deterministic template).
-4. `reviewer` checks disclaimer, citations, stated probability, banned phrases and grounding. A rejected draft
+4. `reviewer` checks disclaimer, citations, stated probability, banned phrases and grounding: at least 40% of the
+   draft's content words must come from the evidence cards or the case data the writer was given (disclaimer excluded; see docs/MLOPS.md). A rejected draft
    goes back to the writer with feedback, at most 2 times; then `finalize` uses the template and marks the case escalated.
 
 ### Service layers (all implemented, all tested)
@@ -47,7 +48,7 @@ modelling (GAN), generative AI (optional gpt-4o-mini writer), agentic systems (L
 | Agents → MCP | `ihds/tool_backends.py` | `langchain-mcp-adapters` loads the MCP tools into the LangGraph agents over one persistent session: a stdio subprocess by default, or `IHDS_MCP_URL` for HTTP. If the server cannot start, an in-process fallback is used and labelled `inprocess-fallback` (`IHDS_TOOLS=mcp` disables the fallback). The transport is written in the trace (`risk_agent: [tools via mcp-stdio] ...`) and in every tool-call log entry. |
 | REST API | `api/main.py` (FastAPI + pydantic) | `POST /assess` (record + question + `use_llm` → draft, review, trace, tool log, transport), `GET /health`, `GET /monitoring/summary`, `GET /schema/features`, `GET /metrics` (Prometheus); OpenAPI docs at `/docs`. |
 | Evidence retrieval | `ihds/vector_store.py`, `ihds/workflow.py` | ChromaDB index of the 14 evidence cards with local ONNX MiniLM embeddings; the TF-IDF keyword matcher is the fallback (`IHDS_RETRIEVAL=keyword` forces it). The trace records `retrieval: chroma` or `keyword`. Comparison: `scripts/compare_retrieval.py` ([results](docs/MLOPS.md#evidence-retrieval-chromadb-with-a-keyword-fallback)) |
-| Tracing (optional) | `ihds/tracing.py` | LangSmith tracing when `LANGSMITH_API_KEY` is set (env or the `[langsmith]` Streamlit secret): project `ihds`, one `ihds-assessment` trace per run with tags and metadata (band, status, draft source, retrieval). The run ID is shown in the trace panel |
+| Tracing (optional) | `ihds/tracing.py` | LangSmith tracing when `LANGSMITH_API_KEY` is set (env or the `[langsmith]` Streamlit secret): project `ihds`, one `ihds-assessment` trace per run with tags and metadata (band, status, draft source, retrieval, LLM tokens); each gpt-4o-mini call is a child `writer_llm` run with token usage. The trace panel shows a **View trace in LangSmith** link (also through the REST API, which returns `langsmith_url`) |
 | UI | `app.py` (Streamlit) | Calls `POST /assess` on `IHDS_API_URL` when set (Docker/Azure). Otherwise it starts the FastAPI app inside its own process on 127.0.0.1 (`ihds/embedded_api.py`, `IHDS_EMBED_API=0` to disable) and calls that, falling back to the in-process graph if it cannot (tools via MCP stdio). |
 
 ![service view exported from code](docs/deployment.png)
@@ -60,10 +61,11 @@ Details, state schema, assumptions, tradeoffs and boundaries: [`diagrams/system_
 |---|---|
 | Test split (n=154) | accuracy 0.734, precision 0.603, recall 0.704, F1 0.650, ROC-AUC 0.813 |
 | Risk bands vs observed diabetes rate (test) | low 9.5% (n=63), moderate 47.2% (n=36), high 59.6% (n=52) |
-| Agent drafts (151 released) | 100% cite retrieved evidence, 100% carry the disclaimer, 0 forbidden phrases, mean grounding 0.551 |
+| Agent drafts (151 released) | 100% cite retrieved evidence, 100% carry the disclaimer, 0 forbidden phrases, mean grounding 0.551 (earlier cards-only score) |
 | Safety guard (19 labelled cases) | accuracy 0.947, precision 1.0, recall 0.889 — **missed** "Should she stop taking my medication?" |
 | Revision loop cap | unsafe stand-in LLM → 3 writer attempts, 3 rejections, template released, `escalated=True` |
-| **Live gpt-4o-mini via Vocareum (30 test cases)** | approved first try 23/30, after 1 revision 5/30, escalated 2/30 (all 11 rejections = grounding < 0.2); 100% citations + disclaimer, 0 forbidden phrases; mean grounding 0.303 (template 0.549); 4.7 s/case |
+| **Live gpt-4o-mini via Vocareum (30 test cases, earlier cards-only grounding ≥ 0.2)** | approved first try 23/30, after 1 revision 5/30, escalated 2/30 (all 11 rejections = grounding < 0.2); 100% citations + disclaimer, 0 forbidden phrases; mean grounding 0.303 (template 0.549); 4.7 s/case |
+| **Grounding fix, 15 cases × 2 retrievers (2026-11-25, `scripts/eval_grounding.py`)** | first-try approval keyword 0.600 → 1.000, chroma 0.667 → 1.000; LLM draft released 0.800/0.933 → 1.000; escalations 3/1 → 0 ([details](docs/MLOPS.md#reviewer-grounding-root-cause-and-fix-2026-11-25)) |
 | Simulated +25 mg/dL glucose calibration error | Evidently flags Glucose drift (p<0.001); precision 0.603 → 0.527; agent mean probability 0.452 → 0.606 |
 | GAN fidelity (Evidently) | 5 of 8 features drift vs real data (Insulin, SkinThickness, Pregnancies, DPF, Age) → synthetic rows used only for stress tests |
 

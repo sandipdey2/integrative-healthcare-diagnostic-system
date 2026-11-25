@@ -1,0 +1,1610 @@
+{
+  "before": {
+    "model": "gpt-4o-mini",
+    "n_cases": 15,
+    "date": "2026-11-25",
+    "keyword": {
+      "cases": 15,
+      "retrieval_used": [
+        "keyword"
+      ],
+      "first_try_approval": 0.6,
+      "llm_draft_used": 0.8,
+      "escalated": 3,
+      "llm_calls": 25,
+      "mean_grounding_llm_drafts": 0.218,
+      "mean_grounding_llm_drafts_evidence_only": 0.218,
+      "default_case": {
+        "case": "default",
+        "retrieval": "keyword",
+        "evidence": [
+          "K7",
+          "K2",
+          "K1"
+        ],
+        "llm_calls": 1,
+        "approved_first": 1,
+        "llm_draft_used": 1,
+        "escalated": 0,
+        "revisions": 0,
+        "final_grounding": 0.212,
+        "draft_grounding": [
+          0.212
+        ],
+        "draft_grounding_evidence_only": [
+          0.212
+        ],
+        "latency_s": 3.64
+      },
+      "rows": [
+        {
+          "case": "default",
+          "retrieval": "keyword",
+          "evidence": [
+            "K7",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.212,
+          "draft_grounding": [
+            0.212
+          ],
+          "draft_grounding_evidence_only": [
+            0.212
+          ],
+          "latency_s": 3.64
+        },
+        {
+          "case": "test1",
+          "retrieval": "keyword",
+          "evidence": [
+            "K4",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.273,
+          "draft_grounding": [
+            0.273
+          ],
+          "draft_grounding_evidence_only": [
+            0.273
+          ],
+          "latency_s": 3.63
+        },
+        {
+          "case": "test2",
+          "retrieval": "keyword",
+          "evidence": [
+            "K7",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.271,
+          "draft_grounding": [
+            0.271
+          ],
+          "draft_grounding_evidence_only": [
+            0.271
+          ],
+          "latency_s": 3.27
+        },
+        {
+          "case": "test3",
+          "retrieval": "keyword",
+          "evidence": [
+            "K4",
+            "K7",
+            "K6"
+          ],
+          "llm_calls": 3,
+          "approved_first": 0,
+          "llm_draft_used": 0,
+          "escalated": 1,
+          "revisions": 3,
+          "final_grounding": 0.565,
+          "draft_grounding": [
+            0.143,
+            0.182,
+            0.192
+          ],
+          "draft_grounding_evidence_only": [
+            0.143,
+            0.182,
+            0.192
+          ],
+          "latency_s": 8.57
+        },
+        {
+          "case": "test4",
+          "retrieval": "keyword",
+          "evidence": [
+            "K4",
+            "K7",
+            "K6"
+          ],
+          "llm_calls": 3,
+          "approved_first": 0,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 2,
+          "final_grounding": 0.2,
+          "draft_grounding": [
+            0.162,
+            0.177,
+            0.2
+          ],
+          "draft_grounding_evidence_only": [
+            0.162,
+            0.177,
+            0.2
+          ],
+          "latency_s": 7.34
+        },
+        {
+          "case": "test5",
+          "retrieval": "keyword",
+          "evidence": [
+            "K6",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.2,
+          "draft_grounding": [
+            0.2
+          ],
+          "draft_grounding_evidence_only": [
+            0.2
+          ],
+          "latency_s": 2.82
+        },
+        {
+          "case": "test6",
+          "retrieval": "keyword",
+          "evidence": [
+            "K4",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.226,
+          "draft_grounding": [
+            0.226
+          ],
+          "draft_grounding_evidence_only": [
+            0.226
+          ],
+          "latency_s": 3.26
+        },
+        {
+          "case": "test7",
+          "retrieval": "keyword",
+          "evidence": [
+            "K4",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.233,
+          "draft_grounding": [
+            0.233
+          ],
+          "draft_grounding_evidence_only": [
+            0.233
+          ],
+          "latency_s": 3.65
+        },
+        {
+          "case": "test8",
+          "retrieval": "keyword",
+          "evidence": [
+            "K4",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.444,
+          "draft_grounding": [
+            0.444
+          ],
+          "draft_grounding_evidence_only": [
+            0.444
+          ],
+          "latency_s": 3.37
+        },
+        {
+          "case": "test9",
+          "retrieval": "keyword",
+          "evidence": [
+            "K4",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.323,
+          "draft_grounding": [
+            0.323
+          ],
+          "draft_grounding_evidence_only": [
+            0.323
+          ],
+          "latency_s": 4.11
+        },
+        {
+          "case": "test10",
+          "retrieval": "keyword",
+          "evidence": [
+            "K7",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 3,
+          "approved_first": 0,
+          "llm_draft_used": 0,
+          "escalated": 1,
+          "revisions": 3,
+          "final_grounding": 0.643,
+          "draft_grounding": [
+            0.127,
+            0.127,
+            0.167
+          ],
+          "draft_grounding_evidence_only": [
+            0.127,
+            0.127,
+            0.167
+          ],
+          "latency_s": 8.99
+        },
+        {
+          "case": "test11",
+          "retrieval": "keyword",
+          "evidence": [
+            "K4",
+            "K7",
+            "K6"
+          ],
+          "llm_calls": 3,
+          "approved_first": 0,
+          "llm_draft_used": 0,
+          "escalated": 1,
+          "revisions": 3,
+          "final_grounding": 0.565,
+          "draft_grounding": [
+            0.143,
+            0.143,
+            0.155
+          ],
+          "draft_grounding_evidence_only": [
+            0.143,
+            0.143,
+            0.155
+          ],
+          "latency_s": 11.55
+        },
+        {
+          "case": "test12",
+          "retrieval": "keyword",
+          "evidence": [
+            "K4",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.246,
+          "draft_grounding": [
+            0.246
+          ],
+          "draft_grounding_evidence_only": [
+            0.246
+          ],
+          "latency_s": 2.79
+        },
+        {
+          "case": "test13",
+          "retrieval": "keyword",
+          "evidence": [
+            "K4",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 2,
+          "approved_first": 0,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 1,
+          "final_grounding": 0.377,
+          "draft_grounding": [
+            0.196,
+            0.377
+          ],
+          "draft_grounding_evidence_only": [
+            0.196,
+            0.377
+          ],
+          "latency_s": 5.85
+        },
+        {
+          "case": "test14",
+          "retrieval": "keyword",
+          "evidence": [
+            "K6",
+            "K4",
+            "K5"
+          ],
+          "llm_calls": 2,
+          "approved_first": 0,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 1,
+          "final_grounding": 0.357,
+          "draft_grounding": [
+            0.182,
+            0.357
+          ],
+          "draft_grounding_evidence_only": [
+            0.182,
+            0.357
+          ],
+          "latency_s": 7.63
+        }
+      ]
+    },
+    "chroma": {
+      "cases": 15,
+      "retrieval_used": [
+        "chroma"
+      ],
+      "first_try_approval": 0.667,
+      "llm_draft_used": 0.933,
+      "escalated": 1,
+      "llm_calls": 22,
+      "mean_grounding_llm_drafts": 0.207,
+      "mean_grounding_llm_drafts_evidence_only": 0.207,
+      "default_case": {
+        "case": "default",
+        "retrieval": "chroma",
+        "evidence": [
+          "K7",
+          "K2",
+          "K1"
+        ],
+        "llm_calls": 3,
+        "approved_first": 0,
+        "llm_draft_used": 1,
+        "escalated": 0,
+        "revisions": 2,
+        "final_grounding": 0.214,
+        "draft_grounding": [
+          0.182,
+          0.185,
+          0.214
+        ],
+        "draft_grounding_evidence_only": [
+          0.182,
+          0.185,
+          0.214
+        ],
+        "latency_s": 12.12
+      },
+      "rows": [
+        {
+          "case": "default",
+          "retrieval": "chroma",
+          "evidence": [
+            "K7",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 3,
+          "approved_first": 0,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 2,
+          "final_grounding": 0.214,
+          "draft_grounding": [
+            0.182,
+            0.185,
+            0.214
+          ],
+          "draft_grounding_evidence_only": [
+            0.182,
+            0.185,
+            0.214
+          ],
+          "latency_s": 12.12
+        },
+        {
+          "case": "test1",
+          "retrieval": "chroma",
+          "evidence": [
+            "K2",
+            "K1",
+            "K4"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.29,
+          "draft_grounding": [
+            0.29
+          ],
+          "draft_grounding_evidence_only": [
+            0.29
+          ],
+          "latency_s": 3.97
+        },
+        {
+          "case": "test2",
+          "retrieval": "chroma",
+          "evidence": [
+            "K7",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.267,
+          "draft_grounding": [
+            0.267
+          ],
+          "draft_grounding_evidence_only": [
+            0.267
+          ],
+          "latency_s": 3.13
+        },
+        {
+          "case": "test3",
+          "retrieval": "chroma",
+          "evidence": [
+            "K7",
+            "K4",
+            "K6"
+          ],
+          "llm_calls": 2,
+          "approved_first": 0,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 1,
+          "final_grounding": 0.217,
+          "draft_grounding": [
+            0.185,
+            0.217
+          ],
+          "draft_grounding_evidence_only": [
+            0.185,
+            0.217
+          ],
+          "latency_s": 6.27
+        },
+        {
+          "case": "test4",
+          "retrieval": "chroma",
+          "evidence": [
+            "K7",
+            "K4",
+            "K6"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.204,
+          "draft_grounding": [
+            0.204
+          ],
+          "draft_grounding_evidence_only": [
+            0.204
+          ],
+          "latency_s": 2.4
+        },
+        {
+          "case": "test5",
+          "retrieval": "chroma",
+          "evidence": [
+            "K6",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.2,
+          "draft_grounding": [
+            0.2
+          ],
+          "draft_grounding_evidence_only": [
+            0.2
+          ],
+          "latency_s": 3.59
+        },
+        {
+          "case": "test6",
+          "retrieval": "chroma",
+          "evidence": [
+            "K2",
+            "K4",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.291,
+          "draft_grounding": [
+            0.291
+          ],
+          "draft_grounding_evidence_only": [
+            0.291
+          ],
+          "latency_s": 2.81
+        },
+        {
+          "case": "test7",
+          "retrieval": "chroma",
+          "evidence": [
+            "K2",
+            "K1",
+            "K4"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.213,
+          "draft_grounding": [
+            0.213
+          ],
+          "draft_grounding_evidence_only": [
+            0.213
+          ],
+          "latency_s": 4.07
+        },
+        {
+          "case": "test8",
+          "retrieval": "chroma",
+          "evidence": [
+            "K2",
+            "K1",
+            "K4"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.246,
+          "draft_grounding": [
+            0.246
+          ],
+          "draft_grounding_evidence_only": [
+            0.246
+          ],
+          "latency_s": 3.35
+        },
+        {
+          "case": "test9",
+          "retrieval": "chroma",
+          "evidence": [
+            "K2",
+            "K1",
+            "K4"
+          ],
+          "llm_calls": 2,
+          "approved_first": 0,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 1,
+          "final_grounding": 0.204,
+          "draft_grounding": [
+            0.161,
+            0.204
+          ],
+          "draft_grounding_evidence_only": [
+            0.161,
+            0.204
+          ],
+          "latency_s": 7.73
+        },
+        {
+          "case": "test10",
+          "retrieval": "chroma",
+          "evidence": [
+            "K7",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 3,
+          "approved_first": 0,
+          "llm_draft_used": 0,
+          "escalated": 1,
+          "revisions": 3,
+          "final_grounding": 0.643,
+          "draft_grounding": [
+            0.127,
+            0.163,
+            0.163
+          ],
+          "draft_grounding_evidence_only": [
+            0.127,
+            0.163,
+            0.163
+          ],
+          "latency_s": 8.32
+        },
+        {
+          "case": "test11",
+          "retrieval": "chroma",
+          "evidence": [
+            "K7",
+            "K4",
+            "K6"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.203,
+          "draft_grounding": [
+            0.203
+          ],
+          "draft_grounding_evidence_only": [
+            0.203
+          ],
+          "latency_s": 4.01
+        },
+        {
+          "case": "test12",
+          "retrieval": "chroma",
+          "evidence": [
+            "K2",
+            "K4",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.24,
+          "draft_grounding": [
+            0.24
+          ],
+          "draft_grounding_evidence_only": [
+            0.24
+          ],
+          "latency_s": 2.61
+        },
+        {
+          "case": "test13",
+          "retrieval": "chroma",
+          "evidence": [
+            "K2",
+            "K4",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.2,
+          "draft_grounding": [
+            0.2
+          ],
+          "draft_grounding_evidence_only": [
+            0.2
+          ],
+          "latency_s": 3.41
+        },
+        {
+          "case": "test14",
+          "retrieval": "chroma",
+          "evidence": [
+            "K6",
+            "K4",
+            "K7"
+          ],
+          "llm_calls": 2,
+          "approved_first": 0,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 1,
+          "final_grounding": 0.222,
+          "draft_grounding": [
+            0.18,
+            0.222
+          ],
+          "draft_grounding_evidence_only": [
+            0.18,
+            0.222
+          ],
+          "latency_s": 7.28
+        }
+      ]
+    }
+  },
+  "after": {
+    "model": "gpt-4o-mini",
+    "n_cases": 15,
+    "date": "2026-11-25",
+    "keyword": {
+      "cases": 15,
+      "retrieval_used": [
+        "keyword"
+      ],
+      "first_try_approval": 1.0,
+      "llm_draft_used": 1.0,
+      "escalated": 0,
+      "llm_calls": 15,
+      "mean_grounding_llm_drafts": 0.757,
+      "mean_grounding_llm_drafts_evidence_only": 0.298,
+      "default_case": {
+        "case": "default",
+        "retrieval": "keyword",
+        "evidence": [
+          "K7",
+          "K2",
+          "K1"
+        ],
+        "llm_calls": 1,
+        "approved_first": 1,
+        "llm_draft_used": 1,
+        "escalated": 0,
+        "revisions": 0,
+        "final_grounding": 0.814,
+        "draft_grounding": [
+          0.814
+        ],
+        "draft_grounding_evidence_only": [
+          0.397
+        ],
+        "latency_s": 3.63,
+        "drafts": [
+          "The estimated diabetes risk probability for this case is 60% (high band). The main model drivers include a glucose level of 140, which raises risk by +0.72 log-odds; two pregnancies, which lowers risk by -0.20 log-odds; and an age of 41, which raises risk by +0.12 log-odds. \n\nIn the population context, the mean glucose level is 142.32 in diabetic patients compared to 110.64 in non-diabetic patients, with a Welch p-value of 2.8e-41, indicating a significant difference. \n\nA history of gestational diabetes or delivering a baby over 9 pounds increases later type 2 diabetes risk, but the dataset records the number of pregnancies without gestational diabetes history [K7]. Additionally, a 2-hour plasma glucose of 140 mg/dL indicates impaired glucose tolerance, a state of elevated future diabetes risk [K2]. \n\nAdvisory draft only - not a diagnosis. Clinician review and sign-off are required."
+        ]
+      },
+      "rows": [
+        {
+          "case": "default",
+          "retrieval": "keyword",
+          "evidence": [
+            "K7",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.814,
+          "draft_grounding": [
+            0.814
+          ],
+          "draft_grounding_evidence_only": [
+            0.397
+          ],
+          "latency_s": 3.63,
+          "drafts": [
+            "The estimated diabetes risk probability for this case is 60% (high band). The main model drivers include a glucose level of 140, which raises risk by +0.72 log-odds; two pregnancies, which lowers risk by -0.20 log-odds; and an age of 41, which raises risk by +0.12 log-odds. \n\nIn the population context, the mean glucose level is 142.32 in diabetic patients compared to 110.64 in non-diabetic patients, with a Welch p-value of 2.8e-41, indicating a significant difference. \n\nA history of gestational diabetes or delivering a baby over 9 pounds increases later type 2 diabetes risk, but the dataset records the number of pregnancies without gestational diabetes history [K7]. Additionally, a 2-hour plasma glucose of 140 mg/dL indicates impaired glucose tolerance, a state of elevated future diabetes risk [K2]. \n\nAdvisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test1",
+          "retrieval": "keyword",
+          "evidence": [
+            "K4",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.789,
+          "draft_grounding": [
+            0.789
+          ],
+          "draft_grounding_evidence_only": [
+            0.362
+          ],
+          "latency_s": 2.8,
+          "drafts": [
+            "The estimated diabetes risk probability for this case is 73% (high band). The main model drivers include a glucose level of 159, which raises risk (+1.47 log-odds), and a BMI of 27.4, which lowers risk (-0.53 log-odds). The number of pregnancies is 7, which raises risk (+0.36 log-odds). \n\nA glucose level of 159 mg/dL indicates impaired glucose tolerance, a state of elevated future diabetes risk [K2]. Additionally, a BMI of 27.4 categorizes the individual as overweight, a major modifiable risk factor for type 2 diabetes, for which screening is recommended [K4]. \n\nAdvisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test2",
+          "retrieval": "keyword",
+          "evidence": [
+            "K7",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.686,
+          "draft_grounding": [
+            0.686
+          ],
+          "draft_grounding_evidence_only": [
+            0.333
+          ],
+          "latency_s": 3.16,
+          "drafts": [
+            "The estimated diabetes risk probability for this case is 21% (low band). The main model drivers include a glucose level of 68, which lowers risk (-2.12 log-odds), and a BMI of 35.5 and 10 pregnancies, both of which raise risk (+0.32 log-odds and +0.70 log-odds, respectively). It is important to note that a history of gestational diabetes or delivering a baby over 9 pounds increases later type 2 diabetes risk, although the dataset records the number of pregnancies without gestational diabetes history [K7]. Additionally, a glucose level of 68 is below the threshold for impaired glucose tolerance, which indicates a lower risk compared to the mean glucose levels in diabetic and non-diabetic patients [K2]. Advisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test3",
+          "retrieval": "keyword",
+          "evidence": [
+            "K4",
+            "K7",
+            "K6"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.638,
+          "draft_grounding": [
+            0.638
+          ],
+          "draft_grounding_evidence_only": [
+            0.232
+          ],
+          "latency_s": 3.09,
+          "drafts": [
+            "The estimated diabetes risk probability is 44% (moderate band). The main model drivers include a BMI of 35.9, which raises risk (+0.36 log-odds), and 2 pregnancies, which lowers risk (-0.20 log-odds). Age at 26 also lowers risk (-0.12 log-odds). The mean BMI is 35.41 in diabetic patients compared to 30.86 in non-diabetic patients, indicating a significant difference (Welch p=2.5e-18) [K4]. While the dataset records the number of pregnancies, it does not provide information on gestational diabetes history, which is a known risk factor [K7]. Additionally, family history of diabetes may influence risk, but this dataset summarizes it as a single score [K6]. Advisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test4",
+          "retrieval": "keyword",
+          "evidence": [
+            "K4",
+            "K7",
+            "K6"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.761,
+          "draft_grounding": [
+            0.761
+          ],
+          "draft_grounding_evidence_only": [
+            0.273
+          ],
+          "latency_s": 2.77,
+          "drafts": [
+            "The estimated diabetes risk probability is 38% (moderate band). The main model drivers include a BMI of 27.4, which lowers risk (-0.53 log-odds), and a history of 7 pregnancies, which raises risk (+0.36 log-odds) [K7]. A glucose level of 114 also lowers risk (-0.30 log-odds). It is important to note that overweight (BMI 25 or higher) and obesity (BMI 30 or higher) are major modifiable risk factors for type 2 diabetes, and screening is recommended for adults with these conditions [K4]. The population context indicates that the mean BMI is significantly higher in diabetic patients compared to non-diabetic patients (Welch p=2.5e-18). Advisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test5",
+          "retrieval": "keyword",
+          "evidence": [
+            "K6",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.8,
+          "draft_grounding": [
+            0.8
+          ],
+          "draft_grounding_evidence_only": [
+            0.259
+          ],
+          "latency_s": 2.93,
+          "drafts": [
+            "The estimated diabetes risk probability for this case is 28% (low band). The main model drivers include a glucose level of 100, which lowers risk (-0.86 log-odds), a Diabetes Pedigree Function score of 0.949, which raises risk (+0.41 log-odds), and 3 pregnancies, which lowers risk (-0.09 log-odds). A family history of diabetes in first-degree relatives increases type 2 diabetes risk, as summarized by the Diabetes Pedigree Function [K6]. The mean glucose levels in diabetic patients (142.32) compared to non-diabetic patients (110.64) indicate significant differences in risk [population context]. Advisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test6",
+          "retrieval": "keyword",
+          "evidence": [
+            "K4",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.81,
+          "draft_grounding": [
+            0.81
+          ],
+          "draft_grounding_evidence_only": [
+            0.294
+          ],
+          "latency_s": 3.38,
+          "drafts": [
+            "The estimated diabetes risk probability for this case is 66% (high band). The main model drivers include a BMI of 43.3, which raises risk (+1.13 log-odds), and a glucose level of 105, which lowers risk (-0.66 log-odds). Additionally, the number of pregnancies is 8, raising risk (+0.47 log-odds). Overweight (BMI 25 or higher) and obesity (BMI 30 or higher) are major modifiable risk factors for type 2 diabetes; screening is recommended for adults with overweight or obesity [K4]. The mean BMI is significantly higher in diabetic patients (35.41) compared to non-diabetic patients (30.86) [population context]. Advisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test7",
+          "retrieval": "keyword",
+          "evidence": [
+            "K4",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.633,
+          "draft_grounding": [
+            0.633
+          ],
+          "draft_grounding_evidence_only": [
+            0.207
+          ],
+          "latency_s": 2.79,
+          "drafts": [
+            "The estimated diabetes risk probability for this case is 96% (high band). The main model drivers include a glucose level of 197 mg/dL, which raises risk significantly (+2.97 log-odds) and meets the diagnostic criterion for diabetes [K1]. The BMI of 25.9 lowers risk slightly (-0.68 log-odds), but it is still classified as overweight, a major modifiable risk factor for type 2 diabetes [K4]. The Diabetes Pedigree Function score of 1.191 also raises risk (+0.62 log-odds). The mean glucose levels in diabetic patients (142.32 mg/dL) compared to non-diabetic patients (110.64 mg/dL) indicate a significant difference in risk [K2]. Advisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test8",
+          "retrieval": "keyword",
+          "evidence": [
+            "K4",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.66,
+          "draft_grounding": [
+            0.66
+          ],
+          "draft_grounding_evidence_only": [
+            0.268
+          ],
+          "latency_s": 2.81,
+          "drafts": [
+            "The estimated diabetes risk probability for this case is 13% (low band). The main model drivers include a glucose level of 100, which lowers risk (-0.86 log-odds), a BMI of 29.7, which also lowers risk (-0.29 log-odds), and 2 pregnancies, contributing to a lower risk (-0.20 log-odds). It is important to note that overweight (BMI 25 or higher) and obesity (BMI 30 or higher) are major modifiable risk factors for type 2 diabetes, and screening is recommended for adults with these conditions [K4]. The mean glucose level in diabetic patients is significantly higher than in non-diabetic patients, indicating the importance of monitoring glucose levels [K2]. Advisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test9",
+          "retrieval": "keyword",
+          "evidence": [
+            "K4",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.82,
+          "draft_grounding": [
+            0.82
+          ],
+          "draft_grounding_evidence_only": [
+            0.322
+          ],
+          "latency_s": 3.26,
+          "drafts": [
+            "The estimated diabetes risk probability for this case is 91% (high band). The main model drivers include a glucose level of 165, which raises risk (+1.71 log-odds), and a BMI of 47.9, which also raises risk (+1.61 log-odds). The absence of pregnancies lowers risk (-0.43 log-odds). \n\nIn the population context, the mean glucose level is significantly higher in diabetic patients (142.32) compared to non-diabetic patients (110.64) with a Welch p-value of 2.8e-41. \n\nOverweight and obesity are major modifiable risk factors for type 2 diabetes, and screening is recommended for adults with these conditions [K4]. A glucose level of 165 meets the diagnostic criterion for diabetes [K1]. \n\nAdvisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test10",
+          "retrieval": "keyword",
+          "evidence": [
+            "K7",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.838,
+          "draft_grounding": [
+            0.838
+          ],
+          "draft_grounding_evidence_only": [
+            0.261
+          ],
+          "latency_s": 3.58,
+          "drafts": [
+            "The estimated diabetes risk probability is 39% (moderate band). The main model drivers include a glucose level of 137, which raises risk (+0.61 log-odds), and a DiabetesPedigreeFunction of 0.17, which lowers risk (-0.27 log-odds). The absence of pregnancies also lowers risk (-0.43 log-odds) [K7]. The mean glucose level in diabetic patients is significantly higher (142.32) compared to non-diabetic patients (110.64) [K2]. A glucose level of 137 is indicative of impaired glucose tolerance, a state of elevated future diabetes risk [K2]. \n\nAdvisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test11",
+          "retrieval": "keyword",
+          "evidence": [
+            "K4",
+            "K7",
+            "K6"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.805,
+          "draft_grounding": [
+            0.805
+          ],
+          "draft_grounding_evidence_only": [
+            0.28
+          ],
+          "latency_s": 3.14,
+          "drafts": [
+            "The estimated diabetes risk probability for this case is 62% (high band). The main model drivers include a BMI of 43.2, which raises risk (+1.12 log-odds), and a glucose level of 131, which also raises risk (+0.37 log-odds). The absence of pregnancies lowers risk (-0.43 log-odds). Overweight (BMI 25 or higher) and obesity (BMI 30 or higher) are major modifiable risk factors for type 2 diabetes; screening is recommended for adults with overweight or obesity [K4]. The mean BMI is significantly higher in diabetic patients (35.41) compared to non-diabetic patients (30.86) [population context]. Advisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test12",
+          "retrieval": "keyword",
+          "evidence": [
+            "K4",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.814,
+          "draft_grounding": [
+            0.814
+          ],
+          "draft_grounding_evidence_only": [
+            0.423
+          ],
+          "latency_s": 3.33,
+          "drafts": [
+            "The estimated diabetes risk probability for this case is 20% (low band). The main model drivers include a BMI of 24.8, which lowers risk (-0.80 log-odds), a glucose level of 137, which raises risk (+0.61 log-odds), and zero pregnancies, which also lowers risk (-0.43 log-odds). \n\nIt is important to note that overweight (BMI 25 or higher) and obesity (BMI 30 or higher) are major modifiable risk factors for type 2 diabetes, and screening is recommended for adults with overweight or obesity [K4]. Additionally, a glucose level of 137 mg/dL indicates impaired glucose tolerance (prediabetes), a state of elevated future diabetes risk [K2]. \n\nAdvisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test13",
+          "retrieval": "keyword",
+          "evidence": [
+            "K4",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.75,
+          "draft_grounding": [
+            0.75
+          ],
+          "draft_grounding_evidence_only": [
+            0.396
+          ],
+          "latency_s": 3.58,
+          "drafts": [
+            "The estimated diabetes risk probability for this case is 17% (low band). The main model drivers include a BMI of 23.7, which lowers risk (-0.91 log-odds), a glucose level of 131, which raises risk (+0.37 log-odds), and one pregnancy, which also lowers risk (-0.32 log-odds). \n\nIt is important to note that overweight (BMI 25 or higher) and obesity (BMI 30 or higher) are major modifiable risk factors for type 2 diabetes, and screening is recommended for adults with these conditions [K4]. Additionally, a glucose level of 131 mg/dL indicates impaired glucose tolerance, a state of elevated future diabetes risk [K2]. \n\nAdvisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test14",
+          "retrieval": "keyword",
+          "evidence": [
+            "K6",
+            "K4",
+            "K5"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.743,
+          "draft_grounding": [
+            0.743
+          ],
+          "draft_grounding_evidence_only": [
+            0.159
+          ],
+          "latency_s": 3.09,
+          "drafts": [
+            "The estimated diabetes risk probability for this case is 40% (moderate band). The main model drivers include a BMI of 36, which raises risk (+0.37 log-odds) [K4]; a Diabetes Pedigree Function score of 0.127, which lowers risk (-0.31 log-odds) [K6]; and an age of 25, which also lowers risk (-0.13 log-odds) [K5]. The population context indicates that the mean BMI is 35.41 in diabetic patients compared to 30.86 in non-diabetic patients, highlighting the significance of BMI as a risk factor (Welch p=2.5e-18). \n\nAdvisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        }
+      ]
+    },
+    "chroma": {
+      "cases": 15,
+      "retrieval_used": [
+        "chroma"
+      ],
+      "first_try_approval": 1.0,
+      "llm_draft_used": 1.0,
+      "escalated": 0,
+      "llm_calls": 15,
+      "mean_grounding_llm_drafts": 0.756,
+      "mean_grounding_llm_drafts_evidence_only": 0.305,
+      "default_case": {
+        "case": "default",
+        "retrieval": "chroma",
+        "evidence": [
+          "K7",
+          "K2",
+          "K1"
+        ],
+        "llm_calls": 1,
+        "approved_first": 1,
+        "llm_draft_used": 1,
+        "escalated": 0,
+        "revisions": 0,
+        "final_grounding": 0.695,
+        "draft_grounding": [
+          0.695
+        ],
+        "draft_grounding_evidence_only": [
+          0.338
+        ],
+        "latency_s": 4.33,
+        "drafts": [
+          "The estimated diabetes risk probability for this case is 60% (high band). The main model drivers include a glucose level of 140, which raises risk by +0.72 log-odds; two pregnancies, which lowers risk by -0.20 log-odds; and an age of 41, which raises risk by +0.12 log-odds. It is important to note that a 2-hour plasma glucose between 140 and 199 mg/dL indicates impaired glucose tolerance (prediabetes), a state of elevated future diabetes risk [K2]. Additionally, a history of pregnancies may increase later type 2 diabetes risk, although the dataset does not record gestational diabetes history [K7]. The mean glucose levels in diabetic patients are significantly higher than in non-diabetic patients, indicating a strong association with diabetes risk [population context]. Advisory draft only - not a diagnosis. Clinician review and sign-off are required."
+        ]
+      },
+      "rows": [
+        {
+          "case": "default",
+          "retrieval": "chroma",
+          "evidence": [
+            "K7",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.695,
+          "draft_grounding": [
+            0.695
+          ],
+          "draft_grounding_evidence_only": [
+            0.338
+          ],
+          "latency_s": 4.33,
+          "drafts": [
+            "The estimated diabetes risk probability for this case is 60% (high band). The main model drivers include a glucose level of 140, which raises risk by +0.72 log-odds; two pregnancies, which lowers risk by -0.20 log-odds; and an age of 41, which raises risk by +0.12 log-odds. It is important to note that a 2-hour plasma glucose between 140 and 199 mg/dL indicates impaired glucose tolerance (prediabetes), a state of elevated future diabetes risk [K2]. Additionally, a history of pregnancies may increase later type 2 diabetes risk, although the dataset does not record gestational diabetes history [K7]. The mean glucose levels in diabetic patients are significantly higher than in non-diabetic patients, indicating a strong association with diabetes risk [population context]. Advisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test1",
+          "retrieval": "chroma",
+          "evidence": [
+            "K2",
+            "K1",
+            "K4"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.702,
+          "draft_grounding": [
+            0.702
+          ],
+          "draft_grounding_evidence_only": [
+            0.286
+          ],
+          "latency_s": 3.53,
+          "drafts": [
+            "The estimated diabetes risk probability for this case is 73% (high band). The main model drivers include a glucose level of 159, which raises risk (+1.47 log-odds), and a BMI of 27.4, which lowers risk (-0.53 log-odds). The number of pregnancies is 7, which raises risk (+0.36 log-odds). A glucose level of 159 mg/dL indicates impaired glucose tolerance, a state of elevated future diabetes risk [K2]. The patient's BMI of 27.4 categorizes them as overweight, a major modifiable risk factor for type 2 diabetes [K4]. The mean glucose levels in diabetic patients are significantly higher than in non-diabetic patients, indicating a strong association with diabetes risk. Advisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test2",
+          "retrieval": "chroma",
+          "evidence": [
+            "K7",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.686,
+          "draft_grounding": [
+            0.686
+          ],
+          "draft_grounding_evidence_only": [
+            0.333
+          ],
+          "latency_s": 3.16,
+          "drafts": [
+            "The estimated diabetes risk probability for this case is 21% (low band). The main model drivers include a glucose level of 68, which lowers risk (-2.12 log-odds), and a BMI of 35.5 and 10 pregnancies, both of which raise risk (+0.32 log-odds and +0.70 log-odds, respectively). It is important to note that a history of gestational diabetes or delivering a baby over 9 pounds increases later type 2 diabetes risk, although the dataset records the number of pregnancies without gestational diabetes history [K7]. Additionally, a glucose level of 68 is below the threshold for impaired glucose tolerance, which indicates a lower risk compared to the mean glucose levels in diabetic and non-diabetic patients [K2]. Advisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test3",
+          "retrieval": "chroma",
+          "evidence": [
+            "K7",
+            "K4",
+            "K6"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.709,
+          "draft_grounding": [
+            0.709
+          ],
+          "draft_grounding_evidence_only": [
+            0.219
+          ],
+          "latency_s": 3.44,
+          "drafts": [
+            "The estimated diabetes risk probability for this case is 44% (moderate band). The main model drivers include a BMI of 35.9, which raises risk (+0.36 log-odds), and two pregnancies, which lowers risk (-0.20 log-odds). Age at 26 also lowers risk (-0.12 log-odds). The population context indicates that the mean BMI is 35.41 in diabetic patients compared to 30.86 in non-diabetic patients, with a significant difference (Welch p=2.5e-18) [K4]. A history of gestational diabetes or delivering a baby over 9 pounds could increase later type 2 diabetes risk, but this dataset does not record gestational diabetes history [K7]. The robustness check shows model probability ranges from 21%-70% across 25 similar synthetic profiles. Advisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test4",
+          "retrieval": "chroma",
+          "evidence": [
+            "K7",
+            "K4",
+            "K6"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.732,
+          "draft_grounding": [
+            0.732
+          ],
+          "draft_grounding_evidence_only": [
+            0.1
+          ],
+          "latency_s": 2.84,
+          "drafts": [
+            "The estimated diabetes risk probability is 38% (moderate band). The main model drivers include a BMI of 27.4, which lowers risk (-0.53 log-odds) [K4]; a history of 7 pregnancies, which raises risk (+0.36 log-odds) [K7]; and a glucose level of 114, which lowers risk (-0.30 log-odds). Skin thickness and insulin levels were not measured and were imputed with the training median. The population context indicates that the mean BMI is 35.41 in diabetic patients compared to 30.86 in non-diabetic patients, with a significant difference (Welch p=2.5e-18). Advisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test5",
+          "retrieval": "chroma",
+          "evidence": [
+            "K6",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.8,
+          "draft_grounding": [
+            0.8
+          ],
+          "draft_grounding_evidence_only": [
+            0.259
+          ],
+          "latency_s": 2.87,
+          "drafts": [
+            "The estimated diabetes risk probability for this case is 28% (low band). The main model drivers include a glucose level of 100, which lowers risk (-0.86 log-odds), a Diabetes Pedigree Function score of 0.949, which raises risk (+0.41 log-odds), and 3 pregnancies, which lowers risk (-0.09 log-odds). A family history of diabetes in first-degree relatives increases type 2 diabetes risk, as summarized by the Diabetes Pedigree Function [K6]. The mean glucose levels in diabetic patients (142.32) compared to non-diabetic patients (110.64) indicate significant differences in risk [population context]. Advisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test6",
+          "retrieval": "chroma",
+          "evidence": [
+            "K2",
+            "K4",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.796,
+          "draft_grounding": [
+            0.796
+          ],
+          "draft_grounding_evidence_only": [
+            0.362
+          ],
+          "latency_s": 3.23,
+          "drafts": [
+            "The estimated diabetes risk probability for this patient is 66% (high band). The main model drivers include a BMI of 43.3, which raises risk (+1.13 log-odds), and a glucose level of 105, which lowers risk (-0.66 log-odds). Additionally, the patient has had 8 pregnancies, which raises risk (+0.47 log-odds). The mean BMI in diabetic patients is significantly higher (35.41) compared to non-diabetic patients (30.86) [Welch p=2.5e-18]. Overweight and obesity are major modifiable risk factors for type 2 diabetes, and screening is recommended for adults with these conditions [K4]. A glucose level of 105 indicates impaired glucose tolerance, a state of elevated future diabetes risk [K2]. Advisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test7",
+          "retrieval": "chroma",
+          "evidence": [
+            "K2",
+            "K1",
+            "K4"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.648,
+          "draft_grounding": [
+            0.648
+          ],
+          "draft_grounding_evidence_only": [
+            0.254
+          ],
+          "latency_s": 3.42,
+          "drafts": [
+            "The estimated diabetes risk probability for this case is 96% (high band). The main model drivers include a glucose level of 197, which raises risk (+2.97 log-odds), and a BMI of 25.9, which lowers risk (-0.68 log-odds). The Diabetes Pedigree Function score of 1.191 raises risk (+0.62 log-odds). A glucose level of 197 mg/dL indicates a state of elevated future diabetes risk, as it falls within the range of impaired glucose tolerance [K2]. The patient's BMI of 25.9 categorizes them as overweight, a major modifiable risk factor for type 2 diabetes [K4]. The population context shows a significant difference in mean glucose levels between diabetic and non-diabetic patients, reinforcing the high risk indicated by the model. Advisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test8",
+          "retrieval": "chroma",
+          "evidence": [
+            "K2",
+            "K1",
+            "K4"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.865,
+          "draft_grounding": [
+            0.865
+          ],
+          "draft_grounding_evidence_only": [
+            0.426
+          ],
+          "latency_s": 3.21,
+          "drafts": [
+            "The estimated diabetes risk probability for this case is 13% (low band). The main model drivers include a glucose level of 100, which lowers risk by -0.86 log-odds; a BMI of 29.7, which lowers risk by -0.29 log-odds; and 2 pregnancies, which lowers risk by -0.20 log-odds. The mean glucose level in diabetic patients is significantly higher than in non-diabetic patients (142.32 vs 110.64, Welch p=2.8e-41). Overweight (BMI 25 or higher) and obesity (BMI 30 or higher) are major modifiable risk factors for type 2 diabetes, and screening is recommended for adults with these conditions [K4]. A 2-hour plasma glucose between 140 and 199 mg/dL indicates impaired glucose tolerance, a state of elevated future diabetes risk [K2]. Advisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test9",
+          "retrieval": "chroma",
+          "evidence": [
+            "K2",
+            "K1",
+            "K4"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.736,
+          "draft_grounding": [
+            0.736
+          ],
+          "draft_grounding_evidence_only": [
+            0.323
+          ],
+          "latency_s": 3.3,
+          "drafts": [
+            "The estimated diabetes risk probability for this case is 91% (high band). The main model drivers include a glucose level of 165, which raises risk (+1.71 log-odds), and a BMI of 47.9, which also raises risk (+1.61 log-odds). The absence of pregnancies lowers risk (-0.43 log-odds). \n\nAccording to evidence, a 2-hour plasma glucose of 200 mg/dL or higher meets the diagnostic criterion for diabetes [K1]. Additionally, obesity (BMI 30 or higher) is a major modifiable risk factor for type 2 diabetes, and screening is recommended for adults with obesity [K4]. \n\nThe mean glucose levels in diabetic patients are significantly higher than in non-diabetic patients, indicating a strong association with diabetes risk [population context]. \n\nAdvisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test10",
+          "retrieval": "chroma",
+          "evidence": [
+            "K7",
+            "K2",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.811,
+          "draft_grounding": [
+            0.811
+          ],
+          "draft_grounding_evidence_only": [
+            0.239
+          ],
+          "latency_s": 2.64,
+          "drafts": [
+            "The estimated diabetes risk probability is 39% (moderate band). The main model drivers include a glucose level of 137, which raises risk (+0.61 log-odds), and a DiabetesPedigreeFunction of 0.17, which lowers risk (-0.27 log-odds). The absence of pregnancies also lowers risk (-0.43 log-odds) [K7]. The mean glucose level in diabetic patients is significantly higher (142.32) compared to non-diabetic patients (110.64) [K2]. A glucose level of 137 suggests impaired glucose tolerance, indicating elevated future diabetes risk [K2]. \n\nAdvisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test11",
+          "retrieval": "chroma",
+          "evidence": [
+            "K7",
+            "K4",
+            "K6"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.811,
+          "draft_grounding": [
+            0.811
+          ],
+          "draft_grounding_evidence_only": [
+            0.371
+          ],
+          "latency_s": 3.37,
+          "drafts": [
+            "The estimated diabetes risk probability is 62% (high band). The main model drivers include a BMI of 43.2, which raises risk (+1.12 log-odds), and a glucose level of 131, which also raises risk (+0.37 log-odds). The number of pregnancies is 0, which lowers risk (-0.43 log-odds) [K7]. Overweight and obesity are major modifiable risk factors for type 2 diabetes, and screening is recommended for adults with these conditions [K4]. The population context indicates that the mean BMI is significantly higher in diabetic patients compared to non-diabetic patients (Welch p=2.5e-18). A family history of diabetes in first-degree relatives increases risk, as summarized by the Diabetes Pedigree Function [K6]. Advisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test12",
+          "retrieval": "chroma",
+          "evidence": [
+            "K2",
+            "K4",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.759,
+          "draft_grounding": [
+            0.759
+          ],
+          "draft_grounding_evidence_only": [
+            0.333
+          ],
+          "latency_s": 3.53,
+          "drafts": [
+            "The estimated diabetes risk probability for this case is 20% (low band). The main model drivers include a BMI of 24.8, which lowers risk (-0.80 log-odds), a glucose level of 137, which raises risk (+0.61 log-odds), and zero pregnancies, which also lowers risk (-0.43 log-odds). The population context indicates that the mean BMI is significantly higher in diabetic patients (35.41) compared to non-diabetic patients (30.86) with a Welch p-value of 2.5e-18, highlighting the importance of BMI as a risk factor. A glucose level of 137 mg/dL indicates impaired glucose tolerance, a state of elevated future diabetes risk [K2]. Overweight and obesity are major modifiable risk factors for type 2 diabetes, and screening is recommended for adults with these conditions [K4]. Advisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test13",
+          "retrieval": "chroma",
+          "evidence": [
+            "K2",
+            "K4",
+            "K1"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.778,
+          "draft_grounding": [
+            0.778
+          ],
+          "draft_grounding_evidence_only": [
+            0.365
+          ],
+          "latency_s": 3.68,
+          "drafts": [
+            "The estimated diabetes risk probability for this case is 17% (low band). The main model drivers include a BMI of 23.7, which lowers risk (-0.91 log-odds), a glucose level of 131, which raises risk (+0.37 log-odds), and one pregnancy, which also lowers risk (-0.32 log-odds). \n\nIn the population context, the mean BMI is significantly higher in diabetic patients (35.41) compared to non-diabetic patients (30.86) with a Welch p-value of 2.5e-18, indicating a strong association between BMI and diabetes risk. \n\nA 2-hour plasma glucose between 140 and 199 mg/dL indicates impaired glucose tolerance, a state of elevated future diabetes risk [K2]. Overweight and obesity are major modifiable risk factors for type 2 diabetes [K4]. \n\nAdvisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        },
+        {
+          "case": "test14",
+          "retrieval": "chroma",
+          "evidence": [
+            "K6",
+            "K4",
+            "K7"
+          ],
+          "llm_calls": 1,
+          "approved_first": 1,
+          "llm_draft_used": 1,
+          "escalated": 0,
+          "revisions": 0,
+          "final_grounding": 0.808,
+          "draft_grounding": [
+            0.808
+          ],
+          "draft_grounding_evidence_only": [
+            0.361
+          ],
+          "latency_s": 3.83,
+          "drafts": [
+            "The estimated diabetes risk probability for this case is 40% (moderate band). The main model drivers include a BMI of 36, which raises risk (+0.37 log-odds), and a Diabetes Pedigree Function score of 0.127, which lowers risk (-0.31 log-odds). Age at 25 also lowers risk (-0.13 log-odds). \n\nA family history of diabetes in first-degree relatives increases type 2 diabetes risk, as summarized by the Diabetes Pedigree Function [K6]. Overweight and obesity are major modifiable risk factors for type 2 diabetes, and screening is recommended for adults with these conditions [K4]. \n\nThe population context indicates that the mean BMI is significantly higher in diabetic patients compared to non-diabetic patients (Welch p=2.5e-18). \n\nAdvisory draft only - not a diagnosis. Clinician review and sign-off are required."
+          ]
+        }
+      ]
+    }
+  }
+}

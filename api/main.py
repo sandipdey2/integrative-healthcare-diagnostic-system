@@ -92,6 +92,9 @@ class AssessResponse(BaseModel):
     transport: str = ""
     retrieval: str = ""
     langsmith_run_id: str = ""
+    langsmith_url: str = ""
+    llm_tokens: int = 0
+    case_facts: list[str] = []
 
 
 def get_system():

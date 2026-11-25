@@ -39,7 +39,7 @@ graph-level test below also exercises MCP.
 | `tests/test_data_stats.py` | 4 | dataset shape (768×9, 268 positive), impossible-zero cleaning, stratified split (614/154), Welch t-test ranking | 4 passed |
 | `tests/test_model.py` | 4 | test ROC-AUC > 0.78 and recall > 0.6, monotonic in glucose, contributions sum exactly to the logit, imputation of missing optional values | 4 passed |
 | `tests/test_gan.py` | 3 | hand-written backprop vs finite differences, valid/finite/non-collapsed samples, glucose mean within 10 mg/dL after training | 3 passed |
-| `tests/test_workflow.py` | 9 | guard (ranges, required fields, injection, dosing, documented paraphrase gap), zero normalisation, retrieval (Chroma, or TF-IDF when unavailable), grounding score, template passes review, reviewer rejects unsafe text | 9 passed |
+| `tests/test_workflow.py` | 10 | guard (ranges, required fields, injection, dosing, documented paraphrase gap), zero normalisation, retrieval (Chroma, or TF-IDF when unavailable), grounding score, grounding against evidence + case data (a real 0.185 draft passes, invented-claim drafts fail), template passes review, reviewer rejects unsafe text | 10 passed |
 | `tests/test_agents.py` | 20 | **graph structure** equals the exported `docs/architecture.mmd`; **routing** functions and supervisor order; non-borderline, borderline (uncertainty agent) and blocked paths; **revision loop cap** (3 writer attempts → escalation); loop recovery after one rejection; LLM error fallback; gpt-4o-mini selection and `OPENAI_API_BASE` (Vocareum) honored; **each agent node** (safety_guard, risk, evidence, uncertainty, writer, reviewer, finalize) | 20 passed |
 | `tests/test_monitoring.py` | 1 | Evidently holdout/shifted/synthetic reports written (HTML+JSON); no drift on holdout; Glucose drift and lower precision on the shifted set | 1 passed |
 | `tests/test_mcp_api.py` | 9 | **real MCP server** subprocess over stdio: `list_tools` = 5 tools, `call_tool` results match the model; **streamable HTTP** server: every tool over MCP returns the same JSON as in-process; **graph via MCP** = in-process on 10 records, transport in trace and tool log; unreachable MCP → labelled `inprocess-fallback` in auto mode, error in `IHDS_TOOLS=mcp`; **FastAPI** `/health`, `/assess` (ok, unsafe question blocked, missing Glucose blocked), 422 on bad types, 400 for `use_llm` without key, `/monitoring/summary`; **Streamlit with `IHDS_API_URL`** calls `POST /assess` | 9 passed |
@@ -137,7 +137,7 @@ Full commands and results are in [`docs/MLOPS.md`](docs/MLOPS.md).
 
 | Environment | Command | Result |
 |---|---|---|
-| Runtime (`requirements.txt` + dev deps, now with chromadb/onnxruntime/langsmith) | `pytest -q -rs` | **75 passed, 14 skipped** without a LangSmith key. The original 56 still give 56 passed, 11 skipped with the new test files ignored (`test_metrics_agent.py`, `test_metrics_push.py`, `test_retrieval.py`, `test_tracing.py`, `test_embedded_api.py`); `test_e2e.py`'s AppTest now goes through the embedded API. New tests: 3 agent + 4 push + 5 retrieval + 4 tracing + 3 embedded API. Skips: 4 live `vocareum`, 7 MLOps tools not installed, promtool, live Grafana push, live LangSmith. With `LANGSMITH_API_KEY` set, `tests/test_tracing.py` gives 5 passed (live test included) |
+| Runtime (`requirements.txt` + dev deps, now with chromadb/onnxruntime/langsmith) | `pytest -q -rs` | **80 passed, 15 skipped** with no LangSmith or OpenAI key. With both keys (Vocareum gpt-4o-mini and LangSmith): **86 passed, 9 skipped** (skips are the MLOps tools not installed, promtool and the live Grafana push). The original 56 tests all still pass. Run with the new test files ignored (`test_metrics_agent.py`, `test_metrics_push.py`, `test_retrieval.py`, `test_tracing.py`, `test_embedded_api.py`), the subset gives 57 passed, 11 skipped: the 56 plus the new grounding test in `test_workflow.py`. `test_e2e.py`'s AppTest goes through the embedded API. Since this change: 1 grounding test in `test_workflow.py`, 4 tracing tests in `test_tracing.py` (1 of them live) and 1 LangSmith-link test in `test_embedded_api.py`. |
 | MLOps (`requirements-mlops.txt`, separate venv) | `pytest -q tests/test_mlops.py tests/test_metrics_agent.py tests/test_metrics_push.py` | **17 passed, 2 skipped** (promtool not on PATH; live Grafana test without creds) |
 | MLOps | `pip install -r requirements-mlops.txt` in a fresh venv, then `pip check` | installs with pip; "No broken requirements found" |
 | Both | `ruff check .` (`ruff.toml`: E, F, W; E501/E702 ignored) | All checks passed. Fixing it removed 9 unused imports and invalid escapes from existing files; there were no behaviour changes |
@@ -177,8 +177,18 @@ What `tests/test_tracing.py` checks:
 - a `[langsmith]` secrets table turns it on with project `ihds` and both tracing variables;
 - an explicit `LANGSMITH_TRACING=false` is respected;
 - the MCP stdio child env is an allow-list without the LangSmith or OpenAI keys;
+- `run_url` returns None when tracing is off or the project lookup fails, and has the format
+  `<host>/o/<tenant>/projects/p/<project>/r/<run>?poll=true`;
+- offline, with a fake chat model and a callback recorder: the writer's call is an `llm` run named `writer_llm`
+  (tag `attempt:1`) under the `writer_agent` node of the graph run, and its usage is summed into
+  `AdvisoryResult.llm_tokens`;
 - live (key only): the run is read back through the langsmith client with the band, status and draft tags and
-  the metadata.
+  the metadata;
+- live (LangSmith and OpenAI keys): every LLM run in the trace is `writer_llm` with tokens, the root
+  `ihds-assessment` `total_tokens` covers them, and `langsmith_url` points at the run.
+
+`tests/test_embedded_api.py` also checks that a run id and URL produced in the embedded API's thread reach the
+Streamlit trace panel as **View trace in LangSmith** (AppTest).
 
 What `tests/test_metrics_push.py` checks (stdlib only):
 

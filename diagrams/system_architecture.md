@@ -66,7 +66,7 @@ and append-only `trace` and `tool_calls` lists (reducer `operator.add`).
 | `evidence_agent` | specialist | Top-3 knowledge snippets + population statistics for the top driver | `rag_search` (ChromaDB embeddings; TF-IDF keyword fallback), `population_context` (Welch results) |
 | `uncertainty_agent` | specialist | Probability spread over the 25 nearest GAN-generated profiles | `synthetic_neighbors` (GAN pool) |
 | `writer_agent` | generator | Advisory draft; uses reviewer feedback on revisions | gpt-4o-mini via `langchain-openai` if `OPENAI_API_KEY` is set (base URL from `OPENAI_API_BASE`, e.g. Vocareum), else deterministic template |
-| `reviewer` | critic agent | Disclaimer, `[K#]` citations of retrieved ids, exact probability, banned phrases, grounding ≥ 0.2 | rules (`workflow.review`) |
+| `reviewer` | critic agent | Disclaimer, `[K#]` citations of retrieved ids, exact probability, banned phrases, grounding ≥ 0.4 against the evidence cards + case data (disclaimer excluded) | rules (`workflow.review`) |
 | `finalize` | terminal | Releases approved draft; if the cap is hit, swaps in the template draft and sets `escalated=True` | — |
 
 Edges: `START → safety_guard`; `safety_guard ⇢ refuse | supervisor`; `supervisor ⇢ risk_agent | evidence_agent |

@@ -74,6 +74,18 @@ def _langsmith_url(run_id: str):
     return tracing.run_url(run_id)
 
 
+def _langsmith_link(res) -> None:
+    """'View trace in LangSmith' under the agent trace. The URL comes from the process that ran the graph
+    (in-process, or the REST API, embedded or external); this process resolves it only as a fallback."""
+    url = res.langsmith_url or (_langsmith_url(res.langsmith_run_id) if res.langsmith_run_id else None)
+    if url:
+        st.markdown(f"[View trace in LangSmith]({url}) · run `{res.langsmith_run_id}`")
+    elif res.langsmith_run_id:
+        st.caption(f"LangSmith run `{res.langsmith_run_id}` in project {tracing.project()} (link unavailable)")
+    elif TRACING:
+        st.caption("LangSmith tracing is on here, but the workflow returned no run id (tracing off where it ran)")
+
+
 EXTERNAL_API = os.environ.get("IHDS_API_URL", "").rstrip("/")
 
 
@@ -227,7 +239,8 @@ with tabs[0]:
             if true_label is not None:
                 st.caption(f"Recorded outcome for this test record: {'diabetic' if true_label else 'not diabetic'}")
             st.subheader("2. Advisory draft")
-            st.caption(f"Draft source: {res.draft_source} · reviewer revisions: {res.revisions}")
+            st.caption(f"Draft source: {res.draft_source} · reviewer revisions: {res.revisions}"
+                       + (f" · LLM tokens: {res.llm_tokens}" if res.llm_tokens else ""))
             st.text(res.draft)
             st.warning(workflow.DISCLAIMER)
             with st.expander("Feature contributions (log-odds vs. training average)"):
@@ -245,10 +258,7 @@ with tabs[0]:
                 st.caption(f"Workflow route: {'REST API ' + API_URL if API_URL else 'in-process LangGraph'}"
                            f"{' (embedded)' if API_URL and not EXTERNAL_API else ''} · "
                            f"tool transport: {res.transport} · retrieval: {res.retrieval or 'n/a'}")
-                if res.langsmith_run_id:
-                    url = _langsmith_url(res.langsmith_run_id)
-                    st.markdown(f"LangSmith run `{res.langsmith_run_id}`" + (f" · [open trace]({url})" if url else
-                                f" (project {tracing.project()})"))
+                _langsmith_link(res)
                 st.write(res.trace)
                 st.dataframe(pd.DataFrame(res.tool_calls), hide_index=True)
 

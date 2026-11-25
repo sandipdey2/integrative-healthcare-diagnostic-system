@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import operator
 import os
+import socket
 from typing import Annotated, Optional, TypedDict
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -63,12 +64,14 @@ class AgentState(TypedDict, total=False):
     draft: str
     draft_source: str
     feedback: list
+    case_facts: list                  # case data lines the writer is given (also grounding sources)
     review: dict
     revisions: int
     escalated: bool
     next: str
     trace: Annotated[list, operator.add]
     tool_calls: Annotated[list, operator.add]
+    llm_usage: Annotated[list, operator.add]  # token usage of each writer LLM call
 
 
 def llm_base_url() -> str | None:
@@ -91,6 +94,25 @@ def default_llm():
 class _C:  # light object so template_draft/llm prompt can use .feature/.value/.contribution
     def __init__(self, d):
         self.__dict__.update(d)
+
+
+WRITER_SYSTEM_PROMPT = (
+    "You write short advisory notes for clinicians about a diabetes risk score. Use only the case data and the "
+    "evidence cards you are given, and keep close to their wording; add no other facts or general advice. "
+    "Cite an evidence card as [K#] right after a statement taken from it. Case data (probability, drivers, "
+    "population context, robustness check) needs no citation; never cite a card for it. Do not diagnose or "
+    "recommend medication or doses. State the probability exactly as given. End with this sentence verbatim: "
+    + wf.DISCLAIMER)
+
+
+def case_facts(p: float, band: str, top: list, extra: list[str], imputed: list | None = None) -> list[str]:
+    """The case data lines given to the writer; the reviewer counts them as grounding sources too."""
+    drivers = "; ".join(f"{c.feature} = {c.value:g} ({'raises' if c.contribution > 0 else 'lowers'} risk, "
+                        f"{c.contribution:+.2f} log-odds)" for c in top[:3])
+    lines = [f"Estimated diabetes risk probability: {p:.0%} ({band} band).", f"Main model drivers: {drivers}."]
+    if imputed:
+        lines.append(f"Not measured (imputed with training median): {', '.join(imputed)}.")
+    return lines + list(extra)
 
 
 def make_nodes(tools, llm=None) -> dict:
@@ -171,37 +193,42 @@ def make_nodes(tools, llm=None) -> dict:
             extra.append(f"Robustness check: model probability over {u['k']} similar synthetic profiles ranges "
                          f"{u['min']:.0%}-{u['max']:.0%}.")
         attempt = state.get("revisions", 0) + 1
+        facts = case_facts(p, band, top, extra, state.get("imputed"))
         if llm is not None:
             evtxt = "\n".join(f"[{e['id']}] {e['fact']}" for e in ev)
-            drivers = "; ".join(f"{c.feature}={c.value:g} ({c.contribution:+.2f} log-odds)" for c in top[:3])
-            fb = ("\nReviewer feedback to fix: " + "; ".join(state["feedback"])) if state.get("feedback") else ""
+            fb = ("\nReviewer feedback to fix:\n- " + "\n- ".join(state["feedback"])) if state.get("feedback") else ""
             msgs = [
-                SystemMessage(content=(
-                    "You write short advisory notes for clinicians about a diabetes risk score. Use ONLY the "
-                    "evidence provided and cite it as [K#]. Do not diagnose or recommend medication or doses. "
-                    "State the probability exactly as given. End with this sentence verbatim: " + wf.DISCLAIMER)),
-                HumanMessage(content=(f"Probability: {p:.0%} ({band} band). Drivers: {drivers}.\n"
-                                      + "\n".join(extra) + f"\nQuestion: {state.get('question') or 'none'}\n"
-                                      f"Evidence:\n{evtxt}{fb}\nAt most 140 words.")),
+                SystemMessage(content=WRITER_SYSTEM_PROMPT),
+                HumanMessage(content=("Case data:\n" + "\n".join(facts)
+                                      + f"\nQuestion: {state.get('question') or 'none'}\n"
+                                      f"Evidence cards:\n{evtxt}{fb}\nAt most 140 words.")),
             ]
+            # Named child run under the writer node (and the "ihds-assessment" root) when LangSmith is on;
+            # with_config merges with the graph's callbacks, so the run nests and carries token usage.
+            call = llm.with_config(run_name="writer_llm", tags=["writer", f"attempt:{attempt}"],
+                                   metadata={"attempt": attempt}) if hasattr(llm, "with_config") else llm
             try:
-                draft = llm.invoke(msgs).content.strip()
-                return {"draft": draft, "draft_source": "llm",
+                msg = call.invoke(msgs)
+                draft = msg.content.strip()
+                usage = dict(getattr(msg, "usage_metadata", None) or {})
+                return {"draft": draft, "draft_source": "llm", "case_facts": facts,
+                        "llm_usage": [{"attempt": attempt, **{k: usage.get(k, 0) for k in
+                                                               ("input_tokens", "output_tokens", "total_tokens")}}],
                         "trace": [f"writer_agent: llm draft (attempt {attempt})"]}
             except Exception as exc:
                 note = f"llm error {type(exc).__name__}, template used"
                 draft = wf.template_draft(p, band, top, ev, state.get("imputed"))
-                return {"draft": _with_extra(draft, extra), "draft_source": "template",
+                return {"draft": _with_extra(draft, extra), "draft_source": "template", "case_facts": facts,
                         "trace": [f"writer_agent: {note} (attempt {attempt})"]}
         draft = wf.template_draft(p, band, top, ev, state.get("imputed"))
-        return {"draft": _with_extra(draft, extra), "draft_source": "template",
+        return {"draft": _with_extra(draft, extra), "draft_source": "template", "case_facts": facts,
                 "trace": [f"writer_agent: template draft (attempt {attempt})"]}
 
     def reviewer(state: AgentState):
-        rv = wf.review(state["draft"], state["probability"], state["evidence"])
+        rv = wf.review(state["draft"], state["probability"], state["evidence"], case_facts=state.get("case_facts"))
         failed = [k for k, ok in rv["checks"].items() if not ok]
         verdict = "approved" if rv["approved"] else "rejected: " + ", ".join(failed)
-        upd = {"review": rv, "feedback": failed, "trace": [f"reviewer: {verdict} (grounding {rv['grounding_score']})"]}
+        upd = {"review": rv, "feedback": rv["feedback"], "trace": [f"reviewer: {verdict} (grounding {rv['grounding_score']})"]}
         if not rv["approved"]:
             upd["revisions"] = state.get("revisions", 0) + 1
         return upd
@@ -211,7 +238,7 @@ def make_nodes(tools, llm=None) -> dict:
             return {"status": "ok", "trace": ["finalize: approved draft released for clinician review"]}
         top = [_C(c) for c in state["contributions"]]
         draft = wf.template_draft(state["probability"], state["band"], top, state["evidence"], state.get("imputed"))
-        rv = wf.review(draft, state["probability"], state["evidence"])
+        rv = wf.review(draft, state["probability"], state["evidence"], case_facts=state.get("case_facts"))
         return {"status": "ok", "escalated": True, "draft": draft, "review": rv,
                 "draft_source": f"template (llm draft rejected {state['revisions']}x, escalated)",
                 "trace": [f"finalize: revision cap ({MAX_REVISIONS}) reached -> template draft, escalated to human review"]}
@@ -292,6 +319,9 @@ class AdvisoryResult:
     transport: str = ""
     retrieval: str = ""            # "chroma" | "keyword"
     langsmith_run_id: str = ""     # set when LangSmith tracing is on (ihds/tracing.py)
+    langsmith_url: str = ""        # link to that run in the LangSmith UI ("" if it could not be resolved)
+    llm_tokens: int = 0            # total tokens of the writer's LLM calls (from the responses' usage metadata)
+    case_facts: list = field(default_factory=list)  # case data given to the writer (grounding sources)
 
 
 def run(graph, record: dict, question: str = "") -> AdvisoryResult:
@@ -308,6 +338,8 @@ def run(graph, record: dict, question: str = "") -> AdvisoryResult:
 
 def _run_traced(graph, record: dict, question: str) -> AdvisoryResult:
     from langsmith import traceable
+
+    from . import tracing
     from langsmith.run_helpers import get_current_run_tree
 
     def _summary(res):
@@ -325,15 +357,18 @@ def _run_traced(graph, record: dict, question: str) -> AdvisoryResult:
             rt.add_metadata({"risk_band": res.band, "final_status": res.status, "draft_source": res.draft_source,
                              "retrieval": res.retrieval, "escalated": res.escalated, "revisions": res.revisions,
                              "probability": res.probability, "tool_transport": res.transport,
-                             "approved": bool(res.review.get("approved")) if res.review else None})
+                             "approved": bool(res.review.get("approved")) if res.review else None,
+                             "llm_calls": sum(t.startswith("writer_agent: llm draft") for t in res.trace),
+                             "llm_total_tokens": res.llm_tokens, "hostname": socket.gethostname()})
             res.langsmith_run_id = str(rt.id)
+            res.langsmith_url = tracing.run_url(res.langsmith_run_id) or ""
         return res
 
     return ihds_assessment(dict(record), question or "")
 
 
 def _run(graph, record: dict, question: str = "") -> AdvisoryResult:
-    s = graph.invoke({"record": dict(record), "question": question or "", "trace": [], "tool_calls": []},
+    s = graph.invoke({"record": dict(record), "question": question or "", "trace": [], "tool_calls": [], "llm_usage": []},
                      config={"recursion_limit": RECURSION_LIMIT})
     return AdvisoryResult(
         status=s["status"], probability=s.get("probability"), band=s.get("band"),
@@ -345,5 +380,6 @@ def _run(graph, record: dict, question: str = "") -> AdvisoryResult:
         guard_reasons=s.get("guard_reasons", []), imputed=s.get("imputed", []),
         trace=s["trace"], tool_calls=s["tool_calls"],
         transport=(s["tool_calls"][0].get("transport", "") if s["tool_calls"] else getattr(graph, "ihds_transport", "")),
-        retrieval=s.get("retrieval") or "",
+        retrieval=s.get("retrieval") or "", case_facts=s.get("case_facts") or [],
+        llm_tokens=int(sum(u.get("total_tokens", 0) for u in s.get("llm_usage") or [])),
     )

@@ -165,7 +165,8 @@ def test_writer_and_reviewer_nodes(nodes, good_record):
 def test_reviewer_node_rejects_and_counts(nodes):
     ev = [{"id": "K1", "fact": "glucose threshold", "source": "x"}]
     out = nodes["reviewer"]({"draft": UNSAFE, "probability": 0.7, "evidence": ev, "revisions": 0})
-    assert not out["review"]["approved"] and out["revisions"] == 1 and "has_disclaimer" in out["feedback"]
+    assert not out["review"]["approved"] and out["revisions"] == 1 and not out["review"]["checks"]["has_disclaimer"]
+    assert any("verbatim" in f for f in out["feedback"])  # actionable feedback for the writer, not check names
 
 
 def test_finalize_node_escalates_when_rejected(nodes, good_record):

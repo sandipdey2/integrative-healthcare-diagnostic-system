@@ -689,6 +689,68 @@ The approval rate did not collapse: the difference is within the run-to-run spre
 0.04 lower with Chroma, and every run stayed at or above the reviewer's 0.2 threshold (minimum 0.2). The committed
 `monitoring/reports/llm_eval_summary.json` (keyword era, first try 0.767) was not regenerated.
 
+## Reviewer grounding: root cause and fix (2026-11-25)
+
+**Symptom:** on Streamlit Cloud with Chroma retrieval, the reviewer rejected all three gpt-4o-mini drafts of the
+default case on `grounding_ok` (0.182 < 0.2). The template was released and the case escalated.
+
+**Root cause:** the score compared against the wrong sources, and Chroma was not the cause.
+
+- `review()` scored a draft only against the evidence cards. It measured the share of the draft's content words
+  found in the retrieved `fact` texts.
+- The writer is told to state the probability, the band and the drivers, and it is given the population
+  context. The reviewer requires the disclaimer. None of those words are in the cards.
+- In the real default-case draft that scored 0.185, 44 of 54 content words were "ungrounded". Most of them came
+  from the case data (`probability, band, high, drivers, log, odds, age, years, mean, diabetic, population,
+  welch, 110, 142`) or the disclaimer (`advisory, draft, diagnosis, clinician, review, sign, off, required`).
+- A faithful draft therefore sat at about 0.18 to 0.22, and approval was close to a coin flip. With temperature
+  0, the retries came back almost the same, because the writer's feedback was only the check name
+  (`grounding_ok`).
+- Keyword and Chroma return the same cards for the default case (K7, K2, K1). In the 15-case batch below, the
+  two retrievers fail at similar rates.
+- The prompt also put the case data and the cards in one block. The model then cited a card for case data:
+  the population means were tagged `[K2]`.
+
+**Change** (`ihds/workflow.py`, `ihds/agents.py`):
+
+- **Sources:** the reviewer now grounds a draft against everything the writer was given. That is the evidence
+  cards plus the case-data lines (`agents.case_facts`: probability and band, drivers with direction and
+  log-odds, population context, robustness check, imputed fields).
+- **Disclaimer:** the mandatory disclaimer is removed before scoring. `has_disclaimer` checks it on its own.
+- **Recalibrated threshold:** `MIN_GROUNDING` went from 0.2 to **0.4**. The threshold was raised, not lowered, so
+  invented content still fails. On the default case:
+  - the faithful 0.185 draft scores 0.578;
+  - drafts with invented clinical claims or numbers (in `tests/test_workflow.py`) score 0.14 to 0.32 and are
+    rejected;
+  - the template scores 1.0.
+- **Feedback:** the reviewer returns actionable feedback (`review["feedback"]`), for example the words not found
+  in any source and the card ids that may be cited. It also returns `unsupported_terms`. The writer receives
+  this feedback instead of check names.
+- **Prompt:** the writer prompt separates "Case data" from "Evidence cards". It says to keep to their wording,
+  cite `[K#]` only for statements taken from a card, never cite a card for case data, and add no other facts.
+
+**Measured:** `scripts/eval_grounding.py`, real gpt-4o-mini through Vocareum, in-process tools. The 15 cases are
+the default case and the first 14 held-out cases with glucose and BMI. Results are in
+`reports/grounding_eval.json`, including every draft.
+
+| Code | Retriever | First-try approval | LLM draft released | Escalated (of 15) | LLM calls | Mean grounding (reviewer's score) | Mean grounding, evidence cards only |
+|---|---|---|---|---|---|---|---|
+| before | keyword | 0.600 | 0.800 | 3 | 25 | 0.218 | 0.218 |
+| before | chroma | 0.667 | 0.933 | 1 | 22 | 0.207 | 0.207 |
+| after | keyword | 1.000 | 1.000 | 0 | 15 | 0.757 | 0.298 |
+| after | chroma | 1.000 | 1.000 | 0 | 15 | 0.756 | 0.305 |
+
+- **Default case:**
+  - before: chroma needed 3 drafts (0.182, 0.185, 0.214), and keyword passed on the first try with 0.212;
+  - after: both passed on the first try (0.695 chroma).
+- **Prompt alone:** under the old cards-only rule, 14 of 15 first drafts from the new prompt would also pass,
+  so the prompt change alone helps.
+- **Margin:** after the change, the lowest reviewer score of any LLM draft is 0.633, against the 0.4
+  threshold.
+- **Caveat:** LLM output varies from run to run, and this is a single 15-case batch per retriever.
+- **Older numbers:** the 30-case evaluations elsewhere in this repo (`scripts/run_llm_eval.py`,
+  `scripts/compare_retrieval.py`) used the earlier cards-only score with the 0.2 threshold and were not rerun.
+
 ## LangSmith tracing (optional)
 
 `ihds/tracing.py` turns tracing on only when a key is present: `LANGSMITH_API_KEY` (or `LANGCHAIN_API_KEY`) in
@@ -699,15 +761,29 @@ the environment, or `LANGSMITH_API_KEY` in a `[langsmith]` secrets table. It the
 
 **What a run looks like:** each `agents.run()` is one root run, `ihds-assessment`.
 
-- **Children:** LangGraph, every node, the `ChatOpenAI` call and the four tool calls.
+- **Children:** LangGraph, every node, the four tool calls and each writer LLM call. The writer call is an
+  `llm` run named `writer_llm` (tags `writer`, `attempt:<n>`) under the `writer_agent` node, with prompt,
+  completion and total tokens. LangSmith sums them into the root's `total_tokens`.
 - **Tool nesting:** the MCP tool coroutine runs on the client's own event-loop thread, so `MCPToolBackend.call`
   passes the caller's runnable config explicitly. Without that, the tool runs would become separate root
   traces.
 - **Tags:** `ihds`, `band:<band>`, `status:<status>`, `draft:<source>`, `retrieval:<method>`.
 - **Metadata:** `risk_band`, `final_status`, `draft_source`, `retrieval`, `escalated`, `revisions`,
-  `probability`, `tool_transport`, `approved`.
-- **Run ID:** stored in `AdvisoryResult.langsmith_run_id`. The trace panel shows it with an "open trace" link,
-  and the sidebar says `LangSmith tracing: on (project ihds)` or off.
+  `probability`, `tool_transport`, `approved`, `llm_calls`, `llm_total_tokens` and `hostname`. Use
+  `hostname` to tell Streamlit Cloud runs from local ones.
+- **Run ID and link:** the process that ran the graph sets `AdvisoryResult.langsmith_run_id` and
+  `langsmith_url`. That process is the app, or the REST API (embedded or external), which returns both in
+  `POST /assess`. The URL comes from one cached project lookup (`tracing.run_url`).
+  - The agent trace panel shows **View trace in LangSmith**.
+  - Without a URL it shows the run id and "link unavailable".
+  - If tracing is on in the app but the run came back without an id, it says so.
+- **Tokens in the app:** the draft caption shows `LLM tokens: N`, summed from the responses' usage metadata.
+- **Sidebar:** shows `LangSmith tracing: on (project ihds)` or off.
+- **Env cache:** `configure()` clears langsmith's cached environment lookups. A check made before
+  `configure()` ran would otherwise keep tracing off for the whole process. That happened in the test suite.
+- **Zero tokens:** root runs tagged `draft:template` with `total_tokens = 0` come from template mode, when no
+  `OPENAI_API_KEY` is set. Those runs make no LLM call. For example, the five newest root runs on 2026-11-25
+  before this change were local box runs without a key.
 
 **Keeping the key out of other processes:**
 
@@ -737,6 +813,18 @@ langsmith client API.
   leak out as separate traces.
 - **Link:** `tracing.run_url` returned a link.
 - **Live test:** `tests/test_tracing.py::test_live_run_is_traced_with_tags_and_metadata` passed with the key.
+
+**Verified on the box after the writer change (2026-11-25):**
+
+- **Embedded REST API route** (gpt-4o-mini, Chroma):
+  - `POST /assess` returned the run id, a `langsmith_url` ending in `/r/<run id>?poll=true`, `llm_tokens=592`
+    and grounding 0.691;
+  - the trace had 21 runs: 16 chain, 1 llm, 4 tool;
+  - the `writer_llm` run had 592 tokens (385 prompt + 207 completion), and the root `ihds-assessment` had
+    `total_tokens=592`.
+- **Live test:** `test_live_llm_runs_are_children_of_the_root_with_tokens` (needs both keys) passed. It checks
+  that every LLM run in the trace is `writer_llm` with tokens, that the root's total covers them, and that the
+  metadata `llm_total_tokens` matches.
 
 ## GitHub Actions (CI/CD) — how to turn it on
 

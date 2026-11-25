@@ -90,3 +90,33 @@ def test_streamlit_app_routes_through_the_embedded_api(monkeypatch):
     [b for b in at.button if b.label == "Run advisory workflow"][0].click().run()
     assert not at.exception and any("Risk probability" in m.label for m in at.metric)
     assert any("(embedded)" in c.value and "retrieval:" in c.value for c in at.caption)
+
+
+def test_langsmith_link_comes_back_through_the_embedded_api(monkeypatch):
+    """The graph runs in the uvicorn thread; the run id/url it produced must reach the Streamlit trace panel."""
+    import sys
+
+    from streamlit.testing.v1 import AppTest
+
+    from ihds import agents
+    from ihds.config import ROOT
+
+    real_run = agents.run
+
+    def traced_run(graph, record, question=""):
+        res = real_run(graph, record, question)
+        res.langsmith_run_id = "run-123"
+        res.langsmith_url = "https://smith.example/o/T/projects/p/P/r/run-123?poll=true"
+        return res
+
+    monkeypatch.setattr(agents, "run", traced_run)  # api/main.py calls agents.run at request time
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("IHDS_API_URL", raising=False)
+    sys.path.insert(0, str(ROOT))
+    at = AppTest.from_file(str(ROOT / "app.py"), default_timeout=180)
+    at.run()
+    [b for b in at.button if b.label == "Run advisory workflow"][0].click().run()
+    assert not at.exception
+    assert any("(embedded)" in c.value for c in at.caption)
+    assert any("[View trace in LangSmith](https://smith.example/o/T/projects/p/P/r/run-123?poll=true)" in m.value
+               for m in at.markdown)

@@ -190,7 +190,7 @@ def _tokens(text: str) -> set[str]:
 
 
 def grounding_score(answer: str, contexts: list[str]) -> float:
-    """Share of answer content tokens found in the retrieved context (from agentic-rag-system)."""
+    """Share of answer content tokens found in the given sources (from agentic-rag-system)."""
     a = _tokens(answer)
     if not a:
         return 0.0
@@ -221,7 +221,33 @@ def template_draft(prob: float, band: str, top: list, evidence: list[dict], impu
 FORBIDDEN = [r"\byou have diabetes\b", r"\bdiagnosed with\b", r"\bdiagnosis is\b", r"\bprescribe\b", r"\bmg of\b", r"\bunits of insulin\b"]
 
 
-def review(draft: str, prob: float, evidence: list[dict], min_grounding: float = 0.2) -> dict:
+# Calibrated on 2026-11-25 for the sources below (docs/MLOPS.md): good gpt-4o-mini drafts of the default case
+# score about 0.55-0.65, drafts with invented clinical claims 0.14-0.32. The earlier 0.2 belonged to the
+# evidence-only score, where the same good drafts scored 0.18-0.22.
+MIN_GROUNDING = 0.4
+
+
+def unsupported_tokens(answer: str, contexts: list[str]) -> list[str]:
+    """Answer content tokens that appear in none of the sources (what pulls the grounding score down)."""
+    c = set().union(*[_tokens(x) for x in contexts]) if contexts else set()
+    return sorted(_tokens(answer) - c)
+
+
+def grounding_sources(evidence: list[dict], case_facts: list[str] | None = None) -> list[str]:
+    """What the writer is given to write from: the retrieved evidence cards and the case data lines (model
+    probability, drivers, population context, robustness check, imputed fields). Before 2026-11-25 only the
+    evidence cards counted, so a draft that restated the case data it was told to state scored about 0.18-0.22
+    against a 0.2 threshold (see docs/MLOPS.md)."""
+    return [e["fact"] for e in evidence] + list(case_facts or [])
+
+
+def _without_disclaimer(draft: str) -> str:
+    """The mandatory disclaimer is checked on its own (has_disclaimer), so it does not count for grounding."""
+    return re.sub(re.escape(DISCLAIMER), " ", draft, flags=re.IGNORECASE)
+
+
+def review(draft: str, prob: float, evidence: list[dict], min_grounding: float = MIN_GROUNDING,
+           case_facts: list[str] | None = None) -> dict:
     ids = {e["id"] for e in evidence}
     cited = set(re.findall(r"\[(K\d+)\]", draft))
     checks = {
@@ -230,9 +256,23 @@ def review(draft: str, prob: float, evidence: list[dict], min_grounding: float =
         "states_model_probability": f"{prob:.0%}" in draft,
         "no_diagnostic_or_dosing_language": not any(re.search(p, draft.lower()) for p in FORBIDDEN),
     }
-    g = grounding_score(draft, [e["fact"] for e in evidence])
+    sources = grounding_sources(evidence, case_facts)
+    body = _without_disclaimer(draft)
+    g = grounding_score(body, sources)
     checks["grounding_ok"] = g >= min_grounding
-    return {"approved": all(checks.values()), "checks": checks, "grounding_score": g}
+    unsupported = unsupported_tokens(body, sources)
+    fixes = {
+        "has_disclaimer": f"end with this sentence verbatim: {DISCLAIMER}",
+        "cites_retrieved_evidence": "cite at least one evidence card, and only these: "
+                                    + ", ".join(f"[{i}]" for i in sorted(ids)),
+        "states_model_probability": f"state the model probability exactly as {prob:.0%}",
+        "no_diagnostic_or_dosing_language": "remove diagnostic or dosing language",
+        "grounding_ok": f"grounding {g} is below {min_grounding}; these words are not in the case data or the "
+                        f"evidence: {', '.join(unsupported[:20])}. Keep to their wording and drop other claims",
+    }
+    return {"approved": all(checks.values()), "checks": checks, "grounding_score": g,
+            "unsupported_terms": unsupported[:20],
+            "feedback": [fixes[k] for k, ok in checks.items() if not ok]}
 
 
 def llm_available() -> bool:

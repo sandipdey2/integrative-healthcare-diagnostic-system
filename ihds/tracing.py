@@ -41,7 +41,20 @@ def configure(secrets=None, env=None) -> dict | None:
     env["LANGSMITH_PROJECT"] = env["LANGCHAIN_PROJECT"] = str(project)
     if endpoint:
         env["LANGSMITH_ENDPOINT"] = str(endpoint)
+    if env is os.environ:
+        _refresh_langsmith_env()
     return {"project": str(project), "endpoint": endpoint or "https://api.smith.langchain.com"}
+
+
+def _refresh_langsmith_env() -> None:
+    """langsmith caches the environment variables it reads (utils.get_env_var is an lru_cache). If anything
+    traced or checked tracing before configure() ran, it would keep seeing tracing off; clear that cache."""
+    try:
+        from langsmith import utils as ls_utils
+
+        ls_utils.get_env_var.cache_clear()
+    except Exception:
+        pass
 
 
 def enabled() -> bool:
@@ -53,14 +66,27 @@ def project() -> str:
     return os.environ.get("LANGSMITH_PROJECT", DEFAULT_PROJECT)
 
 
-def run_url(run_id: str) -> str | None:
-    """Best-effort LangSmith UI link for a run (one API lookup of the project); None on any error."""
-    try:
+_PROJECT_URLS: dict[str, str] = {}
+
+
+def _project_url(name: str) -> str:
+    """UI base URL of a project; one API lookup per process and project (only successes are cached)."""
+    if name not in _PROJECT_URLS:
         from langsmith import Client
 
         c = Client()
-        proj = c.read_project(project_name=project())
-        return f"{c._host_url}/o/{proj.tenant_id}/projects/p/{proj.id}/r/{run_id}?poll=true"
+        proj = c.read_project(project_name=name)
+        _PROJECT_URLS[name] = f"{c._host_url}/o/{proj.tenant_id}/projects/p/{proj.id}"
+    return _PROJECT_URLS[name]
+
+
+def run_url(run_id: str) -> str | None:
+    """Best-effort LangSmith UI link for a run; None when tracing is off or the lookup fails (no network,
+    project not created yet, key without read access). `?poll=true` makes the page wait for a run in flight."""
+    if not run_id or not enabled():
+        return None
+    try:
+        return f"{_project_url(project())}/r/{run_id}?poll=true"
     except Exception:
         return None
 
