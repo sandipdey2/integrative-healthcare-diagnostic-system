@@ -1,0 +1,10 @@
+# Option B (self-hosted on Azure Container Apps): this Prometheus does not scrape ihds-app (its port 8000 is
+# not reachable from other apps). Instead the Prometheus agent inside ihds-app pushes the ihds_* series here
+# with remote_write (http://ihds-prometheus/api/v1/write, internal ingress only). Started with
+# --web.enable-remote-write-receiver (see Dockerfile). It only scrapes itself.
+global:
+  scrape_interval: 30s
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

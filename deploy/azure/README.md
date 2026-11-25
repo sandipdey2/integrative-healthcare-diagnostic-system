@@ -55,6 +55,26 @@ Check: with `scripts/start_all.sh`, Streamlit talks to the in-container API, so 
 "LLM key configured on the API server" (and "Workflow via REST API http://127.0.0.1:8000 · tools: mcp-http").
 A local Streamlit process that has the key in its own environment shows "LLM key detected · endpoint: ...".
 
+## Optional: metrics dashboard on Grafana Cloud
+
+Container Apps keeps port 8000 internal. When the secrets `grafana-rw-url`, `grafana-rw-user` and
+`grafana-rw-token` are mapped to `GRAFANA_RW_URL`, `GRAFANA_RW_USER` and `GRAFANA_RW_TOKEN`, a Prometheus agent
+inside the container pushes the `ihds_*` metrics to Grafana Cloud. With the variables unset, it stays off.
+
+```bash
+export RG=<resource-group> ACR=<acr> TAG=v3     # use a NEW tag
+export GRAFANA_RW_URL='https://prometheus-prod-XX-prod-REGION.grafana.net/api/prom/push'
+export GRAFANA_RW_USER='<instance ID>'
+read -r -s -p "Grafana Cloud token: " GRAFANA_RW_TOKEN; echo; export GRAFANA_RW_TOKEN
+bash deploy/azure/enable_metrics_push.sh
+unset GRAFANA_RW_TOKEN
+```
+
+Then import `monitoring/grafana/dashboards/ihds_api.json` in Grafana Cloud (**Dashboards → New → Import**) and
+pick the `grafanacloud-*-prom` datasource. Full steps, the self-hosted alternative
+(`deploy_monitoring_aca.sh`) and what was verified are in
+[docs/MLOPS.md](../../docs/MLOPS.md#pushing-metrics-from-azure-container-apps). Not yet run in Azure.
+
 ## 3. Verify
 
 ```bash

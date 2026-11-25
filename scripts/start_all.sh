@@ -3,6 +3,9 @@
 #   1. MCP tool server (streamable HTTP)  127.0.0.1:${IHDS_MCP_PORT:-8765}/mcp
 #   2. FastAPI service                    0.0.0.0:${IHDS_API_PORT:-8000}   (agents get tools from 1)
 #   3. Streamlit UI                       0.0.0.0:${PORT:-8501}            (calls 2 via IHDS_API_URL)
+# Optional: if GRAFANA_RW_URL is set, a Prometheus agent (127.0.0.1:9091) scrapes 2's /metrics and
+# remote_writes the ihds_* series there (Grafana Cloud or the self-hosted ACA Prometheus). Off when unset;
+# if the agent fails, the app keeps running. See scripts/metrics_agent.py and docs/MLOPS.md.
 set -eu
 MCP_PORT="${IHDS_MCP_PORT:-8765}"
 API_PORT="${IHDS_API_PORT:-8000}"
@@ -24,12 +27,16 @@ sys.exit(f"timed out waiting for {url}")
 PY
 }
 
-env -u OPENAI_API_KEY python -m mcp_server.server --transport streamable-http --host 127.0.0.1 --port "$MCP_PORT" &
+env -u OPENAI_API_KEY -u GRAFANA_RW_TOKEN python -m mcp_server.server --transport streamable-http --host 127.0.0.1 --port "$MCP_PORT" &
 wait_for "http://127.0.0.1:$MCP_PORT/mcp" 180
 
 IHDS_MCP_URL="http://127.0.0.1:$MCP_PORT/mcp" IHDS_TOOLS=mcp \
-  uvicorn api.main:app --host 0.0.0.0 --port "$API_PORT" &
+  env -u GRAFANA_RW_TOKEN uvicorn api.main:app --host 0.0.0.0 --port "$API_PORT" &
 wait_for "http://127.0.0.1:$API_PORT/health" 180
 
-IHDS_API_URL="http://127.0.0.1:$API_PORT" exec streamlit run app.py \
+if [ -n "${GRAFANA_RW_URL:-}" ]; then
+  IHDS_API_PORT="$API_PORT" python scripts/metrics_agent.py &
+fi
+
+IHDS_API_URL="http://127.0.0.1:$API_PORT" exec env -u GRAFANA_RW_TOKEN streamlit run app.py \
   --server.port="$UI_PORT" --server.address=0.0.0.0 --server.headless=true

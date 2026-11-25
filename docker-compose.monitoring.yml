@@ -1,46 +1,73 @@
 # Local monitoring stack (optional, NOT part of the Azure deployment):
-#   docker compose -f docker-compose.monitoring.yml up -d --build
+#   docker compose -f docker-compose.monitoring.yml up -d --build --wait
 #   API http://127.0.0.1:8000/docs   metrics http://127.0.0.1:8000/metrics
 #   Prometheus http://127.0.0.1:9090  Grafana http://127.0.0.1:3000 (dashboard "IHDS API", anonymous viewer)
 #   docker compose -f docker-compose.monitoring.yml down
-# All ports bind to 127.0.0.1 only. The api service reuses the app image and runs just the FastAPI layer
-# (tools via an MCP stdio subprocess); no OPENAI_API_KEY is passed, so the writer uses the template.
+# All three services share the user-defined bridge network `ihds-monitoring`; Prometheus scrapes the API by
+# service name (api:8000). Host ports bind to 127.0.0.1 only. The api service reuses the app image and runs just
+# the FastAPI layer on 0.0.0.0:8000 inside the container (tools via an MCP stdio subprocess); no OPENAI_API_KEY is
+# passed, so the writer uses the template.
+# If containers cannot reach each other on a host whose kernel runs BOTH iptables-legacy and nftables rules,
+# see scripts/fix_docker_bridge_forward.sh.
+name: ihds-monitoring
+
+networks:
+  ihds-monitoring:
+    driver: bridge
+
 services:
   api:
     build: .
     image: ihds:local
     command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      IHDS_METRICS: "1"
+    networks: [ihds-monitoring]
     ports:
       - "127.0.0.1:8000:8000"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"]
-      interval: 15s
+      interval: 10s
       timeout: 5s
       start_period: 120s
-      retries: 10
+      retries: 12
 
   prometheus:
     image: prom/prometheus:v3.5.0
     command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=2d"]
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks: [ihds-monitoring]
     ports:
       - "127.0.0.1:9090:9090"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:9090/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
   grafana:
     image: grafana/grafana:12.1.0
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
-      GF_AUTH_DISABLE_LOGIN_FORM: "false"
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/ihds_api.json
+      PROMETHEUS_URL: http://prometheus:9090
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks: [ihds-monitoring]
     ports:
       - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     depends_on:
-      - prometheus
+      prometheus:
+        condition: service_healthy

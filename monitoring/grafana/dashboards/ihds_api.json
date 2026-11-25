@@ -19,7 +19,7 @@
       "title": "Assessments (total)",
       "datasource": {
         "type": "prometheus",
-        "uid": "ihds-prometheus"
+        "uid": "${datasource}"
       },
       "gridPos": {
         "x": 0,
@@ -61,7 +61,7 @@
           "refId": "A",
           "datasource": {
             "type": "prometheus",
-            "uid": "ihds-prometheus"
+            "uid": "${datasource}"
           },
           "expr": "sum(ihds_assess_total) or vector(0)"
         }
@@ -73,7 +73,7 @@
       "title": "Escalations (total)",
       "datasource": {
         "type": "prometheus",
-        "uid": "ihds-prometheus"
+        "uid": "${datasource}"
       },
       "gridPos": {
         "x": 6,
@@ -115,7 +115,7 @@
           "refId": "A",
           "datasource": {
             "type": "prometheus",
-            "uid": "ihds-prometheus"
+            "uid": "${datasource}"
           },
           "expr": "sum(ihds_escalations_total) or vector(0)"
         }
@@ -127,7 +127,7 @@
       "title": "High-risk predictions (total)",
       "datasource": {
         "type": "prometheus",
-        "uid": "ihds-prometheus"
+        "uid": "${datasource}"
       },
       "gridPos": {
         "x": 12,
@@ -169,7 +169,7 @@
           "refId": "A",
           "datasource": {
             "type": "prometheus",
-            "uid": "ihds-prometheus"
+            "uid": "${datasource}"
           },
           "expr": "sum(ihds_predictions_total{band=\"high\"}) or vector(0)"
         }
@@ -181,7 +181,7 @@
       "title": "Blocked by safety guard (total)",
       "datasource": {
         "type": "prometheus",
-        "uid": "ihds-prometheus"
+        "uid": "${datasource}"
       },
       "gridPos": {
         "x": 18,
@@ -223,7 +223,7 @@
           "refId": "A",
           "datasource": {
             "type": "prometheus",
-            "uid": "ihds-prometheus"
+            "uid": "${datasource}"
           },
           "expr": "sum(ihds_assess_total{status=\"blocked\"}) or vector(0)"
         }
@@ -235,7 +235,7 @@
       "title": "Request rate by route (req/s)",
       "datasource": {
         "type": "prometheus",
-        "uid": "ihds-prometheus"
+        "uid": "${datasource}"
       },
       "gridPos": {
         "x": 0,
@@ -260,7 +260,7 @@
           "refId": "A",
           "datasource": {
             "type": "prometheus",
-            "uid": "ihds-prometheus"
+            "uid": "${datasource}"
           },
           "expr": "sum by (route, status) (rate(ihds_http_requests_total[5m]))",
           "legendFormat": "{{route}} {{status}}"
@@ -273,7 +273,7 @@
       "title": "Request latency p50 / p95 (s)",
       "datasource": {
         "type": "prometheus",
-        "uid": "ihds-prometheus"
+        "uid": "${datasource}"
       },
       "gridPos": {
         "x": 12,
@@ -298,7 +298,7 @@
           "refId": "A",
           "datasource": {
             "type": "prometheus",
-            "uid": "ihds-prometheus"
+            "uid": "${datasource}"
           },
           "expr": "histogram_quantile(0.5, sum by (le, route) (rate(ihds_http_request_duration_seconds_bucket[5m])))",
           "legendFormat": "p50 {{route}}"
@@ -307,7 +307,7 @@
           "refId": "B",
           "datasource": {
             "type": "prometheus",
-            "uid": "ihds-prometheus"
+            "uid": "${datasource}"
           },
           "expr": "histogram_quantile(0.95, sum by (le, route) (rate(ihds_http_request_duration_seconds_bucket[5m])))",
           "legendFormat": "p95 {{route}}"
@@ -320,7 +320,7 @@
       "title": "Predictions by risk band (per 5m)",
       "datasource": {
         "type": "prometheus",
-        "uid": "ihds-prometheus"
+        "uid": "${datasource}"
       },
       "gridPos": {
         "x": 0,
@@ -345,7 +345,7 @@
           "refId": "A",
           "datasource": {
             "type": "prometheus",
-            "uid": "ihds-prometheus"
+            "uid": "${datasource}"
           },
           "expr": "sum by (band) (increase(ihds_predictions_total[5m]))",
           "legendFormat": "{{band}}"
@@ -358,7 +358,7 @@
       "title": "Escalations and outcomes (per 5m)",
       "datasource": {
         "type": "prometheus",
-        "uid": "ihds-prometheus"
+        "uid": "${datasource}"
       },
       "gridPos": {
         "x": 12,
@@ -383,7 +383,7 @@
           "refId": "A",
           "datasource": {
             "type": "prometheus",
-            "uid": "ihds-prometheus"
+            "uid": "${datasource}"
           },
           "expr": "sum(increase(ihds_escalations_total[5m]))",
           "legendFormat": "escalated"
@@ -392,7 +392,7 @@
           "refId": "B",
           "datasource": {
             "type": "prometheus",
-            "uid": "ihds-prometheus"
+            "uid": "${datasource}"
           },
           "expr": "sum by (status, draft_source) (increase(ihds_assess_total[5m]))",
           "legendFormat": "{{status}} / {{draft_source}}"
@@ -401,9 +401,23 @@
     }
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0,
+        "refresh": 1,
+        "regex": "",
+        "includeAll": false,
+        "multi": false
+      }
+    ]
   },
   "annotations": {
     "list": []
-  }
+  },
+  "description": "IHDS FastAPI /metrics. Pick the Prometheus datasource at the top (local Prometheus, the self-hosted ACA Prometheus, or Grafana Cloud's grafanacloud-*-prom)."
 }

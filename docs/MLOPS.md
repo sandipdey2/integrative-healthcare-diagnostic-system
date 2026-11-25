@@ -15,11 +15,11 @@ every run.
 | Great Expectations 1.25 | Validation of the clinical input data | `ihds/mlops/validate.py` | Implemented, gate in DVC, Prefect and CI |
 | Feast 0.68 | Local feature store (file offline store, SQLite online store) | `feature_repo/`, `ihds/mlops/features.py` | Implemented, local only; the app does not read from Feast |
 | Prefect 3.9 | Orchestration of the stages | `ihds/mlops/flow.py` | Implemented, runs locally on a temporary Prefect API (no Prefect Cloud) |
-| GitHub Actions | CI/CD | `docs/ci.yml.example` | Written and checked by a test; **not active until added as `.github/workflows/ci.yml`** (see below) |
+| GitHub Actions | CI/CD | `docs/ci.yml.example`, active copy in `.github/workflows/ci.yml` | Active; first run passed (lint, test, data-validation, docker). The new `monitoring-stack` job is in the example only (see below) |
 | FastAPI | Model-serving API | `api/main.py` | Already existed; unchanged apart from `/metrics` |
 | Docker | Container image | `Dockerfile`, `scripts/start_all.sh` | Already existed; unchanged; rebuilt and smoke-tested |
 | Deepchecks 0.19.1 | Model-quality testing with a pass/fail gate | `ihds/mlops/quality.py` | Implemented |
-| Prometheus + Grafana | API metrics and dashboard | `api/main.py` (`/metrics`), `docker-compose.monitoring.yml`, `monitoring/prometheus/`, `monitoring/grafana/` | Implemented, local only (not in the Azure deploy) |
+| Prometheus + Grafana | API metrics and dashboard | `api/main.py` (`/metrics`), `docker-compose.monitoring.yml`, `monitoring/prometheus/`, `monitoring/grafana/` | Local stack verified on a bridge network; Azure push (Grafana Cloud) implemented and verified locally, not deployed |
 | Evidently 0.7 | Drift detection | `ihds/monitoring.py` (existing), `ihds/mlops/drift.py` | Already existed; also run as a pipeline stage |
 | SHAP 0.51 + Fairlearn 0.15 | Explainability and a fairness audit | `ihds/mlops/explain.py` | Implemented |
 
@@ -238,7 +238,7 @@ A test uses a throwaway Prefect API (`prefect_test_harness`) and checks two thin
 - the task order;
 - that a failing GX result stops the flow at `validate`, leaving it `Failed`.
 
-## Prometheus and Grafana (local only)
+## Prometheus and Grafana
 
 **The endpoint:** `api/main.py` serves `GET /metrics` through `prometheus_client`. Route labels use the route
 template, and `/metrics` itself is not counted. The series are:
@@ -249,15 +249,7 @@ template, and `/metrics` itself is not counted. The series are:
 - `ihds_assess_total{status,draft_source}`
 - `ihds_escalations_total`
 
-```bash
-docker compose -f docker-compose.monitoring.yml up -d --build
-# API http://127.0.0.1:8000  Prometheus http://127.0.0.1:9090  Grafana http://127.0.0.1:3000 (anonymous viewer)
-docker compose -f docker-compose.monitoring.yml down
-```
-
-**The stack:** the compose file runs the app image as `api` (FastAPI only), `prom/prometheus:v3.5.0` (scraping
-`api:8000/metrics` every 15 s) and `grafana/grafana:12.1.0`. Grafana gets a provisioned Prometheus datasource
-and the dashboard `monitoring/grafana/dashboards/ihds_api.json`, which has 8 panels:
+The dashboard `monitoring/grafana/dashboards/ihds_api.json` has 8 panels:
 
 - totals: assessments, escalations, high-risk predictions, blocked;
 - request rate per route;
@@ -265,30 +257,204 @@ and the dashboard `monitoring/grafana/dashboards/ihds_api.json`, which has 8 pan
 - predictions per band;
 - outcomes and escalations.
 
-All ports bind to 127.0.0.1. Grafana's admin login keeps its default and is meant for local use only.
+Its datasource is a dashboard variable (`${datasource}`, type Prometheus), not a hard-coded uid, so the same file
+works with the provisioned local datasource and can be imported into Grafana Cloud.
 
-**Azure:** this stack is not part of the Azure deployment. Container Apps exposes only port 8501, so the API's
-`/metrics` is not reachable from outside. `deploy/azure/deploy_aci.sh` publishes port 8000, so it sets
-`IHDS_METRICS=0`, which makes `/metrics` return 404. The running Azure app is still the image deployed before
-`/metrics` was added.
+### Local stack (`docker-compose.monitoring.yml`)
 
-**Measured on the box (2026-11-25):** in this sandbox, traffic between containers on the Docker bridge network
-timed out, so Prometheus could not reach `api:8000`. The stack was therefore run with a box-only override (not
-committed) that puts the same three images and the same dashboard on the host network, with targets rewritten
-to `127.0.0.1`. On a normal Docker host the committed compose file should not need this; that case was not
-tested here.
+```bash
+docker compose -f docker-compose.monitoring.yml up -d --build --wait
+# API http://127.0.0.1:8000  Prometheus http://127.0.0.1:9090  Grafana http://127.0.0.1:3000 (anonymous viewer)
+docker compose -f docker-compose.monitoring.yml down -v
+```
 
-- Prometheus showed both targets `up`.
-- A script sent 104 `POST /assess` calls to the rebuilt image: the first 100 Pima rows, plus 4 dosing questions.
+- **Services:** `api` (the app image, FastAPI only, on 0.0.0.0:8000 inside the container), `prom/prometheus:v3.5.0`
+  and `grafana/grafana:12.1.0`.
+- **Network:** all three are on one user-defined bridge network, `ihds-monitoring`. Prometheus scrapes
+  `api:8000/metrics` by service name every 15 s.
+- **Grafana:** gets its datasource URL from `PROMETHEUS_URL=http://prometheus:9090`. It provisions the datasource
+  (uid `ihds-prometheus`) and the dashboard.
+- **Startup order:** each service has a healthcheck: API `/health`, Prometheus `/-/ready`, Grafana `/api/health`.
+  `depends_on: service_healthy` starts them in the order api → prometheus → grafana, and `--wait` returns only
+  when all three are healthy.
+- **Ports:** all bind to 127.0.0.1. Grafana's admin login keeps its default, so the stack is for local use only.
+
+### Why bridge networking failed on the box, and the fix
+
+**Root cause:** the box kernel has two sets of firewall tables, and it evaluates both:
+
+- **iptables-nft:** what dockerd uses. Docker adds its `br-*` ACCEPT rules here.
+- **iptables-legacy:** stale tables. Their `FORWARD` chain has policy `DROP` and rules only for `docker0`.
+
+So traffic between containers worked on the default `docker0` bridge but was dropped on every user-defined
+`br-*` network, which is what Compose creates.
+
+Evidence:
+
+- The legacy `FORWARD` DROP counter rose while the scrape timed out (158 → 233 packets).
+- `iptables-legacy -S | grep br-` returned no rules.
+- With the unmodified compose file, Prometheus showed `ihds-api down: Get "http://api:8000/metrics": context
+  deadline exceeded`.
+
+**The fix:** this is a box problem, not a compose problem. `scripts/fix_docker_bridge_forward.sh` adds two rules
+to the legacy `DOCKER-USER` chain:
+
+- `-i br-+ -j ACCEPT`
+- `-o br-+ ... RELATED,ESTABLISHED -j ACCEPT`
+
+It is idempotent and does nothing unless the legacy `FORWARD` policy is `DROP`. The rules do not survive a
+reboot. A normal Docker host needs none of this.
+
+**Compose-file fixes:**
+
+- explicit network;
+- scrape by service name;
+- API bound to 0.0.0.0;
+- datasource URL from env;
+- healthchecks and `depends_on`.
+
+The earlier host-network override was removed.
+
+### Verified on the box (2026-11-25), unmodified compose file on a bridge network
+
+- **Network:** `docker network inspect` showed all three containers on `ihds-monitoring_ihds-monitoring`.
+- **Targets:** after the fix script, with the compose file unchanged, Prometheus showed `ihds-api up
+  http://api:8000/metrics`.
+- **Grafana:** the datasource URL was `http://prometheus:9090`, and health returned "Successfully queried the
+  Prometheus API".
+- **Traffic:** a script sent 104 `POST /assess` calls (the first 100 Pima rows plus 4 dosing questions).
   Prometheus then returned:
-  - `ihds_assess_total`: ok 95, blocked 9 (the 4 dosing questions and 5 rows outside the guard's ranges or
-    missing required fields);
+  - `ihds_assess_total`: ok 95, blocked 9;
   - `ihds_predictions_total`: high 35, low 33, moderate 27;
-  - `ihds_escalations_total` 0 (template writer, no LLM);
-  - `/assess` latency p50 0.028 s and p95 0.048 s.
-- Grafana's datasource health was "Successfully queried the Prometheus API", and a Grafana `/api/ds/query`
-  returned the band counts.
-- Screenshot: `docs/screenshots/10_grafana_dashboard.png`.
+  - `ihds_escalations_total` 0 (template writer);
+  - p95 latency 0.0486 s.
+- **Panels:** every dashboard panel returned series through Grafana `/api/ds/query`.
+- **Screenshot:** `docs/screenshots/10_grafana_dashboard.png`, taken from this run.
+- **CI rehearsal:** the `monitoring-stack` job's commands from `docs/ci.yml.example` were run by hand. They
+  passed:
+  - `compose config` and `promtool check config`;
+  - `up --wait`, with all 3 healthy;
+  - targets `{'ihds-api': 'up', 'prometheus': 'up'}`;
+  - `sum(ihds_predictions_total)` = 20 after 20 calls;
+  - Grafana `/api/health`, datasource health OK, and the dashboard found by search.
+
+### Pushing metrics from Azure Container Apps
+
+Container Apps exposes only Streamlit (8501), so nothing outside the container can scrape `/metrics`. Instead,
+the app image includes a Prometheus binary (`COPY --from=prom/prometheus:v3.5.0`, about 160 MB).
+
+**How the push works:**
+
+- When `GRAFANA_RW_URL` is set, `scripts/start_all.sh` starts `scripts/metrics_agent.py`.
+- `metrics_agent.py` runs `prometheus --agent`, which scrapes `127.0.0.1:8000/metrics` inside the container
+  every 15 s.
+- It remote-writes only `ihds_*` and `up` to that URL. It drops `*_created` and all python/process series.
+- It adds the labels `service="ihds"` and `deployment="azure-container-apps"`.
+
+**When it is off:** with `GRAFANA_RW_URL` unset (the default), no agent starts, and the image behaves as before.
+
+**Token handling:**
+
+- `GRAFANA_RW_TOKEN` is written to a 0600 file and used through `basic_auth.password_file`.
+- The token is never written to the config, and the agent process is started without it.
+- It is also removed from the environments of the MCP server, uvicorn and Streamlit.
+- Grafana Alloy was considered and rejected: its binary is 370 MB, against 159 MB for Prometheus.
+
+**Verified locally** (`deploy/monitoring/docker-compose.push-test.yml`, the same image with a local Prometheus
+receiver standing in for Grafana Cloud):
+
+- The log showed `metrics agent: pushing ihds_* series to ...`.
+- The token was not in `agent.yml`, the token file was mode 600, and the agent's environment had no
+  `GRAFANA_RW_TOKEN` or `OPENAI_API_KEY`. The uvicorn and Streamlit environments had no token either.
+- After 31 calls, the receiver had `ihds_predictions_total{band="high",service="ihds",deployment="local-push-test"}`
+  = 30, and `ihds_assess_total` ok 30, blocked 1.
+- Pushed metric names were only `ihds_*` and `up`. No `python_*` or `process_*` series arrived, and no new
+  `*_created` samples after the drop rule.
+- Grafana (the option B image) showed data in all 8 panels.
+- **Agent off:** with no `GRAFANA_RW_URL`, the image started MCP, uvicorn and Streamlit only, with no agent
+  process and no `/tmp/ihds-agent`.
+- **Grafana Cloud import:** importing `ihds_api.json` through Grafana 12.1's `/api/dashboards/import` into a
+  Grafana whose Prometheus datasource has a different uid succeeded. The dashboard had 8 panels, all bound to
+  `${datasource}`.
+
+**Not verified:** a push to a real Grafana Cloud stack, and any Azure deployment. Neither has been run.
+
+#### Option A: Grafana Cloud (recommended)
+
+1. **Get the credentials.** In Grafana Cloud, open **My Account → your stack → Prometheus → Details**. Copy:
+   - the **Remote Write Endpoint** (it ends in `/api/prom/push`);
+   - the **Username / Instance ID** (a number).
+
+   Under *Sending metrics*, click **Generate now** to create an access-policy token with `metrics:write`
+   (it starts with `glc_`). It is shown once. Do not paste it into chat or commit it.
+2. **Turn on the push.** In Azure Cloud Shell (Bash), from the repo root (`git pull` first):
+
+   ```bash
+   export RG=Regroup_9vxmyzpemb
+   export ACR=$(az acr list -g "$RG" --query "[0].name" -o tsv); echo "$ACR"
+   export TAG=v3                                   # a NEW tag, so Container Apps starts a new revision
+   export GRAFANA_RW_URL='https://prometheus-prod-XX-prod-REGION.grafana.net/api/prom/push'
+   export GRAFANA_RW_USER='<instance ID>'
+   read -r -s -p "Grafana Cloud token: " GRAFANA_RW_TOKEN; echo; export GRAFANA_RW_TOKEN
+   bash deploy/azure/enable_metrics_push.sh        # secret set + az acr build ihds:$TAG + containerapp update
+   unset GRAFANA_RW_TOKEN
+   ```
+
+   The script stores the three values as Container Apps secrets: `grafana-rw-url`, `grafana-rw-user` and
+   `grafana-rw-token`. It maps them to env vars with `secretref:`. The same steps by hand:
+
+   ```bash
+   az containerapp secret set -n ihds-app -g "$RG" --secrets grafana-rw-url="$GRAFANA_RW_URL" \
+     grafana-rw-user="$GRAFANA_RW_USER" grafana-rw-token="$GRAFANA_RW_TOKEN"
+   az acr build -r "$ACR" -t "ihds:$TAG" .
+   az containerapp update -n ihds-app -g "$RG" --image "$ACR.azurecr.io/ihds:$TAG" \
+     --set-env-vars GRAFANA_RW_URL=secretref:grafana-rw-url GRAFANA_RW_USER=secretref:grafana-rw-user \
+     GRAFANA_RW_TOKEN=secretref:grafana-rw-token
+   ```
+
+3. **Check the push.**
+   - Run `az containerapp logs show -n ihds-app -g "$RG" --tail 80 | grep "metrics agent"`.
+   - Run a few assessments in the app UI.
+   - In Grafana Cloud **Explore**, query `ihds_assess_total{service="ihds"}`.
+4. **Import the dashboard.**
+   - Go to **Dashboards → New → Import → Upload dashboard JSON file**, pick
+     `monitoring/grafana/dashboards/ihds_api.json`, then **Import**.
+   - In the dashboard's **Data source** dropdown, pick `grafanacloud-<stack>-prom` (usually the default), then
+     save.
+5. **Maintenance.**
+   - **Rotate the token:** run `BUILD=0` with the new token. The script restarts the active revision.
+   - **Turn it off:** `RG=... DISABLE=1 bash deploy/azure/enable_metrics_push.sh`.
+   - **Free tier:** 10k active series and 14-day retention. IHDS pushes a few dozen series.
+
+#### Option B: self-hosted Prometheus + Grafana on Container Apps (lower priority)
+
+`deploy/azure/deploy_monitoring_aca.sh` builds two images in ACR:
+
+- `deploy/monitoring/prometheus/Dockerfile`: a remote-write receiver with 15-day retention;
+- `deploy/monitoring/grafana/Dockerfile`: the provisioning and dashboard baked in, anonymous Viewer.
+
+It then creates two apps in `ihds-env`:
+
+- `ihds-prometheus`: internal ingress only, on 9090;
+- `ihds-grafana`: external ingress on 3000, with the admin password as a secret.
+
+Finally, it calls `enable_metrics_push.sh` with `GRAFANA_RW_URL=http://ihds-prometheus/api/v1/write` (internal,
+no credentials).
+
+```bash
+export RG=Regroup_9vxmyzpemb ACR=<acr> TAG=v3
+bash deploy/azure/deploy_monitoring_aca.sh    # prompts for a Grafana admin password (hidden, 12+ chars)
+```
+
+**Caveats:**
+
+- Prometheus data is lost on every new revision, since there is no volume.
+- The receiver has no auth, but it is internal to the environment.
+- The two extra apps use lab credit.
+- `az acr build` may be blocked by lab policy.
+- The admin password applies only on Grafana's first start.
+
+**Verified:** both images were built and run locally (push-test above). They have not been deployed to Azure.
 
 ## GitHub Actions (CI/CD) — how to turn it on
 
@@ -299,27 +465,27 @@ tested here.
 - **data-validation:** `pip install -r requirements-mlops.txt`, then the GX gate, `pytest tests/test_mlops.py`
   and `dvc repro`, uploading the reports.
 - **docker:** `docker build`, then a smoke test of `/health` and `/metrics`.
+- **monitoring-stack:** on `ubuntu-latest`:
+  - `docker compose -f docker-compose.monitoring.yml up --wait` (unmodified, bridge network);
+  - 20 `/assess` calls;
+  - asserts `ihds-api` is `up` in `/api/v1/targets` and `sum(ihds_predictions_total) >= 20`;
+  - checks Grafana `/api/health`, datasource health and the dashboard.
 - **deploy** (optional): runs only through manual `workflow_dispatch` with `deploy=true`, and needs the secrets
   `AZURE_CREDENTIALS`, `ACR_NAME` and `AZURE_RESOURCE_GROUP`. It has never been run. Vocareum lab accounts
   usually cannot create the service principal it needs. The live app was deployed with
   `deploy/azure/deploy_aca.sh`.
 
-The token used to push this repo has no `workflow` scope, so the file cannot be pushed to `.github/workflows/`.
-To activate it:
+**Status:** the workflow is active. It was added through the GitHub web UI as `.github/workflows/ci.yml`
+(commit `890ddc9`), with the contents of `docs/ci.yml.example` as of `aaa9649`. Its first run, on 2026-11-25 at
+05:52 UTC (Actions run 45556540515), passed lint, test, data-validation and docker. The deploy job was skipped,
+as designed.
 
-1. On github.com, open `sandipdey2/integrative-healthcare-diagnostic-system`.
-2. Choose **Add file → Create new file**.
-3. Name it `.github/workflows/ci.yml` (typing `/` creates the folders).
-4. Paste the full contents of `docs/ci.yml.example`.
-5. Choose **Commit changes…** and commit directly to `main`.
-6. Open the **Actions** tab. The `ci-cd` run starts on that commit.
+The active workflow does **not** yet contain the `monitoring-stack` job. The token used to push this repo has no
+`workflow` scope, so the job can only be added through the web UI:
 
-Until this is done, **no CI runs on GitHub**. Every job's commands were run by hand on the box instead:
+1. Open `.github/workflows/ci.yml` on github.com and click the pencil (**Edit**).
+2. Replace the contents with the current `docs/ci.yml.example`.
+3. Commit to `main`.
 
-- `ruff check .`: all checks passed;
-- `pytest`;
-- `python -m ihds.mlops.validate`;
-- `dvc repro`;
-- `docker build`, with `/health` and `/metrics` answering.
-
-The workflow has not run on GitHub's runners, so its first run there is the real test.
+Until then, the `monitoring-stack` job has only been rehearsed by hand on the box (see above). It has not run on
+GitHub's runners.

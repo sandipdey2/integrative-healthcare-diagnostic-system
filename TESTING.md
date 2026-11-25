@@ -137,8 +137,8 @@ Full commands and results are in [`docs/MLOPS.md`](docs/MLOPS.md).
 
 | Environment | Command | Result |
 |---|---|---|
-| Runtime (`requirements-dev.txt` + prometheus-client) | `pytest -q -rs` | **56 passed, 11 skipped** (52 original + `test_api_prometheus_metrics` + 3 config tests in `test_mlops.py`; skips are the 4 live `vocareum` tests and 7 MLOps tests whose tools are not installed) |
-| MLOps (`requirements-mlops.txt`, separate venv) | `pytest -q tests/test_mlops.py` | **10 passed** |
+| Runtime (`requirements-dev.txt` + prometheus-client) | `pytest -q -rs` | **59 passed, 12 skipped**: the earlier 56 (still 56 passed, 11 skipped with `--ignore tests/test_metrics_agent.py`) + 3 in `tests/test_metrics_agent.py`. Skips: 4 live `vocareum` tests, 7 MLOps tests whose tools are not installed, and the promtool check when `promtool` is not on PATH. With promtool 3.5.0 on PATH: 60 passed, 11 skipped |
+| MLOps (`requirements-mlops.txt`, separate venv) | `pytest -q tests/test_mlops.py tests/test_metrics_agent.py` | **13 passed, 1 skipped** (promtool not on PATH) |
 | MLOps | `pip install -r requirements-mlops.txt` in a fresh venv, then `pip check` | installs with pip; "No broken requirements found" |
 | Both | `ruff check .` (`ruff.toml`: E, F, W; E501/E702 ignored) | All checks passed. Fixing it removed 9 unused imports and invalid escapes from existing files; there were no behaviour changes |
 
@@ -148,6 +148,10 @@ What `tests/test_mlops.py` checks:
   - `dvc.yaml` stages, deps and params all exist;
   - Prometheus, compose and Grafana configs parse, every metric named in the dashboard is exposed by the API,
     and all ports bind to 127.0.0.1;
+  - all compose services share the `ihds-monitoring` network, Prometheus waits for a healthy API, and the
+    API binds 0.0.0.0;
+  - the datasource URL comes from `${PROMETHEUS_URL}`, and every panel and target uses the `${datasource}`
+    variable (no hard-coded uid);
   - `docs/ci.yml.example` has the lint, test, data-validation and docker jobs.
 - **GX:** 30/30 on the shipped data; corrupted data fails the Glucose range and Age non-null expectations.
 - **MLflow:** the run's params and metrics are logged; the reloaded model gives the same predictions.
@@ -156,6 +160,15 @@ What `tests/test_mlops.py` checks:
 - **Fairlearn:** the group counts sum to n, and DP diff = max − min selection rate.
 - **Feast:** apply, materialize and online fetch in a temp repo; raw 0 Insulin comes back as missing.
 - **Prefect:** the flow completes in task order, and a failed GX result stops it at `validate` (`Failed`).
+
+What `tests/test_metrics_agent.py` checks (stdlib only, so it runs in the runtime venv):
+
+- with no `GRAFANA_RW_URL` the agent refuses to start, and `start_all.sh` guards on it;
+- the Grafana Cloud config uses `basic_auth.password_file`, never contains the token, keeps only `ihds_.*|up`,
+  and drops `ihds_.*_created`;
+- the token file is mode 600;
+- with no user there is no `basic_auth`, and an empty token with a user fails;
+- the rendered config passes `promtool check config --agent` (skipped without promtool).
 
 End-to-end runs on the box:
 
@@ -169,13 +182,22 @@ End-to-end runs on the box:
 | SHAP / Fairlearn | explain stage | top 3: Glucose, BMI, Pregnancies; DP diff 0.420, EO diff 0.563 across age bands |
 | Feast | features stage | patient 0 and 5 fetched online, matching the source; p = 0.826 / 0.2059 |
 | Docker | `docker compose -f docker-compose.monitoring.yml build`, then `docker run --network host ihds:local` (default CMD = `scripts/start_all.sh`) | image built; Streamlit `/_stcore/health` `ok`; API `/health` showed `tools_transport: mcp-http`; `/metrics` served 18 `ihds_` lines; container healthcheck `healthy`; `mlflow` is not in the image |
-| Prometheus + Grafana | compose stack (host-network override on the box, see below), 104 `/assess` calls | targets `up`; ok 95, blocked 9; high 35, low 33, moderate 27; escalations 0; p95 0.048 s; Grafana datasource health OK; `docs/screenshots/10_grafana_dashboard.png` |
+| Prometheus + Grafana | unmodified `docker-compose.monitoring.yml` on a bridge network (after `scripts/fix_docker_bridge_forward.sh`, box only), 104 `/assess` calls | `ihds-api up http://api:8000/metrics`; ok 95, blocked 9; high 35, low 33, moderate 27; escalations 0; p95 0.0486 s; Grafana datasource health OK; every panel returned series; `docs/screenshots/10_grafana_dashboard.png` |
+| CI `monitoring-stack` job (by hand) | the job's steps from `docs/ci.yml.example` | `compose config -q` and `promtool check config` OK; `up --wait` with 3/3 healthy; targets `{'ihds-api': 'up', 'prometheus': 'up'}`; `sum(ihds_predictions_total)` = 20; Grafana health, datasource health and dashboard search OK |
+| Metrics push (Grafana Cloud path) | `deploy/monitoring/docker-compose.push-test.yml` (same image, local receiver in place of Grafana Cloud), 31 `/assess` calls | agent log line present; token absent from config and from the agent, uvicorn and Streamlit environments; token file 600; receiver had `ihds_predictions_total{band="high",service="ihds",deployment="local-push-test"}` 30 and `ihds_assess_total` ok 30 / blocked 1; only `ihds_*` + `up` names; all 8 panels had data in the option B Grafana image |
+| Agent off | `docker run ihds:local` with no `GRAFANA_RW_URL` | only MCP, uvicorn and Streamlit running; no `/tmp/ihds-agent` |
+| Config lint | `promtool check config` (3.5.0) on `monitoring/prometheus/prometheus.yml`, `deploy/monitoring/prometheus/prometheus.yml` and the rendered agent config (`--agent`); `docker compose config -q` on both compose files; Grafana 12.1 started with the provisioning | all SUCCESS; Grafana logged no provisioning errors and listed the `ihds-api` dashboard; `ihds_api.json` imported through `/api/dashboards/import` into a Grafana whose datasource has another uid |
 
-**Docker networking on the box:** traffic between containers on the Docker bridge network timed out in this
-sandbox. Prometheus showed `ihds-api` down with "context deadline exceeded", and `wget api:8000` from the
-Prometheus container timed out. The stack was therefore verified with an uncommitted override that runs the
-same images on the host network, with targets rewritten to 127.0.0.1. The committed bridge-network compose file
-was not verified end to end on a normal Docker host.
+**Docker networking on the box:** user-defined bridge networks failed on the box because of a stale
+iptables-legacy `FORWARD` chain (policy `DROP`, rules only for `docker0`). The kernel evaluates it alongside
+the nft rules that dockerd writes. `scripts/fix_docker_bridge_forward.sh` adds `br-+` ACCEPT rules to the legacy
+`DOCKER-USER` chain. It is a box-only fix and does not survive a reboot. Before the fix, the unmodified file
+showed `ihds-api down ... context deadline exceeded`. After it, with no compose change, the target was up.
+See docs/MLOPS.md.
 
-**CI:** GitHub Actions has not run, because `docs/ci.yml.example` is not yet in `.github/workflows/`. Each job's
-commands were run by hand as listed above.
+**Not verified:** a push to a real Grafana Cloud stack and any Azure deployment of the push or option B.
+
+**CI:** `.github/workflows/ci.yml` (added through the web UI in `890ddc9`) ran on GitHub as Actions run
+45556540515 (2026-11-25 05:52 UTC). lint, test, data-validation and docker passed, and deploy was skipped. The
+`monitoring-stack` job exists only in `docs/ci.yml.example` so far. Its steps were run by hand on the box (see the
+table above).

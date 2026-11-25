@@ -9,6 +9,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# Prometheus binary for the optional in-container metrics push (agent mode; only started when
+# IHDS_REMOTE_WRITE_URL is set, see scripts/metrics_agent.py). Static Go binary, ~160 MB.
+COPY --from=prom/prometheus:v3.5.0 /bin/prometheus /usr/local/bin/prometheus
+
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install -r requirements.txt
 

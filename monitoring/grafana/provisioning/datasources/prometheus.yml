@@ -1,9 +1,11 @@
+# PROMETHEUS_URL is set by the deployment: http://prometheus:9090 in docker-compose.monitoring.yml,
+# the internal ingress of the ihds-prometheus container app in deploy/azure/deploy_monitoring_aca.sh.
 apiVersion: 1
 datasources:
   - name: Prometheus
     uid: ihds-prometheus
     type: prometheus
     access: proxy
-    url: http://prometheus:9090
+    url: ${PROMETHEUS_URL}
     isDefault: true
     editable: false

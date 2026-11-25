@@ -65,11 +65,18 @@ def test_prometheus_grafana_configs_reference_real_metrics():
     compose = yaml.safe_load((ROOT / "docker-compose.monitoring.yml").read_text())
     assert set(compose["services"]) == {"api", "prometheus", "grafana"}
     assert all(p.startswith("127.0.0.1:") for s in compose["services"].values() for p in s.get("ports", []))
+    assert all(s["networks"] == ["ihds-monitoring"] for s in compose["services"].values())
+    assert compose["services"]["prometheus"]["depends_on"]["api"]["condition"] == "service_healthy"
+    assert "0.0.0.0" in compose["services"]["api"]["command"]
     ds = yaml.safe_load((ROOT / "monitoring/grafana/provisioning/datasources/prometheus.yml").read_text())
-    uid = ds["datasources"][0]["uid"]
+    assert ds["datasources"][0]["url"] == "${PROMETHEUS_URL}"
     dash = json.loads((ROOT / "monitoring/grafana/dashboards/ihds_api.json").read_text())
     exprs = [t["expr"] for p in dash["panels"] for t in p["targets"]]
-    assert all(p["datasource"]["uid"] == uid for p in dash["panels"])
+    # datasource is a dashboard variable (importable into Grafana Cloud), never a hard-coded uid
+    var = dash["templating"]["list"][0]
+    assert var["name"] == "datasource" and var["type"] == "datasource" and var["query"] == "prometheus"
+    assert all(p["datasource"]["uid"] == "${datasource}" for p in dash["panels"])
+    assert all(t["datasource"]["uid"] == "${datasource}" for p in dash["panels"] for t in p["targets"])
     used = set(re.findall(r"ihds_[a-z_]+", " ".join(exprs)))
     defined = {"ihds_http_requests_total", "ihds_http_request_duration_seconds_bucket", "ihds_predictions_total",
                "ihds_assess_total", "ihds_escalations_total"}
@@ -78,8 +85,13 @@ def test_prometheus_grafana_configs_reference_real_metrics():
         import api.main as api_main  # noqa: F401  (registers the metrics)
         from prometheus_client import REGISTRY
 
-        exposed = {s.name for m in REGISTRY.collect() for s in m.samples}
-        assert used <= exposed
+        # compare metric families, not samples: a labelled counter has no samples until it is first incremented,
+        # so a sample-based check depended on test order
+        families = {m.name: m.type for m in REGISTRY.collect()}
+        for name in used:
+            base = re.sub(r"_(total|bucket)$", "", name)
+            assert base in families, name
+            assert families[base] == ("histogram" if name.endswith("_bucket") else "counter"), name
 
 
 def test_ci_workflow_example_has_required_jobs():

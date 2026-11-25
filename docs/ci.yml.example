@@ -5,7 +5,8 @@
 #
 # Jobs: lint (ruff) -> test (52 offline pytest tests + /metrics test) and data-validation + mlops tests
 # (Great Expectations gate, MLflow / Deepchecks / SHAP / Fairlearn / Feast / Prefect tests, `dvc repro`)
-# -> docker (build the app image and smoke-test /health and /metrics) -> deploy (optional, manual only).
+# -> docker (build the app image and smoke-test /health and /metrics) and monitoring-stack (Prometheus +
+# Grafana on a plain bridge network) -> deploy (optional, manual only).
 name: ci-cd
 
 on:
@@ -88,6 +89,37 @@ jobs:
           for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8000/health && break; sleep 3; done
           curl -fsS http://127.0.0.1:8000/metrics | grep ihds_http_requests_total
           docker rm -f ihds-api
+
+  # Brings up docker-compose.monitoring.yml unmodified (plain bridge network) and checks that Prometheus
+  # scrapes the API by service name and that Grafana has the provisioned datasource and dashboard with data.
+  monitoring-stack:
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate configs
+        run: |
+          docker compose -f docker-compose.monitoring.yml config -q
+          docker run --rm -v "$PWD/monitoring/prometheus:/cfg:ro" --entrypoint promtool prom/prometheus:v3.5.0 \
+            check config /cfg/prometheus.yml
+      - name: Start the stack
+        run: docker compose -f docker-compose.monitoring.yml up -d --build --wait --wait-timeout 600
+      - name: Generate traffic and check Prometheus + Grafana
+        run: |
+          for i in $(seq 1 20); do
+            curl -fsS -X POST localhost:8000/assess -H 'content-type: application/json' \
+              -d '{"record":{"Pregnancies":2,"Glucose":150,"BloodPressure":72,"SkinThickness":30,"Insulin":120,"BMI":34,"DiabetesPedigreeFunction":0.5,"Age":45}}' >/dev/null
+          done
+          sleep 35
+          curl -fsS localhost:9090/api/v1/targets | python3 -c "import json,sys; t={x['labels']['job']: x['health'] for x in json.load(sys.stdin)['data']['activeTargets']}; print(t); assert t['ihds-api'] == 'up'"
+          curl -fsS localhost:9090/api/v1/query --data-urlencode 'query=sum(ihds_predictions_total)' | python3 -c "import json,sys; r=json.load(sys.stdin)['data']['result']; print(r); assert float(r[0]['value'][1]) >= 20"
+          curl -fsS localhost:3000/api/health
+          curl -fsS localhost:3000/api/datasources/uid/ihds-prometheus/health | grep -q '"status":"OK"'
+          curl -fsS 'localhost:3000/api/search?query=IHDS' | grep -q ihds-api
+      - if: always()
+        run: docker compose -f docker-compose.monitoring.yml logs --no-color | tail -200
+      - if: always()
+        run: docker compose -f docker-compose.monitoring.yml down -v
 
   # Optional CD. Runs only when started by hand (Actions -> ci-cd -> Run workflow, deploy = true) AND the
   # repo has these secrets: AZURE_CREDENTIALS (service-principal JSON for azure/login), ACR_NAME,

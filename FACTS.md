@@ -106,10 +106,10 @@ all 8 features p < 1e-5.
 - Feast 0.68: patient 0 online features match the parquet; model p = 0.826 (patient 5: 0.2059). patient_id = CSV row; one fixed timestamp.
 - Prefect 3.9.5: flow `ihds-mlops-pipeline` Completed, 7/7 tasks, 37 s, temporary local API.
 - Prometheus/Grafana: `/metrics` plus the compose stack.
-  - Box result: 104 /assess calls → ok 95, blocked 9; high 35, low 33, moderate 27; escalations 0; p95 0.048 s.
-  - The box's Docker bridge blocked container-to-container traffic, so it was verified with a host-network override.
-  - Not in Azure. ACI sets IHDS_METRICS=0.
-- GitHub Actions: docs/ci.yml.example (lint/test/data-validation/docker/optional deploy). NOT active until added as .github/workflows/ci.yml via the web UI.
+  - Box result (unmodified compose, bridge network): 104 /assess calls → ok 95, blocked 9; high 35, low 33, moderate 27; escalations 0; p95 0.0486 s; target `ihds-api up`.
+  - Box bridge failure root cause: stale iptables-legacy FORWARD policy DROP (no br-* rules). The box-only fix is scripts/fix_docker_bridge_forward.sh (not persistent).
+  - Azure: optional in-container Prometheus agent pushes ihds_* via remote_write when GRAFANA_RW_URL/USER/TOKEN (ACA secrets) are set (deploy/azure/enable_metrics_push.sh). Verified locally against a local receiver; NOT deployed and NOT tested against real Grafana Cloud. Option B (self-hosted ACA Prometheus+Grafana) is scripted, not deployed. ACI sets IHDS_METRICS=0.
+- GitHub Actions: docs/ci.yml.example (lint/test/data-validation/docker/monitoring-stack/optional deploy). Active as .github/workflows/ci.yml (890ddc9, added via web UI); run 45556540515 passed lint/test/data-validation/docker, deploy skipped. monitoring-stack job only in the example until the workflow file is updated via the web UI.
 
 ## Tests
 - 56 pytest tests: 52 offline (pass on py3.11, 3.12, 3.14) + 4 live `vocareum` (skipped without key); 56/56 pass with key on 3.11 and 3.14. New: 9 in tests/test_mcp_api.py (real MCP subprocess stdio list/call, HTTP server vs in-process, graph via MCP = in-process, fallback, FastAPI health/assess/blocked/422/400/monitoring, Streamlit via API). Docker image builds, healthcheck healthy. Azure Container Apps deployment smoke-tested 2026-11-25 (see Live deployments).

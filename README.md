@@ -83,8 +83,8 @@ runtime does not install or import them, apart from `prometheus-client`, which s
 | Evidently | Drift stage reusing `ihds/monitoring.py` | Holdout: no drift; +25 mg/dL shift: Glucose flagged |
 | Feast | `feature_repo/` (file source, SQLite online store); `python -m ihds.mlops.features` applies, materializes and fetches | Patient 0's online features match the source; p = 0.826 |
 | Prefect | `python -m ihds.mlops.flow` chains all stages on a temporary local API (no Prefect Cloud) | Flow `Completed`, 7 / 7 tasks, 37 s |
-| Prometheus + Grafana | `GET /metrics` plus `docker-compose.monitoring.yml` with a provisioned datasource and dashboard (not part of the Azure deploy) | 104 calls scraped; bands high 35, low 33, moderate 27 |
-| GitHub Actions | `docs/ci.yml.example`: lint, tests, data validation with `dvc repro`, Docker build and smoke test, optional manual deploy | **Not active yet.** It must be added as `.github/workflows/ci.yml` through the GitHub web UI ([steps](docs/MLOPS.md#github-actions-cicd--how-to-turn-it-on)) |
+| Prometheus + Grafana | `GET /metrics`; `docker-compose.monitoring.yml` (bridge network, healthchecks, provisioned datasource and dashboard); optional push to Grafana Cloud from Azure via an in-container Prometheus agent (`GRAFANA_RW_*` secrets, [steps](docs/MLOPS.md#option-a-grafana-cloud-recommended)) | Unmodified compose on a bridge network: target up, 104 calls scraped, bands high 35, low 33, moderate 27, all panels with data. Push verified locally against a receiver; not yet run against Grafana Cloud or in Azure |
+| GitHub Actions | `docs/ci.yml.example`: lint, tests, data validation with `dvc repro`, Docker build and smoke test, monitoring-stack check (Prometheus targets + Grafana health), optional manual deploy | **Active** as `.github/workflows/ci.yml` (first run passed: lint, test, data-validation, docker). The `monitoring-stack` job is in the example only until the workflow file is updated in the web UI ([steps](docs/MLOPS.md#github-actions-cicd--how-to-turn-it-on)) |
 
 ## Run locally
 
@@ -162,7 +162,8 @@ Both deployments serve the `main` branch. LLM drafts vary from run to run.
 | `scripts/` | `export_graph.py` (diagrams from code), `start_all.sh` (MCP + API + UI), `run_llm_eval.py` (live LLM vs template, Evidently) |
 | `monitoring/reports/` | Evidently HTML/JSON reports |
 | `ihds/mlops/`, `dvc.yaml`, `params.yaml`, `feature_repo/`, `reports/` | Optional MLOps layer (GX, MLflow, DVC, Deepchecks, SHAP/Fairlearn, Feast, Prefect) and its committed JSON results — see `docs/MLOPS.md` |
-| `docker-compose.monitoring.yml`, `monitoring/prometheus/`, `monitoring/grafana/` | Local Prometheus + Grafana stack (provisioned datasource and dashboard) |
+| `docker-compose.monitoring.yml`, `monitoring/prometheus/`, `monitoring/grafana/` | Local Prometheus + Grafana stack (provisioned datasource; dashboard JSON also importable into Grafana Cloud) |
+| `scripts/metrics_agent.py`, `deploy/azure/enable_metrics_push.sh`, `deploy/monitoring/` | Optional metrics push from Azure Container Apps (Grafana Cloud, or self-hosted option B via `deploy/azure/deploy_monitoring_aca.sh`) |
 | `requirements-mlops.txt`, `ruff.toml`, `docs/ci.yml.example` | MLOps environment, lint config, GitHub Actions CI/CD workflow (to be added via the web UI) |
 | `evaluation/` | `results.json`, synthetic samples |
 | `docs/` | `architecture.mmd/.png` and `deployment.mmd/.png` (exported from code), app screenshots, `module_summary.pdf` |
