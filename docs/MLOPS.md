@@ -618,6 +618,14 @@ Streamlit Community Cloud runs only `streamlit run app.py`, so `ihds/embedded_ap
   - Checked locally: after a source change and a page reload, the API moved to a new port, the old port was
     closed, and one MCP child remained. The push went on every 5 s with one pusher and "incl. API metrics".
   - The first page load after a push retrains the model (as on a cold start).
+  - **Switching from an older app.py:** that version had no holder for the running API. On the first rerun
+    with the new code, `app.py` finds the running `ihds-embedded-api` threads and stops those uvicorn servers.
+    It touches only those threads, because Streamlit's own server also runs on uvicorn. Then it re-imports the
+    project modules.
+  - Checked locally from a worktree: 256c514 was running (template grounding 0.616). After switching to
+    eacc43f plus this app.py and reloading the page, the app showed grounding 1.0 from the new reviewer, on a
+    new port. The old port was closed and one MCP child remained. A second source change rebuilt the API
+    again. In both cases the Streamlit process stayed up.
 - **Caveats:**
   - The API has no authentication. It listens only on 127.0.0.1 inside the app container.
   - `/metrics` is not reachable from outside; the push is the only way out.
@@ -790,7 +798,9 @@ the environment, or `LANGSMITH_API_KEY` in a `[langsmith]` secrets table. It the
   `langsmith_url`. That process is the app, or the REST API (embedded or external), which returns both in
   `POST /assess`. The URL comes from one cached project lookup (`tracing.run_url`).
   - The agent trace panel shows **View trace in LangSmith**.
-  - Without a URL it shows the run id and "link unavailable".
+  - If the lookup failed, the same link text points to the LangSmith home page for the configured endpoint
+    (`tracing.app_url()`), with the project and run id to search for. A caption gives the reason
+    (`langsmith_url_error`, returned by `POST /assess`; any key is masked).
   - If tracing is on in the app but the run came back without an id, it says so.
 - **Tokens in the app:** the draft caption shows `LLM tokens: N`, summed from the responses' usage metadata.
 - **Sidebar:** shows `LangSmith tracing: on (project ihds)` or off.
@@ -860,7 +870,7 @@ with the psycopg 3 driver. The table is `assessments`:
 The table is created on startup. A failed write is logged with credentials redacted, counted on
 `ihds_audit_writes_total{result="ok"|"failed"}`, and never raised into the assessment path. The sidebar shows
 `Audit log: postgres (neon) · N rows` when the host is Neon, `postgres` for any other Postgres URL, or
-`sqlite (local)`. The **Audit log** tab lists the last 20 rows. `GET /assessments/recent?limit=` returns the same
+`sqlite (local)`. The count is refreshed after an assessment's row is written, so it includes that run. The **Audit log** tab lists the last 20 rows. `GET /assessments/recent?limit=` returns the same
 rows as JSON. `POST /assess` writes the row (so the embedded Streamlit API and the Docker/Azure API both log).
 The in-process Streamlit fallback also writes, with `workflow_route=in-process`.
 

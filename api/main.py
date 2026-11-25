@@ -106,6 +106,7 @@ class AssessResponse(BaseModel):
     retrieval: str = ""
     langsmith_run_id: str = ""
     langsmith_url: str = ""
+    langsmith_url_error: str = ""
     llm_tokens: int = 0
     case_facts: list[str] = []
 

@@ -80,14 +80,32 @@ def _project_url(name: str) -> str:
     return _PROJECT_URLS[name]
 
 
+LAST_URL_ERROR = ""  # why the latest run_url() lookup failed ("" after a success)
+
+
+def app_url() -> str:
+    """LangSmith UI home for the configured endpoint (no API call): the fallback link."""
+    ep = os.environ.get("LANGSMITH_ENDPOINT", "https://api.smith.langchain.com").rstrip("/")
+    return ep.replace("://api.", "://", 1).replace("://eu.api.", "://eu.", 1) if "smith.langchain" in ep else ep
+
+
 def run_url(run_id: str) -> str | None:
     """Best-effort LangSmith UI link for a run; None when tracing is off or the lookup fails (no network,
-    project not created yet, key without read access). `?poll=true` makes the page wait for a run in flight."""
+    project not created yet, key without read access; the reason is kept in LAST_URL_ERROR, without the key).
+    `?poll=true` makes the page wait for a run in flight."""
+    global LAST_URL_ERROR
     if not run_id or not enabled():
         return None
     try:
-        return f"{_project_url(project())}/r/{run_id}?poll=true"
-    except Exception:
+        url = f"{_project_url(project())}/r/{run_id}?poll=true"
+        LAST_URL_ERROR = ""
+        return url
+    except Exception as exc:
+        msg = f"{type(exc).__name__}: {exc}"
+        for k in KEY_VARS:
+            if os.environ.get(k):
+                msg = msg.replace(os.environ[k], "***")
+        LAST_URL_ERROR = msg[:200]
         return None
 
 

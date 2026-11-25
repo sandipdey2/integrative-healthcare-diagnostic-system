@@ -170,3 +170,20 @@ def test_live_llm_runs_are_children_of_the_root_with_tokens():
     assert llm_runs and all(r.name == "writer_llm" and (r.total_tokens or 0) > 0 for r in llm_runs)
     assert root.total_tokens >= sum(r.total_tokens for r in llm_runs) > 0
     assert root.extra["metadata"]["llm_total_tokens"] == res.llm_tokens
+
+
+def test_app_url_and_lookup_error_is_kept_without_the_key(monkeypatch):
+    monkeypatch.delenv("LANGSMITH_ENDPOINT", raising=False)
+    assert tracing.app_url() == "https://smith.langchain.com"
+    monkeypatch.setenv("LANGSMITH_ENDPOINT", "https://eu.api.smith.langchain.com")
+    assert tracing.app_url() == "https://eu.smith.langchain.com"
+    monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_dummy_secret")
+    monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    monkeypatch.setattr(tracing, "_PROJECT_URLS", {})
+
+    def boom(name):
+        raise PermissionError("403 for key lsv2_dummy_secret")
+
+    monkeypatch.setattr(tracing, "_project_url", boom)
+    assert tracing.run_url("r1") is None
+    assert tracing.LAST_URL_ERROR.startswith("PermissionError") and "lsv2_dummy_secret" not in tracing.LAST_URL_ERROR

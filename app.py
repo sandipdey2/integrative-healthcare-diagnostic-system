@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -22,12 +23,13 @@ _PROJECT_PACKAGES = ("ihds", "api", "mcp_server")
 
 
 def _code_version() -> str:
-    """Hash of the project's Python sources (ihds/, api/, mcp_server/)."""
+    """Hash of the project's Python sources (ihds/, api/, mcp_server/) and of this file."""
     h = hashlib.sha1()
     root = Path(__file__).resolve().parent
     for pkg in _PROJECT_PACKAGES:
         for p in sorted((root / pkg).glob("*.py")):
             h.update(p.name.encode() + p.read_bytes())
+    h.update(Path(__file__).read_bytes())
     return h.hexdigest()[:12]
 
 
@@ -38,11 +40,26 @@ def _live() -> dict:
     return {}
 
 
+def _stop_untracked_embedded_apis() -> None:
+    """One-time switch from an app version without the holder below: stop the embedded uvicorn servers it left
+    running (their lifespan shutdown closes the System and MCP child they hold). Only threads named
+    "ihds-embedded-api" are touched; Streamlit's own server also runs on uvicorn."""
+    for t in threading.enumerate():
+        server = getattr(getattr(t, "_target", None), "__self__", None)  # Thread(target=server.run)
+        if t.name == "ihds-embedded-api" and hasattr(server, "should_exit"):
+            server.should_exit = True
+
+
 CODE_VERSION = _code_version()
-if _live().get("version") not in (None, CODE_VERSION):
+_PREV_VERSION = _live().get("version")
+_STALE_PROCESS = _PREV_VERSION is None and any(  # an older app.py (no holder) already started an embedded API
+    t.name == "ihds-embedded-api" and t.is_alive() for t in threading.enumerate())
+if _PREV_VERSION not in (None, CODE_VERSION) or _STALE_PROCESS:
     # Streamlit Cloud applies a git push by rerunning this script with only the changed modules reloaded. Unchanged
     # modules would keep references to the old ones, so drop every project module (except the metrics pusher,
     # whose thread keeps running) and import them again; the cached System and API are rebuilt below.
+    if _STALE_PROCESS:
+        _stop_untracked_embedded_apis()
     for _name in [m for m in sys.modules if m.split(".")[0] in _PROJECT_PACKAGES and m != "ihds.metrics_push"]:
         del sys.modules[_name]
 _live()["version"] = CODE_VERSION
@@ -133,9 +150,22 @@ def _langsmith_link(res) -> None:
     if url:
         st.markdown(f"[View trace in LangSmith]({url}) · run `{res.langsmith_run_id}`")
     elif res.langsmith_run_id:
-        st.caption(f"LangSmith run `{res.langsmith_run_id}` in project {tracing.project()} (link unavailable)")
+        # The run URL needs the workspace and project ids (one API lookup). If that lookup failed, link to the
+        # project list instead and say why.
+        st.markdown(f"[View trace in LangSmith]({tracing.app_url()}) · open project `{tracing.project()}` and "
+                    f"search run `{res.langsmith_run_id}`")
+        why = res.langsmith_url_error or tracing.LAST_URL_ERROR
+        st.caption("Direct run link unavailable" + (f": {why}" if why else ""))
     elif TRACING:
         st.caption("LangSmith tracing is on here, but the workflow returned no run id (tracing off where it ran)")
+
+
+def _render_audit_status(slot) -> None:
+    try:
+        info = audit_log.status()
+        slot.caption(f"Audit log: {info['backend']} · {info['rows']} rows")
+    except Exception:
+        slot.caption("Audit log: unavailable")
 
 
 EXTERNAL_API = os.environ.get("IHDS_API_URL", "").rstrip("/")
@@ -243,11 +273,8 @@ with st.sidebar:
             st.caption("Metrics push: off (no GRAFANA_RW_URL secret)")
     st.caption(f"LangSmith tracing: on (project {TRACING['project']})" if TRACING
                else "LangSmith tracing: off (no LANGSMITH_API_KEY)")
-    try:
-        info = audit_log.status()
-        st.caption(f"Audit log: {info['backend']} · {info['rows']} rows")
-    except Exception:
-        st.caption("Audit log: unavailable")
+    AUDIT_SLOT = st.empty()  # filled now and again after an assessment, so the row count includes it
+    _render_audit_status(AUDIT_SLOT)
     st.divider()
     st.markdown("**Advisory system only** — clinician review required.")
 
@@ -303,6 +330,7 @@ with tabs[0]:
             else:
                 metrics_push.record_assessment(res, time.perf_counter() - t0)  # no-op when the push is off
             audit_log.record(res, record, workflow_route="in-process")
+        _render_audit_status(AUDIT_SLOT)  # the row was written in-process or by the embedded API
         if res.status == "blocked":
             st.error(res.draft)
         else:

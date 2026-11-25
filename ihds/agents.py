@@ -320,6 +320,7 @@ class AdvisoryResult:
     retrieval: str = ""            # "chroma" | "keyword"
     langsmith_run_id: str = ""     # set when LangSmith tracing is on (ihds/tracing.py)
     langsmith_url: str = ""        # link to that run in the LangSmith UI ("" if it could not be resolved)
+    langsmith_url_error: str = ""  # why the link could not be resolved
     llm_tokens: int = 0            # total tokens of the writer's LLM calls (from the responses' usage metadata)
     case_facts: list = field(default_factory=list)  # case data given to the writer (grounding sources)
 
@@ -362,6 +363,7 @@ def _run_traced(graph, record: dict, question: str) -> AdvisoryResult:
                              "llm_total_tokens": res.llm_tokens, "hostname": socket.gethostname()})
             res.langsmith_run_id = str(rt.id)
             res.langsmith_url = tracing.run_url(res.langsmith_run_id) or ""
+            res.langsmith_url_error = "" if res.langsmith_url else tracing.LAST_URL_ERROR
         return res
 
     return ihds_assessment(dict(record), question or "")

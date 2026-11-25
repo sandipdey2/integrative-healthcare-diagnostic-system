@@ -120,3 +120,41 @@ def test_langsmith_link_comes_back_through_the_embedded_api(monkeypatch):
     assert any("(embedded)" in c.value for c in at.caption)
     assert any("[View trace in LangSmith](https://smith.example/o/T/projects/p/P/r/run-123?poll=true)" in m.value
                for m in at.markdown)
+
+
+def test_langsmith_fallback_link_when_the_run_url_lookup_fails(monkeypatch):
+    import sys
+
+    from streamlit.testing.v1 import AppTest
+
+    from ihds import agents, tracing
+    from ihds.config import ROOT
+
+    real_run = agents.run
+
+    def traced_run(graph, record, question=""):
+        res = real_run(graph, record, question)
+        res.langsmith_run_id, res.langsmith_url_error = "run-456", "HTTPError: 403 Forbidden"
+        return res
+
+    monkeypatch.setattr(agents, "run", traced_run)
+    monkeypatch.setattr(tracing, "run_url", lambda run_id: None)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("IHDS_API_URL", raising=False)
+    sys.path.insert(0, str(ROOT))
+    at = AppTest.from_file(str(ROOT / "app.py"), default_timeout=180)
+    at.run()
+
+    def audit_rows():
+        import re
+        side = " ".join(c.value for c in at.sidebar.caption)
+        m = re.search(r"Audit log: \S+.* · (\d+) rows", side)
+        return int(m.group(1)) if m else None
+
+    before = audit_rows()
+    [b for b in at.button if b.label == "Run advisory workflow"][0].click().run()
+    assert not at.exception
+    assert before is not None and audit_rows() == before + 1  # sidebar count refreshed after the audit write
+    assert any("[View trace in LangSmith](https://smith.langchain.com)" in m.value and "run-456" in m.value
+               for m in at.markdown)
+    assert any("Direct run link unavailable: HTTPError: 403 Forbidden" in c.value for c in at.caption)
