@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from prometheus_client import Counter
+from prometheus_client import REGISTRY, Counter
 from sqlalchemy import Boolean, DateTime, Float, Integer, JSON, String, create_engine, func, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import Engine
@@ -34,7 +34,17 @@ from ihds.config import FEATURES, ROOT
 log = logging.getLogger("ihds.audit_log")
 
 DEFAULT_SQLITE = ROOT / "data" / "audit.db"
-WRITES = Counter("ihds_audit_writes_total", "Assessment audit-log writes", ["result"])
+
+
+def _audit_counter() -> Counter:
+    """Reuse the collector if Streamlit re-imports this module (a second registration raises ValueError)."""
+    existing = REGISTRY._names_to_collectors.get("ihds_audit_writes_total")
+    if isinstance(existing, Counter):
+        return existing
+    return Counter("ihds_audit_writes_total", "Assessment audit-log writes", ["result"])
+
+
+WRITES = _audit_counter()
 WRITES.labels("ok")
 WRITES.labels("failed")
 
