@@ -45,8 +45,9 @@ names the MCP server lists over a real MCP session, and the agent→tool pairs i
   band, contributions, evidence, population, uncertainty, draft, review, revisions, escalated, trace,
   tool_calls, transport); `use_llm=true` needs a key on the server (else HTTP 400). `GET /health` reports the
   tool transport and tool names; `GET /monitoring/summary` returns the Evidently summaries.
-- **UI** (`app.py`): with `IHDS_API_URL` it calls `POST /assess`; otherwise it runs the graph in-process
-  (tools still over MCP stdio). The sidebar and the trace panel show the route and transport.
+- **UI** (`app.py`): with `IHDS_API_URL` it calls `POST /assess`. Otherwise (Streamlit Cloud, local
+  `streamlit run`) it starts the FastAPI app in a daemon thread of its own process on 127.0.0.1
+  (`ihds/embedded_api.py`) and calls that. If that fails, it runs the graph in-process; tools stay on MCP stdio. The sidebar and the trace panel show the route and transport.
 - **Docker** (`scripts/start_all.sh`): MCP HTTP server on 127.0.0.1:8765 → API on 8000 (`IHDS_TOOLS=mcp`) →
   Streamlit on 8501 (`IHDS_API_URL`). Each step waits for the previous one.
 

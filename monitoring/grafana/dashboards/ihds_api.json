@@ -6,7 +6,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 3,
+  "version": 4,
   "refresh": "10s",
   "time": {
     "from": "now-30m",
@@ -240,7 +240,7 @@
     {
       "id": 5,
       "type": "timeseries",
-      "title": "API request rate by route (req/s, API only)",
+      "title": "API request rate by route (req/s)",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -270,8 +270,8 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (route, status) (rate(ihds_http_requests_total{service=~\"$service\"}[5m]))",
-          "legendFormat": "{{route}} {{status}}"
+          "expr": "sum by (service, route, status) (rate(ihds_http_requests_total{service=~\"$service\"}[5m]))",
+          "legendFormat": "{{service}} {{route}} {{status}}"
         }
       ]
     },

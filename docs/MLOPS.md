@@ -258,8 +258,9 @@ The dashboard `monitoring/grafana/dashboards/ihds_api.json` has 10 panels:
 
 - stat panels for assessments, escalations, high-risk predictions and blocked. Each one counts events in the
   selected time range with `round(sum(increase(...[$__range])))`, which survives counter resets when a process
-  restarts. Dashboard version 3: re-import the JSON if you imported an earlier version;
-- API request rate per route;
+  restarts. Dashboard version 4: re-import the JSON if you imported an earlier version;
+- API request rate per route, split by `service` (the Docker/Azure API and the API embedded in the Streamlit Cloud
+  app);
 - assessment latency p50 / p95;
 - predictions per band;
 - outcomes and escalations;
@@ -470,9 +471,9 @@ bash deploy/azure/deploy_monitoring_aca.sh    # prompts for a Grafana admin pass
 
 ### Streamlit Community Cloud → Grafana Cloud (direct push)
 
-The Streamlit Cloud app (https://ihds-diabetes-advisor.streamlit.app) runs the LangGraph workflow in-process
-(tools over `mcp-stdio`, no FastAPI). It cannot run a Prometheus binary or expose `/metrics`, so
-`ihds/metrics_push.py` pushes from the Streamlit process itself.
+The Streamlit Cloud app (https://ihds-diabetes-advisor.streamlit.app) runs the FastAPI app inside its own process
+(see "Embedded REST API" below), with tools over `mcp-stdio`. It cannot run a Prometheus binary or expose
+`/metrics`, so `ihds/metrics_push.py` pushes from the Streamlit process itself.
 
 **How the push works:**
 
@@ -497,8 +498,13 @@ The Streamlit Cloud app (https://ihds-diabetes-advisor.streamlit.app) runs the L
   - Use the `[grafana]` table: Streamlit exports only root-level secrets as environment variables.
   - Checked on the box: neither the Streamlit nor the MCP process had any `GRAFANA_RW_*` variable.
 - **Sidebar:** shows `Metrics push: on → <host> · N ok / M failed` or `Metrics push: off`.
-- **API mode:** when the app calls the REST API (`IHDS_API_URL`), Streamlit does not count, because the API
-  already does.
+- **API mode:** when the app calls an external REST API (`IHDS_API_URL`, Docker/Azure), Streamlit neither
+  counts nor pushes, because that API already exposes `/metrics`.
+- **Embedded API:** the pusher also sends the in-process FastAPI app's `ihds_*` series from `prometheus_client`'s
+  default registry (`include_api_metrics`), relabelled `service="ihds-streamlit"`: `ihds_http_requests_total`,
+  `ihds_http_request_duration_seconds` and the assessment counters. `ihds_app_*` and `*_created` are skipped (the
+  pusher sends its own heartbeat). If a label set exists in both registries (the latency histogram), the API's
+  wins, so each series is sent once. The sidebar adds ` · incl. API metrics`.
 
 **Series:** the names are shared with `api/main.py`, so one dashboard covers both:
 
@@ -570,10 +576,51 @@ The latency panel now uses `ihds_assess_duration_seconds`, which the API also re
   Grafana Cloud **Explore**, or use a token with `metrics:read`.
 - **Dashboard (local):** imported into a local Grafana 12.1 whose datasource has another uid. It was fed by
   `metrics_push` through a local Prometheus remote-write receiver (40 synthetic assessments). The `service`
-  variable resolved to `ihds-streamlit`, and 9 of 10 panels returned data. The API request-rate panel is empty by
-  design. Latency p50 0.03 s, p95 0.085 s; heartbeat 0.2 s.
+  variable resolved to `ihds-streamlit`, and 9 of 10 panels returned data. The API request-rate panel was empty
+  then, because Streamlit had no API; it gets data since the embedded API (dashboard version 4). Latency p50 0.03 s, p95 0.085 s; heartbeat 0.2 s.
 - **Dashboard (Grafana Cloud):** not imported through the API. That needs the stack URL and a Grafana service
   account token, and the write token cannot list stacks.
+
+### Embedded REST API in the Streamlit Cloud app
+
+Streamlit Community Cloud runs only `streamlit run app.py`, so `ihds/embedded_api.py` starts the FastAPI app
+(`api/main.py`) inside the Streamlit process. The UI then uses the same `POST /assess` route as Docker and Azure.
+
+- **Start:** once per process (`st.cache_resource`), so Streamlit reruns do not start it again. `uvicorn.Server`
+  runs in a daemon thread on `127.0.0.1` and a free port, with no signal handlers and no access log. The app waits
+  for `GET /health` (30 s timeout, polled every 0.2 s).
+- **Shared state:** the API reuses the app's `System` (`api.main.STATE["system"]`): the same model, the same
+  Chroma index and one MCP stdio child. There is no second training run and no second MCP process. The MCP HTTP
+  server is not started (it is optional); tools stay `mcp-stdio`.
+- **Gate:** `IHDS_EMBED_API`, default on. It is off when `IHDS_API_URL` is set, and `scripts/start_all.sh` sets
+  `IHDS_EMBED_API=0` for Docker/Azure, where the API runs as its own process.
+- **Fallback:** if the start or a call fails, the app runs the graph in-process. The sidebar then shows
+  `Embedded REST API unavailable, using in-process: <reason>`, or a warning for one failed call. That
+  assessment is counted in the API's metrics, so it is still pushed.
+- **Sidebar and trace:** `Workflow via REST API http://127.0.0.1:<port> · tools: mcp-stdio`, `REST API embedded
+  in this process (started in X s)`, and `Workflow route: REST API ... (embedded)`.
+- **Tracing:** LangSmith tracing, the Chroma retrieval and the Grafana push are unchanged. Tokens stay out of the
+  MCP child: on the box its environment had only HOME, LOGNAME, PATH, TERM, USER, PYTHONPATH and IHDS_GAN_STEPS.
+- **Startup:** about 0.2 s on the box, because the `System` is already built. The first page load still pays for
+  the model and Chroma build (and the ONNX download on Streamlit Cloud).
+- **Caveats:**
+  - The API has no authentication. It listens only on 127.0.0.1 inside the app container.
+  - `/metrics` is not reachable from outside; the push is the only way out.
+  - All sessions share one API and one MCP child, as before with the shared `System`.
+  - If Streamlit Cloud ever runs several processes, each starts its own API on its own port, with its own
+    `instance` label.
+
+**Checked on the box** (`streamlit run`, headless Chrome, a local remote-write receiver):
+
+- The sidebar showed `Workflow via REST API http://127.0.0.1:46453 · tools: mcp-stdio` and `started in 0.2 s`.
+- One assessment returned p=0.60, high, approved, with retrieval `chroma` and a LangSmith run link.
+- The receiver got `ihds_http_requests_total{service="ihds-streamlit",method="POST",route="/assess",status="200"}`
+  with a 0 sample first, then 1. No push sent duplicate series.
+- Only one MCP child ran.
+
+Tests: `tests/test_embedded_api.py` covers the gate, `/health` and `/assess` on the shared `System`, the pushed
+API series (labels, zero-first, no duplicates, no `_created`), and the Streamlit app routed through the embedded
+API (AppTest).
 
 ## Evidence retrieval: ChromaDB with a keyword fallback
 

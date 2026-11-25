@@ -162,6 +162,8 @@ class Pusher:
         self.pushes_failed = 0
         self.last_status: int | str | None = None
         self._last_ts = 0
+        self.include_prometheus_client = False  # also push ihds_* from prometheus_client's REGISTRY (embedded API)
+        self._prom_seen: set[tuple] = set()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -173,7 +175,15 @@ class Pusher:
         self._last_ts = ts
         with self.registry._lock:
             fresh = set(self.registry.new_keys)
-        rows = self.registry.snapshot(self.labels, ts, ts - max(1, int(self.interval * 1000)))
+        zero_ts = ts - max(1, int(self.interval * 1000))
+        rows = self.registry.snapshot(self.labels, ts, zero_ts)
+        prom_new: set[tuple] = set()
+        if self.include_prometheus_client:
+            prom_rows, prom_new = self._prometheus_client_rows(ts, zero_ts)
+            # one series per label set: the API's REGISTRY wins (e.g. ihds_assess_duration_seconds exists in both;
+            # the app records into the API's metrics while the embedded API is in use)
+            taken = {tuple(sorted(lbl.items())) for lbl, _ in prom_rows}
+            rows = [r for r in rows if tuple(sorted(r[0].items())) not in taken] + prom_rows
         body = snappy_block(encode_write_request([(lbl, v, ts) for lbl, v in rows]))
         headers = {"Content-Type": "application/x-protobuf", "Content-Encoding": "snappy",
                    "X-Prometheus-Remote-Write-Version": "0.1.0", "User-Agent": "ihds-metrics-push/1"}
@@ -185,6 +195,7 @@ class Pusher:
                 self.last_status = r.status
             with self.registry._lock:
                 self.registry.new_keys -= fresh  # zero samples delivered; retried on failure
+            self._prom_seen |= prom_new
             self.pushes_ok += 1
             return True
         except urllib.error.HTTPError as e:
@@ -196,6 +207,31 @@ class Pusher:
             log.warning("metrics push failed: %s", type(e).__name__)
         self.pushes_failed += 1
         return False
+
+    def _prometheus_client_rows(self, ts: int, zero_ts: int):
+        """ihds_* samples of the in-process FastAPI app (api/main.py registers them in prometheus_client's default
+        REGISTRY), relabelled with this pusher's labels. ihds_app_* gauges are skipped (the pusher sends its own
+        heartbeat) and so are *_created timestamps. New counter/histogram series get a leading 0 sample."""
+        try:
+            from prometheus_client import REGISTRY
+        except ImportError:
+            return [], set()
+        rows, new = [], set()
+        for fam in REGISTRY.collect():
+            if not fam.name.startswith("ihds_") or fam.name.startswith("ihds_app_"):
+                continue
+            cumulative = fam.type in ("counter", "histogram")
+            for smp in fam.samples:
+                if smp.name.endswith("_created"):
+                    continue
+                labels = {**self.labels, **smp.labels, "__name__": smp.name}
+                key = (smp.name, tuple(sorted(smp.labels.items())))
+                if cumulative and key not in self._prom_seen:
+                    new.add(key)
+                    rows.append((labels, [(0.0, zero_ts), (smp.value, ts)]))
+                else:
+                    rows.append((labels, smp.value))
+        return rows, new
 
     def _loop(self) -> None:
         while not self._stop.is_set():
@@ -273,8 +309,14 @@ def record_assessment(res, seconds: float | None = None) -> None:
         log.exception("metrics record failed")
 
 
+def include_api_metrics(on: bool = True) -> None:
+    """Push the in-process FastAPI app's prometheus_client metrics too (used with ihds/embedded_api.py)."""
+    if _PUSHER is not None:
+        _PUSHER.include_prometheus_client = on
+
+
 def status() -> dict | None:
     if _PUSHER is None:
         return None
     return {"url": _PUSHER.url, "ok": _PUSHER.pushes_ok, "failed": _PUSHER.pushes_failed,
-            "last_status": _PUSHER.last_status}
+            "last_status": _PUSHER.last_status, "api_metrics": _PUSHER.include_prometheus_client}

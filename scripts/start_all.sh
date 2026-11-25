@@ -38,5 +38,5 @@ if [ -n "${GRAFANA_RW_URL:-}" ]; then
   IHDS_API_PORT="$API_PORT" python scripts/metrics_agent.py &
 fi
 
-IHDS_API_URL="http://127.0.0.1:$API_PORT" exec env -u GRAFANA_RW_TOKEN streamlit run app.py \
+IHDS_EMBED_API=0 IHDS_API_URL="http://127.0.0.1:$API_PORT" exec env -u GRAFANA_RW_TOKEN streamlit run app.py \
   --server.port="$UI_PORT" --server.address=0.0.0.0 --server.headless=true

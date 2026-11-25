@@ -137,7 +137,7 @@ Full commands and results are in [`docs/MLOPS.md`](docs/MLOPS.md).
 
 | Environment | Command | Result |
 |---|---|---|
-| Runtime (`requirements.txt` + dev deps, now with chromadb/onnxruntime/langsmith) | `pytest -q -rs` | **72 passed, 14 skipped** without a LangSmith key. The original 56 still give 56 passed, 11 skipped with the new test files ignored (`test_metrics_agent.py`, `test_metrics_push.py`, `test_retrieval.py`, `test_tracing.py`). New tests: 3 agent + 4 push + 5 retrieval + 4 tracing. Skips: 4 live `vocareum`, 7 MLOps tools not installed, promtool, live Grafana push, live LangSmith. With `LANGSMITH_API_KEY` set, `tests/test_tracing.py` gives 5 passed (live test included) |
+| Runtime (`requirements.txt` + dev deps, now with chromadb/onnxruntime/langsmith) | `pytest -q -rs` | **75 passed, 14 skipped** without a LangSmith key. The original 56 still give 56 passed, 11 skipped with the new test files ignored (`test_metrics_agent.py`, `test_metrics_push.py`, `test_retrieval.py`, `test_tracing.py`, `test_embedded_api.py`); `test_e2e.py`'s AppTest now goes through the embedded API. New tests: 3 agent + 4 push + 5 retrieval + 4 tracing + 3 embedded API. Skips: 4 live `vocareum`, 7 MLOps tools not installed, promtool, live Grafana push, live LangSmith. With `LANGSMITH_API_KEY` set, `tests/test_tracing.py` gives 5 passed (live test included) |
 | MLOps (`requirements-mlops.txt`, separate venv) | `pytest -q tests/test_mlops.py tests/test_metrics_agent.py tests/test_metrics_push.py` | **17 passed, 2 skipped** (promtool not on PATH; live Grafana test without creds) |
 | MLOps | `pip install -r requirements-mlops.txt` in a fresh venv, then `pip check` | installs with pip; "No broken requirements found" |
 | Both | `ruff check .` (`ruff.toml`: E, F, W; E501/E702 ignored) | All checks passed. Fixing it removed 9 unused imports and invalid escapes from existing files; there were no behaviour changes |
@@ -189,6 +189,16 @@ What `tests/test_metrics_push.py` checks (stdlib only):
   and heartbeat values with `service="ihds-streamlit"`, and that `repr()` hides the token;
 - HTTP 500 and connection-refused errors return `False` and never raise;
 - live (only with `GRAFANA_RW_*` in the env): Grafana Cloud accepts a push.
+
+What `tests/test_embedded_api.py` checks (FastAPI inside the Streamlit process):
+
+- the gate: on by default, off with `IHDS_EMBED_API=0` or when `IHDS_API_URL` is set;
+- the embedded uvicorn answers `/health` (on the shared `System`, `inprocess` tools in the test) and `POST /assess`;
+- the pusher, against a local receiver, sends `ihds_http_requests_total{route="/assess",method="POST"}` with
+  `service="ihds-streamlit"` and a 0 sample first. It sends no `_created` series, one `ihds_app_up` and no
+  duplicate label sets;
+- the Streamlit app (AppTest) shows `Workflow via REST API http://127.0.0.1:...` and an assessment works, with
+  `(embedded)` and the retrieval in the trace caption.
 
 What `tests/test_metrics_agent.py` checks (stdlib only, so it runs in the runtime venv):
 

@@ -15,7 +15,7 @@ import time
 import pandas as pd
 import streamlit as st
 
-from ihds import agents, data, metrics_push, model, monitoring, stats_analysis, tracing, workflow
+from ihds import agents, data, embedded_api, metrics_push, model, monitoring, stats_analysis, tracing, workflow
 from ihds.config import FEATURES, LLM_MODEL, REPORTS_DIR, ROOT, TARGET, VALID_RANGES
 from ihds.pipeline import build_system
 
@@ -74,13 +74,14 @@ def _langsmith_url(run_id: str):
     return tracing.run_url(run_id)
 
 
-API_URL = os.environ.get("IHDS_API_URL", "").rstrip("/")
+EXTERNAL_API = os.environ.get("IHDS_API_URL", "").rstrip("/")
 
 
 @st.cache_resource(show_spinner="Training risk model and GAN (first load only)...")
 def get_system():
-    # In API mode the graph runs in the API service; the local system only feeds the other tabs.
-    return build_system(tools_mode="inprocess" if API_URL else None)
+    # With an external API (Docker/Azure) the graph runs there; the local system only feeds the other tabs.
+    # Otherwise this System (MCP stdio tools) is shared with the embedded API below.
+    return build_system(tools_mode="inprocess" if EXTERNAL_API else None)
 
 
 def run_via_api(record: dict, question: str, use_llm: bool) -> agents.AdvisoryResult:
@@ -95,6 +96,21 @@ def run_via_api(record: dict, question: str, use_llm: bool) -> agents.AdvisoryRe
 
 
 S = get_system()
+
+
+@st.cache_resource(show_spinner="Starting the embedded REST API (first load only)...")
+def get_embedded_api():
+    """Once per process: FastAPI on 127.0.0.1:<free port> in a daemon thread (ihds/embedded_api.py)."""
+    try:
+        api = embedded_api.EmbeddedAPI(S)
+        metrics_push.include_api_metrics(True)  # push the API's ihds_http_* etc. with service=ihds-streamlit
+        return {"url": api.url, "error": None, "startup_s": api.startup_s}
+    except Exception as exc:
+        return {"url": "", "error": f"{type(exc).__name__}: {exc}"[:200], "startup_s": None}
+
+
+EMBEDDED = get_embedded_api() if (not EXTERNAL_API and embedded_api.enabled()) else None
+API_URL = EXTERNAL_API or (EMBEDDED["url"] if EMBEDDED else "")
 
 
 @st.cache_resource(show_spinner=False)
@@ -128,13 +144,18 @@ with st.sidebar:
         st.write("No OPENAI_API_KEY: template mode")
     if API_URL:
         st.write(f"Workflow via REST API {API_URL} · tools: {api_health.get('tools_transport', api_health.get('error'))}")
+        if EMBEDDED:
+            st.caption(f"REST API embedded in this process (started in {EMBEDDED['startup_s']} s)")
     else:
         st.write(f"Workflow in-process · agent tools via {S.tools.transport}")
+        if EMBEDDED and EMBEDDED["error"]:
+            st.caption(f"Embedded REST API unavailable, using in-process: {EMBEDDED['error']}")
+    if not EXTERNAL_API:
         push = metrics_push.status()
         if push:
             host = push["url"].split("/")[2]
             st.caption(f"Metrics push: on → {host} · {push['ok']} ok / {push['failed']} failed"
-                       f" (last {push['last_status']})")
+                       f" (last {push['last_status']})" + (" · incl. API metrics" if push.get("api_metrics") else ""))
         else:
             st.caption("Metrics push: off (no GRAFANA_RW_URL secret)")
     st.caption(f"LangSmith tracing: on (project {TRACING['project']})" if TRACING
@@ -176,13 +197,23 @@ with tabs[0]:
     question = st.text_input("Optional clinician question", placeholder="e.g. Which factors drive this score?")
 
     if st.button("Run advisory workflow", type="primary"):
+        res = None
         if API_URL:
-            res = run_via_api(record, question, bool(use_llm))  # the API service counts it in its own /metrics
-        else:
+            try:
+                res = run_via_api(record, question, bool(use_llm))  # the API counts it in its own metrics
+            except Exception as exc:
+                if EXTERNAL_API:
+                    raise
+                st.warning(f"Embedded REST API call failed ({type(exc).__name__}); ran the workflow in-process.")
+        if res is None:
             graph = get_llm_graph() if (use_llm and has_key) else S.graph
             t0 = time.perf_counter()
             res = agents.run(graph, record, question)
-            metrics_push.record_assessment(res, time.perf_counter() - t0)  # no-op when the push is off
+            if API_URL:  # embedded API fallback: count it in the API's metrics, which the pusher already sends
+                from api.main import record_assessment as api_record
+                api_record(res, time.perf_counter() - t0)
+            else:
+                metrics_push.record_assessment(res, time.perf_counter() - t0)  # no-op when the push is off
         if res.status == "blocked":
             st.error(res.draft)
         else:
@@ -211,7 +242,8 @@ with tabs[0]:
             with st.expander("Reviewer checks"):
                 st.json(res.review)
             with st.expander("Agent trace (LangGraph node order) and tool-call log (audit)"):
-                st.caption(f"Workflow route: {'REST API ' + API_URL if API_URL else 'in-process LangGraph'} · "
+                st.caption(f"Workflow route: {'REST API ' + API_URL if API_URL else 'in-process LangGraph'}"
+                           f"{' (embedded)' if API_URL and not EXTERNAL_API else ''} · "
                            f"tool transport: {res.transport} · retrieval: {res.retrieval or 'n/a'}")
                 if res.langsmith_run_id:
                     url = _langsmith_url(res.langsmith_run_id)

@@ -48,7 +48,7 @@ modelling (GAN), generative AI (optional gpt-4o-mini writer), agentic systems (L
 | REST API | `api/main.py` (FastAPI + pydantic) | `POST /assess` (record + question + `use_llm` → draft, review, trace, tool log, transport), `GET /health`, `GET /monitoring/summary`, `GET /schema/features`, `GET /metrics` (Prometheus); OpenAPI docs at `/docs`. |
 | Evidence retrieval | `ihds/vector_store.py`, `ihds/workflow.py` | ChromaDB index of the 14 evidence cards with local ONNX MiniLM embeddings; the TF-IDF keyword matcher is the fallback (`IHDS_RETRIEVAL=keyword` forces it). The trace records `retrieval: chroma` or `keyword`. Comparison: `scripts/compare_retrieval.py` ([results](docs/MLOPS.md#evidence-retrieval-chromadb-with-a-keyword-fallback)) |
 | Tracing (optional) | `ihds/tracing.py` | LangSmith tracing when `LANGSMITH_API_KEY` is set (env or the `[langsmith]` Streamlit secret): project `ihds`, one `ihds-assessment` trace per run with tags and metadata (band, status, draft source, retrieval). The run ID is shown in the trace panel |
-| UI | `app.py` (Streamlit) | Calls `POST /assess` when `IHDS_API_URL` is set; otherwise runs the graph in-process (tools still via MCP stdio). |
+| UI | `app.py` (Streamlit) | Calls `POST /assess` on `IHDS_API_URL` when set (Docker/Azure). Otherwise it starts the FastAPI app inside its own process on 127.0.0.1 (`ihds/embedded_api.py`, `IHDS_EMBED_API=0` to disable) and calls that, falling back to the in-process graph if it cannot (tools via MCP stdio). |
 
 ![service view exported from code](docs/deployment.png)
 
@@ -95,7 +95,7 @@ python3 -m venv .venv          # Python 3.11–3.14 && source .venv/bin/activate
 pip install -r requirements-dev.txt
 pytest -q                                   # 56 offline tests pass (+4 live tests and 7 MLOps tests skipped)
 python -m ihds.pipeline                     # evaluation + Evidently reports
-streamlit run app.py --server.headless true # http://localhost:8501 (graph in-process, tools via MCP stdio)
+streamlit run app.py --server.headless true # http://localhost:8501 (embedded REST API on 127.0.0.1, tools via MCP stdio)
 ```
 
 Each layer on its own:
@@ -129,7 +129,7 @@ For Streamlit, the same two values can go in `.streamlit/secrets.toml` (git-igno
 
 Both deployments serve the `main` branch. LLM drafts vary from run to run.
 
-- **Streamlit Community Cloud:** [ihds-diabetes-advisor.streamlit.app](https://ihds-diabetes-advisor.streamlit.app/). The app runs the graph in-process and spawns the MCP server over stdio (labelled in-process fallback only if the server cannot start). Optional secrets: `OPENAI_API_KEY` and `OPENAI_API_BASE`. A live gpt-4o-mini run (default inputs) rejected the first draft for grounding (0.19) and approved the second (0.207); draft source `llm`.
+- **Streamlit Community Cloud:** [ihds-diabetes-advisor.streamlit.app](https://ihds-diabetes-advisor.streamlit.app/). The app starts the FastAPI app inside its process (embedded REST API on 127.0.0.1, see docs/MLOPS.md) and spawns the MCP server over stdio (labelled in-process fallback only if the server cannot start). Optional secrets: `OPENAI_API_KEY` and `OPENAI_API_BASE`. A live gpt-4o-mini run (default inputs) rejected the first draft for grounding (0.19) and approved the second (0.207); draft source `llm`.
 - **Azure Container Apps** (West US): [ihds-app.bluebay-94b3aae3.westus.azurecontainerapps.io](https://ihds-app.bluebay-94b3aae3.westus.azurecontainerapps.io). The Docker image runs `scripts/start_all.sh` (MCP HTTP on `127.0.0.1:8765` → FastAPI on `8000` → Streamlit on `8501`). Public ingress is port 8501; the UI calls the in-container API at `http://127.0.0.1:8000`. Verified 2026-11-25: `GET /_stcore/health` returned `ok` (HTTP 200). On the default record the sidebar showed `Workflow via REST API http://127.0.0.1:8000 · tools: mcp-http` and `LLM key configured on the API server`; risk p = 0.604 (high band, top driver Glucose); evidence K7, K2, K1; tools `risk_score`, `explain_contributions`, `rag_search` and `population_context` over `mcp-http`. The writer produced three gpt-4o-mini drafts; the reviewer rejected all three for grounding (0.185, 0.182, 0.185). The revision cap was reached, so `finalize` released the template draft (page grounding 0.703) and marked the case escalated to human review.
 
 ![Azure Container Apps — risk assessment result (template released after three rejected LLM drafts)](docs/screenshots/08_azure_container_app.png)

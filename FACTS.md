@@ -51,7 +51,7 @@ all 8 features p < 1e-5.
 - Trace shows transport: "risk_agent: [tools via mcp-stdio] p=... ". MCP and in-process give identical outputs (test on 10 records + every tool over HTTP).
 - Agent→tool map (from tool-call log): risk_agent → risk_score, explain_contributions; evidence_agent → rag_search, population_context; uncertainty_agent → synthetic_neighbors.
 - FastAPI api/main.py (fastapi 0.165.0, uvicorn 0.54.0): POST /assess, GET /health, GET /monitoring/summary, GET /schema/features, /docs. use_llm=true without key → 400; bad types → 422.
-- Streamlit uses the API when IHDS_API_URL is set, else in-process graph (tools via MCP stdio).
+- Streamlit uses the API when IHDS_API_URL is set; else it embeds the FastAPI app in its own process (ihds/embedded_api.py, uvicorn daemon thread on 127.0.0.1, shared System, IHDS_EMBED_API gate, in-process fallback); tools via MCP stdio. Its API metrics are pushed with service=ihds-streamlit.
 - Docker: scripts/start_all.sh → MCP HTTP 127.0.0.1:8765 → API :8000 (IHDS_TOOLS=mcp) → Streamlit :8501; container healthy, /health tools_transport "mcp-http", UI trace "Workflow route: REST API ... · tool transport: mcp-http" (docs/screenshots/07_docker_api_mcp_trace.png); ~0.83 GB RAM after one UI run.
 - Timing: MCP stdio graph run ≈ 0.02 s per case (50 cases 0.86 s) after ~5 s server start-up. Pipeline evaluation results unchanged by the switch to MCP (float noise only).
 
