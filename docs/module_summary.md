@@ -5,15 +5,15 @@ Repository: github.com/sandipdey2/integrative-healthcare-diagnostic-system
 
 ## Overview and Industry Context
 
-Type 2 diabetes is frequently undiagnosed for years, and screening in primary care depends on clinicians interpreting routine measurements under time pressure. Current guidance recommends screening adults with overweight or obesity from age 35 and confirming diagnosis with standard laboratory criteria (American Diabetes Association Professional Practice Committee [ADA], 2024; US Preventive Services Task Force, 2021). Early identification matters because lifestyle intervention reduced the incidence of diabetes by 58% in people at high risk (Diabetes Prevention Program Research Group, 2002).
+Type 2 diabetes is often undiagnosed for years, and primary-care screening depends on clinicians interpreting routine measurements under time pressure. Guidance recommends screening adults with overweight or obesity from age 35 and confirming diagnosis with standard laboratory criteria (American Diabetes Association Professional Practice Committee [ADA], 2024; US Preventive Services Task Force, 2021). Early identification matters: lifestyle intervention reduced incidence by 58% in people at high risk (Diabetes Prevention Program Research Group, 2002).
 
-I built a decision-support prototype for this screening and triage setting. A clinician enters eight routine measurements (pregnancies, 2-hour glucose, blood pressure, skin-fold thickness, insulin, BMI, diabetes pedigree function and age), and a LangGraph multi-agent workflow returns an **advisory draft**: a risk probability and band, the factors driving it, cited guideline snippets, a robustness check for borderline cases and a full audit trace of every agent step and tool call. The system never issues a diagnosis or treatment advice; every output says so and the clinician decides.
+I built a decision-support prototype for this setting. A clinician enters eight routine measurements (pregnancies, 2-hour glucose, blood pressure, skin-fold thickness, insulin, BMI, diabetes pedigree function and age), and a LangGraph multi-agent workflow returns an **advisory draft**: a risk probability and band, the factors driving it, cited guideline snippets, a robustness check for borderline cases and a full audit trace. The system never issues a diagnosis or treatment advice; every output says so and the clinician decides.
 
-The data are the public Pima Indians Diabetes Database (Smith et al., 1988): 768 records of women aged 21 and over of Pima heritage, 268 (34.9%) with diabetes. The healthcare setting imposes the main constraints: errors have clinical consequences, the population is narrow, records are incomplete (48.7% of Insulin values are recorded as impossible zeros), and regulators expect clinicians to be able to review the basis of any recommendation (US Food and Drug Administration [FDA], 2022).
+The data are the public Pima Indians Diabetes Database (Smith et al., 1988): 768 records of women aged 21 and over of Pima heritage, 268 (34.9%) with diabetes. Constraints follow from the setting: errors have clinical consequences, the population is narrow, records are incomplete (48.7% of Insulin values are impossible zeros), and regulators expect clinicians to review the basis of any recommendation (US Food and Drug Administration [FDA], 2022).
 
 ## Integration Rationale
 
-The system is new work, but each core component deliberately reuses a method I developed in an earlier capstone project. The integration is explicit in the code: each method is a module, and each module is exposed to the agents as a named tool.
+The system is new work, but each core component reuses a method from an earlier capstone. The integration is explicit: each method is a module exposed to the agents as a named tool.
 
 | Prior project | Method reused | Location in this repo | Agent tool |
 |---|---|---|---|
@@ -22,21 +22,21 @@ The system is new work, but each core component deliberately reuses a method I d
 | Project 5 — [generative-mnist](https://github.com/sandipdey2/generative-mnist) | MLP generator/discriminator GAN (LeakyReLU 0.2, BCE, Adam 2e-4, β = 0.5/0.999), re-implemented in NumPy for tabular data | `ihds/gan.py` | `synthetic_neighbors` |
 | Project 6 — [agentic-rag-system](https://github.com/sandipdey2/agentic-rag-system) | LangGraph StateGraph with typed state, input guard, TF-IDF retrieval over a CSV knowledge base, reviewer with grounding score, trace logging | `ihds/agents.py`, `ihds/workflow.py`, `data/clinical_knowledge.csv` | `rag_search` |
 
-My Statistical Analysis project (Project 2) taught me to test group differences before modelling rather than assume them. Here, Welch t-tests confirm that all eight features separate diabetic from non-diabetic patients (p < 1e-5); glucose has the largest effect (142.3 vs 110.6 mg/dL, d = 1.16). The evidence agent quotes these population statistics for the patient's top risk driver.
+Project 2 (Statistical Analysis) taught me to test group differences before modelling. Here, Welch t-tests confirm that all eight features separate diabetic from non-diabetic patients (p < 1e-5); glucose has the largest effect (142.3 vs 110.6 mg/dL, d = 1.16). The evidence agent quotes these statistics for the patient's top risk driver.
 
-My Breast Cancer Classification project (Project 3) showed that a scaled logistic regression is a strong, auditable baseline for medical tabular data. I kept that pipeline and metric set, and added `class_weight="balanced"` and median imputation for the impossible zeros.
+Project 3 (Breast Cancer Classification) showed that a scaled logistic regression is a strong, auditable baseline for medical tabular data. I kept that pipeline and metric set, and added `class_weight="balanced"` and median imputation for the impossible zeros.
 
-My Generative MNIST project (Project 5) gave me a working understanding of adversarial training. I re-implemented the same architecture in NumPy for tabular rows and use the generated profiles only as a stress-test population and a neighbourhood for uncertainty checks.
+Project 5 (Generative MNIST) supplied the adversarial-training pattern. I re-implemented the same architecture in NumPy for tabular rows and use the generated profiles only for stress tests and uncertainty checks.
 
-My Agentic RAG project (Project 6) supplied the orchestration pattern: a typed LangGraph state, an input guard, retrieval with citations and a reviewer that scores grounding before an answer is released.
+Project 6 (Agentic RAG) supplied the orchestration pattern: a typed LangGraph state, an input guard, retrieval with citations and a reviewer that scores grounding before an answer is released.
 
 Together, these cover five AI domains: statistical analysis, machine learning, deep generative modelling, generative AI (an optional LLM writer) and agentic systems, each with a specific clinical job.
 
 ## System Design and Technical Decisions
 
-Figure 1 (below) is exported from the compiled graph by `scripts/export_graph.py`, and a unit test fails if it and the code diverge—a direct response to earlier feedback that my diagrams overstated the code.
+Figure 1 is exported from the compiled graph by `scripts/export_graph.py`; a unit test fails if it and the code diverge, addressing earlier feedback that my diagrams overstated the code.
 
-At start-up, `ihds/pipeline.py` loads and cleans the data, runs the statistics, trains the model and the GAN. The five tools run in a separate MCP server (`mcp_server/server.py`, official `mcp` SDK), which the agents reach through `langchain-mcp-adapters` over stdio or HTTP; a FastAPI service exposes the workflow as `POST /assess`. Each request then flows through the graph with one shared typed state (`AgentState`) containing append-only `trace` and `tool_calls` lists:
+At start-up, `ihds/pipeline.py` loads and cleans the data, runs the statistics, and trains the model and the GAN. The five tools run in a separate MCP server (`mcp_server/server.py`, official `mcp` SDK), which the agents reach through `langchain-mcp-adapters` over stdio or HTTP; a FastAPI service exposes the workflow as `POST /assess`. Each request flows through the graph with one shared typed state (`AgentState`) containing append-only `trace` and `tool_calls` lists:
 
 1. `safety_guard` normalises zeros, checks ranges and required fields, and blocks prompt-injection and dosing or diagnosis questions, sending them to `refuse`.
 2. A rule-based `supervisor` routes in hub-and-spoke fashion: `risk_agent` (probability, band, per-feature log-odds contributions), then `evidence_agent` (top-3 TF-IDF knowledge snippets plus population statistics), then `uncertainty_agent` only when 0.40 ≤ p < 0.60 (probability spread across the 25 nearest GAN profiles). Each specialist returns to the supervisor.
@@ -45,35 +45,35 @@ At start-up, `ihds/pipeline.py` loads and cleans the data, runs the statistics, 
 
 ![LangGraph agent graph exported from the compiled code (docs/architecture.png). Solid arrows are fixed edges; dotted arrows are conditional.](architecture.png)
 
-**Key decisions and tradeoffs.** Logistic regression was chosen over more flexible models because its log-odds contributions are exact, which makes the explanations faithful rather than approximate (Amann et al., 2020). The cost is a ceiling on accuracy (test ROC-AUC 0.813). Class balancing trades precision for recall because, in screening, a missed case usually costs more than an extra confirmatory test. The supervisor uses rules rather than an LLM, so routing is deterministic and every path can be tested; the cost is less flexibility for unanticipated requests. The LLM only writes text and is optional, so the system also runs offline and reproducibly.
+**Key decisions and tradeoffs.** Logistic regression was chosen over more flexible models because its log-odds contributions are exact, so explanations are faithful rather than approximate (Amann et al., 2020). The cost is a ceiling on accuracy (test ROC-AUC 0.813). Class balancing trades precision for recall because, in screening, a missed case usually costs more than an extra confirmatory test. The supervisor uses rules rather than an LLM, so routing is deterministic and testable, at the cost of less flexibility. The LLM only writes text and is optional, so the system also runs offline and reproducibly.
 
-**Honest scope.** The agent graph runs in one process; only the tools are remote, over MCP. An in-process fallback is used, and labelled in the trace, only if the MCP server cannot start. There is no message bus and no memory beyond the single request. The gpt-4o-mini writer was verified live through Vocareum's OpenAI-compatible endpoint (results below); without a key the template writer is used, and the scenario results above it come from template runs. The API and MCP server have no authentication, and nothing stores patient inputs.
+**Honest scope.** The agent graph runs in one process; only the tools are remote, over MCP. An in-process fallback is used, and labelled in the trace, only if the MCP server cannot start. There is no message bus and no memory beyond the single request. The gpt-4o-mini writer was verified live through Vocareum (results below); without a key the template writer is used, and the scenario results come from template runs. The API and MCP server have no authentication, and nothing stores patient inputs.
 
 ## Ethical Considerations and Responsible AI
 
-**Bias and generalisability.** The model learned from one population of Pima women. Diabetes prevalence, body composition and glucose distributions differ by ancestry, sex and age, so the probabilities are not validated for men, other ethnic groups or younger patients. The data card and the app state this explicitly.
+**Bias and generalisability.** The model learned from one population of Pima women. Diabetes prevalence, body composition and glucose distributions differ by ancestry, sex and age, so the probabilities are not validated for men, other ethnic groups or younger patients.
 
-**Automation bias and accountability.** Clinicians may over-trust a confident number. My evaluation includes a diabetic patient scored at p = 0.077, which shows why the output is framed as an advisory draft: it reports a band and drivers rather than a verdict, includes a mandatory disclaimer that the reviewer verifies, and leaves the decision with the clinician. This matches the FDA (2022) expectation that clinicians can independently review the basis of non-device decision support.
+**Automation bias and accountability.** Clinicians may over-trust a confident number. A diabetic patient scored at p = 0.077 shows why the output is an advisory draft: it reports a band and drivers rather than a verdict, includes a mandatory disclaimer the reviewer verifies, and leaves the decision with the clinician. This matches the FDA (2022) expectation that clinicians can independently review the basis of non-device decision support.
 
 **Transparency.** Each output shows the exact feature contributions, cites retrieved evidence by identifier and includes the agent trace and tool log. Explainability in healthcare is a clinical, legal and ethical requirement, not only a technical one (Amann et al., 2020).
 
 **Misuse.** The safety guard blocks dosing and diagnosis requests, and the reviewer rejects banned phrases such as "you have diabetes" before any LLM text is released.
 
-**Responsible deployment safeguards.** Real-world use would require external and subgroup validation, an intent classifier instead of the keyword guard, Evidently alerts with named owners, clinical sign-off on the knowledge base, authentication with audit logging, and a regulatory device assessment. Monitoring is part of the design because deployed models accumulate hidden maintenance and data-dependency risks (Sculley et al., 2015).
+**Responsible deployment safeguards.** Real-world use would need external and subgroup validation, an intent classifier instead of the keyword guard, Evidently alerts with named owners, clinical sign-off on the knowledge base, authentication with audit logging, and a regulatory device assessment. Monitoring is part of the design because deployed models accumulate hidden maintenance and data-dependency risks (Sculley et al., 2015).
 
 ## Evaluation and Reflection
 
-Template-mode results are reproducible with `python -m ihds.pipeline` (seed 42). All 56 automated tests pass, including real MCP and API tests and four live Vocareum tests.
+Template-mode results are reproducible with `python -m ihds.pipeline` (seed 42). All 56 automated tests pass.
 
-**Model.** On the held-out test set (n = 154), the model reached accuracy 0.734, precision 0.603, recall 0.704, F1 0.650 and ROC-AUC 0.813. Training ROC-AUC was 0.851 (limited overfitting). Glucose (odds ratio 3.27 per SD) and BMI (2.03) dominate, which is clinically plausible.
+**Model.** On the held-out test set (n = 154), the model reached accuracy 0.734, precision 0.603, recall 0.704, F1 0.650 and ROC-AUC 0.813. Training ROC-AUC was 0.851 (limited overfitting). Glucose (odds ratio 3.27 per SD) and BMI (2.03) dominate.
 
-**Workflow scenarios.** Of 154 test records, 151 were released and 3 were correctly blocked for missing BMI. The reviewer approved all 151 drafts (mean grounding 0.551). Risk bands were ordered as intended: observed diabetes rates were 9.5% in the low band, 47.2% in the moderate band and 59.6% in the high band. All 27 borderline cases were routed to the uncertainty agent. With an always-unsafe stand-in LLM, the revision cap held: three writer attempts were made, the template was released and the case was escalated.
+**Workflow scenarios.** Of 154 test records, 151 were released and 3 were correctly blocked for missing BMI. The reviewer approved all 151 drafts (mean grounding 0.551). Risk bands were ordered: observed diabetes rates were 9.5% in the low band, 47.2% in the moderate band and 59.6% in the high band. All 27 borderline cases were routed to the uncertainty agent. With an always-unsafe stand-in LLM, the revision cap held: three writer attempts, then the template was released and the case escalated.
 
 **Evidently monitoring.** On the hold-out data, 0 of 8 features drifted. The 151 template drafts had 100% citation and disclaimer rates and no forbidden phrases.
 
 **Live LLM writer.** On 30 held-out cases run live with gpt-4o-mini, the reviewer approved 23 drafts first time and 5 after one revision; 2 cases hit the cap and were escalated with the template. All 11 rejections were for grounding below 0.2. Evidently found 100% citation and disclaimer rates and no forbidden phrases, but LLM drafts were less grounded than template drafts (mean 0.303 vs 0.549) and took 4.7 s rather than 0.01 s. One draft attached a valid citation to an unrelated claim, which the reviewer cannot detect. The cap also fired on a later Azure run; a Streamlit Cloud run approved the second draft. Outcomes vary run to run.
 
-**Did the system meet its goals?** Mostly. It produces grounded, explainable, auditable advisory drafts, blocks incomplete records and fails safely when the writer misbehaves. It does not reach diagnostic-grade accuracy, which was never the aim.
+**Did the system meet its goals?** Mostly. It produces grounded, explainable, auditable advisory drafts, blocks incomplete records and fails safely when the writer misbehaves. Diagnostic-grade accuracy was never the aim.
 
 **Failure cases.**
 
@@ -88,7 +88,7 @@ Template-mode results are reproducible with `python -m ihds.pipeline` (seed 42).
 
 ## Professional Relevance
 
-This project reflects applied AI engineering in a regulated industry: framing a clinical problem, choosing an interpretable model, orchestrating specialised agents with safety checks, monitoring inputs and outputs, and documenting only what the code does. The repository includes 56 tests, an MCP tool server, a REST API, Docker, Evidently reports and a tested architecture diagram. The system is live on Streamlit Community Cloud and Azure Container Apps (West US; URLs in the README). Making the architecture match the code reinforced an industry habit: claims must be verifiable from the system itself.
+This project reflects applied AI engineering in a regulated industry: framing a clinical problem, choosing an interpretable model, orchestrating specialised agents with safety checks, monitoring inputs and outputs, and documenting only what the code does. The repository includes 56 tests, an MCP tool server, a REST API, Docker, Evidently reports and a tested architecture diagram. The system is live on Streamlit Community Cloud (https://ihds-diabetes-advisor.streamlit.app/) and Azure Container Apps in West US (https://ihds-app.bluebay-94b3aae3.westus.azurecontainerapps.io). Making the architecture match the code reinforced an industry habit: claims must be verifiable from the system itself.
 
 ## References
 
