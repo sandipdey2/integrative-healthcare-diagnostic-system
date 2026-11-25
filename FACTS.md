@@ -1,4 +1,4 @@
-# Verified facts for the P8 deck, defense Q&A and module_summary.pdf
+# Verified facts for the P8 deck, and module_summary.pdf
 
 All numbers come from `python -m ihds.pipeline` (seed 42) on 2026-11-24 → `evaluation/results.json`,
 `monitoring/reports/*.json`. Re-running reproduces them exactly.
