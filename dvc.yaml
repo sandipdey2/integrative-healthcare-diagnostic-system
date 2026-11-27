@@ -128,6 +128,27 @@ stages:
       - reports/drift_summary.json:
           cache: false
 
+  drift_stats:
+    cmd: python -m ihds.drift_stats
+    deps:
+      - data/processed/train.parquet
+      - data/processed/test.parquet
+      - models/risk_model.joblib
+      - ihds/drift_stats.py
+      - ihds/data.py
+      - ihds/monitoring.py
+      - ihds/stats_analysis.py
+      - ihds/config.py
+    params:
+      - train.threshold
+      - drift_stats
+    metrics:
+      - reports/drift_stats.json:
+          cache: false
+    plots:
+      - reports/drift_stats_psi.png:
+          cache: false
+
   features:
     cmd: python -m ihds.mlops.features --patient-id 0 --patient-id 5
     deps:

@@ -49,6 +49,16 @@ cm_analysis:
   n_cv_folds: 5
   n_calibration_bins: 10
 
+drift_stats:
+  # python -m ihds.drift_stats (also a DVC stage). Not read by the Streamlit app.
+  # PSI bands are industry rules of thumb. A moderate PSI without a significant
+  # KS or chi-square test (Benjamini-Hochberg adjusted) is a watch, not an alert.
+  n_bins: 10
+  epsilon: 1.0e-4
+  psi_stable_max: 0.10
+  psi_major_min: 0.25
+  alpha: 0.05
+
 deploy:
   # Scheduled local Prefect deployment (ihds/mlops/deploy.py, `python -m ihds.mlops.deploy`). Not read by dvc.yaml.
   name: weekly-local

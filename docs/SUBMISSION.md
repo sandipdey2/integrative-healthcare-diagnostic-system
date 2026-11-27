@@ -38,7 +38,7 @@ docker compose -f docker-compose.monitoring.yml up -d --build   # Grafana on :30
 
 The stack also runs Loki and Grafana Alloy for the API's JSON logs (dashboard `IHDS logs (Loki)`). Run `mkdir -p logs` first. Local only. The log pipeline was run on the box with the same binaries outside Docker; the compose services were not run under Docker. See `docs/MLOPS.md`.
 
-**Optional MLOps layer** (separate venv): run `pip install -r requirements-mlops.txt`, then either `dvc repro` (8 stages, including `cm_analysis`) or `python -m ihds.mlops.flow` (Prefect, one-off, still 7 tasks). For the scheduled local Prefect deployment, run `prefect server start` and then `python -m ihds.mlops.deploy` in another terminal (local only: no Prefect Cloud, work pool, Docker or Azure). See `docs/MLOPS.md`.
+**Optional MLOps layer** (separate venv): run `pip install -r requirements-mlops.txt`, then either `dvc repro` (9 stages, including `cm_analysis` and `drift_stats`) or `python -m ihds.mlops.flow` (Prefect, one-off, still 7 tasks). For the scheduled local Prefect deployment, run `prefect server start` and then `python -m ihds.mlops.deploy` in another terminal (local only: no Prefect Cloud, work pool, Docker or Azure). See `docs/MLOPS.md`.
 
 ## 3. Secrets (all optional; placeholders only, never commit real values)
 
@@ -80,7 +80,7 @@ url = "postgresql://<user>:<password>@<host>/<db>?sslmode=require"   # or the DA
 | Safety | `workflow.input_guard`, reviewer, revision cap with escalation | Guard accuracy 0.947 on 19 labelled cases (1 paraphrase miss); loop-cap test |
 | Persistence and audit | `ihds/audit_log.py` (Postgres/Neon or SQLite; the eight features plus run metadata, no free text) | `tests/test_audit_log.py`; Neon read-back in `TESTING.md` §5 |
 | LLM observability | `ihds/tracing.py` (LangSmith root `ihds-assessment` with a `writer_llm` child); optional `ihds/arize_tracing.py` (Arize AX spans, content hidden by default) | `tests/test_tracing.py`, `tests/test_arize_tracing.py`; live runs in `TESTING.md` |
-| Monitoring | `ihds/monitoring.py` (Evidently), `/metrics`, `ihds/metrics_push.py`, `ihds/logging_config.py` (JSON logs to Loki through Alloy), `monitoring/` | `monitoring/reports/`; Grafana dashboard screenshot `docs/screenshots/10_grafana_dashboard.png` |
+| Monitoring | `ihds/monitoring.py` (Evidently), `ihds/drift_stats.py` (KS, PSI, chi-square), `/metrics`, `ihds/metrics_push.py`, `ihds/logging_config.py` (JSON logs to Loki through Alloy), `monitoring/` | `monitoring/reports/`; `reports/drift_stats.json`; Grafana dashboard screenshot `docs/screenshots/10_grafana_dashboard.png` |
 | MLOps | `ihds/mlops/`, `dvc.yaml`, `feature_repo/` (GX, MLflow, DVC, Deepchecks, SHAP/Fairlearn, Feast, Prefect) | `reports/*.json`; `docs/MLOPS.md` |
 | Testing and CI | `tests/`, `.github/workflows/ci.yml`, `ruff.toml` | 135 passed / 21 skipped with no keys (2026-11-27); MLOps venv `test_mlops.py` 15 passed; CI status: see the repository's Actions tab |
 | Deployment | `Dockerfile`, `scripts/start_all.sh`, `deploy/azure/` | Streamlit Cloud is live. Azure was deployed and is now offline (see §1) |

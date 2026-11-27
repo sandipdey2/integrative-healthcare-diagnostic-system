@@ -1,0 +1,438 @@
+{
+  "n_bins": 10,
+  "epsilon": 0.0001,
+  "psi_bands": {
+    "stable_max": 0.1,
+    "major_min": 0.25
+  },
+  "alpha": 0.05,
+  "threshold": 0.5,
+  "glucose_shift_mg_dl": 25.0,
+  "n_reference": 614,
+  "n_holdout": 154,
+  "verdict_rule": "A feature is an alert if PSI is major (greater than psi_major_min) or if the Benjamini-Hochberg-adjusted KS or chi-square p-value is below alpha. A moderate PSI (psi_stable_max to psi_major_min inclusive) without a significant test is a watch, not an alert. The overall scenario alert is true only when at least one feature is an alert.",
+  "note": "Reference is the training split. Holdout is the test split. Shifted is the test split with Glucose increased by 25 mg/dL (monitoring.GLUCOSE_SHIFT). KS and chi-square p-values are Benjamini-Hochberg-adjusted across the eight features, separately for each test. PSI bands are industry rules of thumb. Insulin has a high missing rate (~50%), so its PSI uses about 324 / 70 finite values on this split and is noisier than the complete features. No GAN scenario is included.",
+  "scenarios": {
+    "holdout": {
+      "name": "holdout",
+      "n_reference": 614,
+      "n_current": 154,
+      "features": [
+        {
+          "feature": "Pregnancies",
+          "n_ref": 614,
+          "n_cur": 154,
+          "missing_rate_ref": 0.0,
+          "missing_rate_cur": 0.0,
+          "missing_rate_diff": 0.0,
+          "ks_statistic": 0.0334,
+          "ks_pvalue": 0.998268970635508,
+          "psi": 0.0485,
+          "psi_n_bins": 8,
+          "chi2_statistic": 5.6886,
+          "chi2_pvalue": 0.5765419197426774,
+          "chi2_dof": 7,
+          "ks_pvalue_bh": 0.99864189037926,
+          "chi2_pvalue_bh": 0.9879404207829944,
+          "psi_band": "stable",
+          "verdict": "stable"
+        },
+        {
+          "feature": "Glucose",
+          "n_ref": 610,
+          "n_cur": 153,
+          "missing_rate_ref": 0.0065,
+          "missing_rate_cur": 0.0065,
+          "missing_rate_diff": -0.0,
+          "ks_statistic": 0.0413,
+          "ks_pvalue": 0.9785894526013866,
+          "psi": 0.0226,
+          "psi_n_bins": 10,
+          "chi2_statistic": 2.797,
+          "chi2_pvalue": 0.971803877026008,
+          "chi2_dof": 9,
+          "ks_pvalue_bh": 0.99864189037926,
+          "chi2_pvalue_bh": 0.9879404207829944,
+          "psi_band": "stable",
+          "verdict": "stable"
+        },
+        {
+          "feature": "BloodPressure",
+          "n_ref": 591,
+          "n_cur": 142,
+          "missing_rate_ref": 0.0375,
+          "missing_rate_cur": 0.0779,
+          "missing_rate_diff": 0.0405,
+          "ks_statistic": 0.0526,
+          "ks_pvalue": 0.8894255339798848,
+          "psi": 0.073,
+          "psi_n_bins": 10,
+          "chi2_statistic": 8.0292,
+          "chi2_pvalue": 0.5312111626000188,
+          "chi2_dof": 9,
+          "ks_pvalue_bh": 0.99864189037926,
+          "chi2_pvalue_bh": 0.9879404207829944,
+          "psi_band": "stable",
+          "verdict": "stable"
+        },
+        {
+          "feature": "SkinThickness",
+          "n_ref": 439,
+          "n_cur": 102,
+          "missing_rate_ref": 0.285,
+          "missing_rate_cur": 0.3377,
+          "missing_rate_diff": 0.0526,
+          "ks_statistic": 0.0398,
+          "ks_pvalue": 0.99864189037926,
+          "psi": 0.0376,
+          "psi_n_bins": 10,
+          "chi2_statistic": 3.0465,
+          "chi2_pvalue": 0.9624237830046684,
+          "chi2_dof": 9,
+          "ks_pvalue_bh": 0.99864189037926,
+          "chi2_pvalue_bh": 0.9879404207829944,
+          "psi_band": "stable",
+          "verdict": "stable"
+        },
+        {
+          "feature": "Insulin",
+          "n_ref": 324,
+          "n_cur": 70,
+          "missing_rate_ref": 0.4723,
+          "missing_rate_cur": 0.5455,
+          "missing_rate_diff": 0.0731,
+          "ks_statistic": 0.1572,
+          "ks_pvalue": 0.10273079258003466,
+          "psi": 0.2405,
+          "psi_n_bins": 10,
+          "chi2_statistic": 14.1833,
+          "chi2_pvalue": 0.11595232687457685,
+          "chi2_dof": 9,
+          "ks_pvalue_bh": 0.8218463406402773,
+          "chi2_pvalue_bh": 0.9276186149966148,
+          "psi_band": "moderate",
+          "verdict": "watch"
+        },
+        {
+          "feature": "BMI",
+          "n_ref": 605,
+          "n_cur": 152,
+          "missing_rate_ref": 0.0147,
+          "missing_rate_cur": 0.013,
+          "missing_rate_diff": -0.0017,
+          "ks_statistic": 0.0597,
+          "ks_pvalue": 0.7530692962121168,
+          "psi": 0.0689,
+          "psi_n_bins": 10,
+          "chi2_statistic": 7.9823,
+          "chi2_pvalue": 0.5359320629046478,
+          "chi2_dof": 9,
+          "ks_pvalue_bh": 0.99864189037926,
+          "chi2_pvalue_bh": 0.9879404207829944,
+          "psi_band": "stable",
+          "verdict": "stable"
+        },
+        {
+          "feature": "DiabetesPedigreeFunction",
+          "n_ref": 614,
+          "n_cur": 154,
+          "missing_rate_ref": 0.0,
+          "missing_rate_cur": 0.0,
+          "missing_rate_diff": 0.0,
+          "ks_statistic": 0.078,
+          "ks_pvalue": 0.4163971768297045,
+          "psi": 0.0422,
+          "psi_n_bins": 10,
+          "chi2_statistic": 5.0404,
+          "chi2_pvalue": 0.8307756804568805,
+          "chi2_dof": 9,
+          "ks_pvalue_bh": 0.99864189037926,
+          "chi2_pvalue_bh": 0.9879404207829944,
+          "psi_band": "stable",
+          "verdict": "stable"
+        },
+        {
+          "feature": "Age",
+          "n_ref": 614,
+          "n_cur": 154,
+          "missing_rate_ref": 0.0,
+          "missing_rate_cur": 0.0,
+          "missing_rate_diff": 0.0,
+          "ks_statistic": 0.0454,
+          "ks_pvalue": 0.9485696077343877,
+          "psi": 0.0183,
+          "psi_n_bins": 10,
+          "chi2_statistic": 2.1978,
+          "chi2_pvalue": 0.9879404207829944,
+          "chi2_dof": 9,
+          "ks_pvalue_bh": 0.99864189037926,
+          "chi2_pvalue_bh": 0.9879404207829944,
+          "psi_band": "stable",
+          "verdict": "stable"
+        }
+      ],
+      "label": {
+        "ref_counts": {
+          "0": 400,
+          "1": 214
+        },
+        "cur_counts": {
+          "0": 100,
+          "1": 54
+        },
+        "chi2_statistic": 0.0,
+        "chi2_pvalue": 1.0,
+        "chi2_dof": 1,
+        "note": "Compares the Outcome class counts in the reference and current frames. The stratified split keeps the same rate, so the holdout p-value is 1.0. The shifted scenario does not change labels."
+      },
+      "summary": {
+        "ks_drifted": [],
+        "chi2_drifted": [],
+        "psi_moderate": [
+          "Insulin"
+        ],
+        "psi_major": [],
+        "watch": [
+          "Insulin"
+        ],
+        "alert": [],
+        "overall_alert": false
+      },
+      "verdict_rule": "A feature is an alert if PSI is major (greater than psi_major_min) or if the Benjamini-Hochberg-adjusted KS or chi-square p-value is below alpha. A moderate PSI (psi_stable_max to psi_major_min inclusive) without a significant test is a watch, not an alert. The overall scenario alert is true only when at least one feature is an alert.",
+      "predicted_class": {
+        "ref_counts": {
+          "0": 376,
+          "1": 238
+        },
+        "cur_counts": {
+          "0": 91,
+          "1": 63
+        },
+        "ref_positive_rate": 0.3876,
+        "cur_positive_rate": 0.4091,
+        "chi2_statistic": 0.1565,
+        "chi2_pvalue": 0.6923544829915304,
+        "chi2_dof": 1,
+        "z_statistic": -0.488,
+        "z_pvalue": 0.6255732466645753,
+        "note": "Compares the model's predicted-class rate (threshold from params.yaml / train.threshold, default 0.5) on the reference vs current frames. Not used in the per-feature verdict or the overall alert."
+      }
+    },
+    "shifted": {
+      "name": "shifted",
+      "n_reference": 614,
+      "n_current": 154,
+      "features": [
+        {
+          "feature": "Pregnancies",
+          "n_ref": 614,
+          "n_cur": 154,
+          "missing_rate_ref": 0.0,
+          "missing_rate_cur": 0.0,
+          "missing_rate_diff": 0.0,
+          "ks_statistic": 0.0334,
+          "ks_pvalue": 0.998268970635508,
+          "psi": 0.0485,
+          "psi_n_bins": 8,
+          "chi2_statistic": 5.6886,
+          "chi2_pvalue": 0.5765419197426774,
+          "chi2_dof": 7,
+          "ks_pvalue_bh": 0.99864189037926,
+          "chi2_pvalue_bh": 0.9224670715882839,
+          "psi_band": "stable",
+          "verdict": "stable"
+        },
+        {
+          "feature": "Glucose",
+          "n_ref": 610,
+          "n_cur": 153,
+          "missing_rate_ref": 0.0065,
+          "missing_rate_cur": 0.0065,
+          "missing_rate_diff": -0.0,
+          "ks_statistic": 0.3663,
+          "ks_pvalue": 3.98566596286481e-15,
+          "psi": 0.7836,
+          "psi_n_bins": 10,
+          "chi2_statistic": 74.6786,
+          "chi2_pvalue": 1.8289034557686715e-12,
+          "chi2_dof": 9,
+          "ks_pvalue_bh": 3.188532770291848e-14,
+          "chi2_pvalue_bh": 1.4631227646149372e-11,
+          "psi_band": "major",
+          "verdict": "alert"
+        },
+        {
+          "feature": "BloodPressure",
+          "n_ref": 591,
+          "n_cur": 142,
+          "missing_rate_ref": 0.0375,
+          "missing_rate_cur": 0.0779,
+          "missing_rate_diff": 0.0405,
+          "ks_statistic": 0.0526,
+          "ks_pvalue": 0.8894255339798848,
+          "psi": 0.073,
+          "psi_n_bins": 10,
+          "chi2_statistic": 8.0292,
+          "chi2_pvalue": 0.5312111626000188,
+          "chi2_dof": 9,
+          "ks_pvalue_bh": 0.99864189037926,
+          "chi2_pvalue_bh": 0.9224670715882839,
+          "psi_band": "stable",
+          "verdict": "stable"
+        },
+        {
+          "feature": "SkinThickness",
+          "n_ref": 439,
+          "n_cur": 102,
+          "missing_rate_ref": 0.285,
+          "missing_rate_cur": 0.3377,
+          "missing_rate_diff": 0.0526,
+          "ks_statistic": 0.0398,
+          "ks_pvalue": 0.99864189037926,
+          "psi": 0.0376,
+          "psi_n_bins": 10,
+          "chi2_statistic": 3.0465,
+          "chi2_pvalue": 0.9624237830046684,
+          "chi2_dof": 9,
+          "ks_pvalue_bh": 0.99864189037926,
+          "chi2_pvalue_bh": 0.9879404207829944,
+          "psi_band": "stable",
+          "verdict": "stable"
+        },
+        {
+          "feature": "Insulin",
+          "n_ref": 324,
+          "n_cur": 70,
+          "missing_rate_ref": 0.4723,
+          "missing_rate_cur": 0.5455,
+          "missing_rate_diff": 0.0731,
+          "ks_statistic": 0.1572,
+          "ks_pvalue": 0.10273079258003466,
+          "psi": 0.2405,
+          "psi_n_bins": 10,
+          "chi2_statistic": 14.1833,
+          "chi2_pvalue": 0.11595232687457685,
+          "chi2_dof": 9,
+          "ks_pvalue_bh": 0.41092317032013864,
+          "chi2_pvalue_bh": 0.4638093074983074,
+          "psi_band": "moderate",
+          "verdict": "watch"
+        },
+        {
+          "feature": "BMI",
+          "n_ref": 605,
+          "n_cur": 152,
+          "missing_rate_ref": 0.0147,
+          "missing_rate_cur": 0.013,
+          "missing_rate_diff": -0.0017,
+          "ks_statistic": 0.0597,
+          "ks_pvalue": 0.7530692962121168,
+          "psi": 0.0689,
+          "psi_n_bins": 10,
+          "chi2_statistic": 7.9823,
+          "chi2_pvalue": 0.5359320629046478,
+          "chi2_dof": 9,
+          "ks_pvalue_bh": 0.99864189037926,
+          "chi2_pvalue_bh": 0.9224670715882839,
+          "psi_band": "stable",
+          "verdict": "stable"
+        },
+        {
+          "feature": "DiabetesPedigreeFunction",
+          "n_ref": 614,
+          "n_cur": 154,
+          "missing_rate_ref": 0.0,
+          "missing_rate_cur": 0.0,
+          "missing_rate_diff": 0.0,
+          "ks_statistic": 0.078,
+          "ks_pvalue": 0.4163971768297045,
+          "psi": 0.0422,
+          "psi_n_bins": 10,
+          "chi2_statistic": 5.0404,
+          "chi2_pvalue": 0.8307756804568805,
+          "chi2_dof": 9,
+          "ks_pvalue_bh": 0.99864189037926,
+          "chi2_pvalue_bh": 0.9879404207829944,
+          "psi_band": "stable",
+          "verdict": "stable"
+        },
+        {
+          "feature": "Age",
+          "n_ref": 614,
+          "n_cur": 154,
+          "missing_rate_ref": 0.0,
+          "missing_rate_cur": 0.0,
+          "missing_rate_diff": 0.0,
+          "ks_statistic": 0.0454,
+          "ks_pvalue": 0.9485696077343877,
+          "psi": 0.0183,
+          "psi_n_bins": 10,
+          "chi2_statistic": 2.1978,
+          "chi2_pvalue": 0.9879404207829944,
+          "chi2_dof": 9,
+          "ks_pvalue_bh": 0.99864189037926,
+          "chi2_pvalue_bh": 0.9879404207829944,
+          "psi_band": "stable",
+          "verdict": "stable"
+        }
+      ],
+      "label": {
+        "ref_counts": {
+          "0": 400,
+          "1": 214
+        },
+        "cur_counts": {
+          "0": 100,
+          "1": 54
+        },
+        "chi2_statistic": 0.0,
+        "chi2_pvalue": 1.0,
+        "chi2_dof": 1,
+        "note": "Compares the Outcome class counts in the reference and current frames. The stratified split keeps the same rate, so the holdout p-value is 1.0. The shifted scenario does not change labels."
+      },
+      "summary": {
+        "ks_drifted": [
+          "Glucose"
+        ],
+        "chi2_drifted": [
+          "Glucose"
+        ],
+        "psi_moderate": [
+          "Insulin"
+        ],
+        "psi_major": [
+          "Glucose"
+        ],
+        "watch": [
+          "Insulin"
+        ],
+        "alert": [
+          "Glucose"
+        ],
+        "overall_alert": true
+      },
+      "verdict_rule": "A feature is an alert if PSI is major (greater than psi_major_min) or if the Benjamini-Hochberg-adjusted KS or chi-square p-value is below alpha. A moderate PSI (psi_stable_max to psi_major_min inclusive) without a significant test is a watch, not an alert. The overall scenario alert is true only when at least one feature is an alert.",
+      "predicted_class": {
+        "ref_counts": {
+          "0": 376,
+          "1": 238
+        },
+        "cur_counts": {
+          "0": 61,
+          "1": 93
+        },
+        "ref_positive_rate": 0.3876,
+        "cur_positive_rate": 0.6039,
+        "chi2_statistic": 22.6092,
+        "chi2_pvalue": 1.9853639654990304e-06,
+        "chi2_dof": 1,
+        "z_statistic": -4.8459,
+        "z_pvalue": 1.26037482773817e-06,
+        "note": "Compares the model's predicted-class rate (threshold from params.yaml / train.threshold, default 0.5) on the reference vs current frames. Not used in the per-feature verdict or the overall alert."
+      }
+    }
+  },
+  "plots": {
+    "drift_stats_psi.png": "reports/drift_stats_psi.png"
+  }
+}

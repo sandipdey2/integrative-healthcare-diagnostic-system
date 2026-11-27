@@ -152,9 +152,11 @@ Full commands and results are in [`docs/MLOPS.md`](docs/MLOPS.md).
 | App venv, after the confusion-matrix analysis (2026-11-27) | `pytest -q -rs` | **102 passed, 21 skipped** with no keys (12 new tests in `tests/test_cm_analysis.py` and 1 new multiplicity-correction test in `tests/test_data_stats.py`) |
 | App venv, after the Loki logging layer (2026-11-27) | `pytest -q -rs` (LANGSMITH_API_KEY unset) | **122 passed, 21 skipped** with no keys: 20 new tests in `tests/test_logging.py`; `tests/test_mlops.py::test_prometheus_grafana_configs_reference_real_metrics` now expects the `loki` and `alloy` services. With a LangSmith key whose monthly trace quota was exhausted, `test_live_run_is_traced_with_tags_and_metadata` failed on HTTP 429 from LangSmith (not related to this change), so this run was done without the key |
 | App venv, after Arize tracing (2026-11-27, on top of Loki) | `pytest -q -rs` (LANGSMITH_API_KEY unset) | **135 passed, 21 skipped** with no keys (the 13 new `tests/test_arize_tracing.py` tests pass; run with `LANGSMITH_API_KEY` unset: with it set, the live LangSmith test needs network and can hit LangSmith's rate limit). MLOps venv: `pytest tests/test_mlops.py` 15 passed; `ruff check .` clean |
+| App venv, after the drift-statistics module (2026-11-27) | `pytest -q -rs` (LANGSMITH_API_KEY unset) | **144 passed, 21 skipped** with no keys (9 new tests in `tests/test_drift_stats.py`). MLOps venv: `pytest tests/test_mlops.py` 15 passed (the consistency test now expects 9 DVC stages). `ruff check .` clean |
 | MLOps venv, after the Prefect deployment (2026-11-27) | `.venv-mlops/bin/python -m pytest tests/test_mlops.py -q` | **15 passed** (10 before; 5 new Prefect deployment/retry tests). The whole `tests/` folder is not collected in that venv (no langchain) |
 | MLOps venv, after the confusion-matrix analysis (2026-11-27) | `.venv-mlops/bin/python -m pytest tests/test_mlops.py -q` | **15 passed**. The DVC consistency test now expects 8 stages (`cm_analysis` added after `evaluate`). Prefect still has the original 7 tasks. |
 | MLOps venv, after the Loki logging layer (2026-11-27) | `.venv-mlops/bin/python -m pytest tests/test_mlops.py -q` | **15 passed** |
+| MLOps venv, after the drift-statistics module (2026-11-27) | `.venv-mlops/bin/python -m pytest tests/test_mlops.py -q` | **15 passed**. The DVC consistency test now expects 9 stages (`drift_stats` added after `drift`). Prefect still has the original 7 tasks. |
 | MLOps (`requirements-mlops.txt`, separate venv) | `pytest -q tests/test_mlops.py tests/test_metrics_agent.py tests/test_metrics_push.py` | **17 passed, 2 skipped** (promtool not on PATH; live Grafana test without creds) |
 | MLOps | `pip install -r requirements-mlops.txt` in a fresh venv, then `pip check` | installs with pip; "No broken requirements found" |
 | Both | `ruff check .` (`ruff.toml`: E, F, W; E501/E702 ignored) | All checks passed. Fixing it removed 9 unused imports and invalid escapes from existing files; there were no behaviour changes |
@@ -297,7 +299,7 @@ End-to-end runs on the box:
 
 | Tool | Run | Observed |
 |---|---|---|
-| DVC | `dvc repro -f`, `dvc status`, `dvc push` (local folder remote) | On 2026-11-25: 7/7 stages ran; "Data and pipelines are up to date"; cached outputs pushed. On 2026-11-27 the 8th stage `cm_analysis` was added and locked with `dvc repro cm_analysis` only. |
+| DVC | `dvc repro -f`, `dvc status`, `dvc push` (local folder remote) | On 2026-11-25: 7/7 stages ran; "Data and pipelines are up to date"; cached outputs pushed. On 2026-11-27 the 8th stage `cm_analysis` was added and locked with `dvc repro cm_analysis` only, and the 9th stage `drift_stats` was locked with `dvc repro drift_stats` only. Prefect still has 7 tasks. |
 | Prefect | `python -m ihds.mlops.flow` | flow `Completed`, 7/7 tasks `Completed`, 37 s |
 | Prefect deployment (local `serve()`, 2026-11-27) | `prefect server start`; `python -m ihds.mlops.deploy --run-now`; `prefect deployment run 'ihds-mlops-pipeline/weekly-local'` | run `f4aa95d0-936f-40c3-88eb-929a4d51f717` `Completed` 7/7, 21.9 s; run `fe2ae45e-0868-4b2d-a121-33ff5abe9ae1` `Completed` 7/7, 19.5 s. Scheduled runs were created (next: 2026-11-30 14:00 UTC) but not waited for |
 | MLflow | DVC train stage | run `8b95d9818eae4b4d94177879cdde1f3c`: ROC-AUC 0.8126, CV 0.8444 ± 0.0161 |
@@ -476,3 +478,42 @@ unadjusted p = 2.8×10⁻⁴¹).
 Tests in `tests/test_cm_analysis.py` check the confusion-matrix counts, the metric formulas on a
 hand-built matrix, Wilson interval bounds, bootstrap determinism, a monotone recall sweep,
 per-class supports, and that the report JSON and PNGs are written.
+## 9. Drift statistics — KS, PSI and chi-square (2026-11-27)
+
+`python -m ihds.drift_stats` (and the DVC stage `drift_stats`) compares the training split to the
+test split with three tests per feature: a two-sample Kolmogorov–Smirnov test, the Population
+Stability Index, and a chi-square test of homogeneity on the same PSI bins, plus the missing-rate
+difference. It writes `reports/drift_stats.json` and `reports/drift_stats_psi.png`. The Streamlit
+app and the agent graph do not import this module.
+
+Evidently's `DataDriftPreset` (the existing `drift` stage) already runs a KS test on numeric
+columns at p < 0.05 by default. This module reports that KS test explicitly and adds PSI and
+chi-square. A GAN-synthetic scenario is not included.
+
+PSI uses 10 quantile bins from the reference, ±∞ end edges, and a 1×10⁻⁴ clip on bin proportions
+(documented in the module and in `params.yaml`). The 0.10 / 0.25 PSI bands are industry rules of
+thumb, not a property of this dataset. With n = 154 in the test set, and only 70 finite Insulin
+values, a moderate PSI can appear from noise.
+
+**Verdict rule:** a feature is an alert if PSI is major (> 0.25) or if the Benjamini–Hochberg-adjusted
+KS or chi-square p-value is below 0.05. A moderate PSI (0.10–0.25) without a significant test is a
+watch, not an alert. The overall alert fires only when at least one feature is an alert.
+
+**Holdout:** no overall alert. All KS p-values are above 0.10. PSI is below 0.10 except Insulin
+(0.241, moderate). Insulin KS p = 0.103 and chi-square p = 0.116 (BH-adjusted 0.822 and 0.928), so
+it is a **watch**. Label chi-square p = 1.0 (400 / 214 vs 100 / 54). Predicted-positive rate
+0.388 → 0.409 (z p = 0.63); this rate test is reported only and is not part of the verdict.
+
+**Shifted** (+25 mg/dL on Glucose): overall alert, **Glucose only**. Glucose KS D = 0.366,
+p = 4.0×10⁻¹⁵ (BH 3.2×10⁻¹⁴), PSI 0.784 (major), chi-square p = 1.8×10⁻¹² (BH 1.5×10⁻¹¹).
+Insulin is unchanged and stays a watch. Label chi-square p is still 1.0. The predicted-positive
+rate rises from 0.388 to 0.604 (z p = 1.3×10⁻⁶), which is the expected effect of the glucose shift.
+
+This stage is not a quality gate and is not a Prefect task, so the tested 7-task flow is unchanged.
+
+Tests in `tests/test_drift_stats.py` check that PSI is 0 on identical samples and larger on a
+shifted sample, that PSI is non-negative and handles NaN and constant columns, that KS and
+chi-square p-values are high for identical samples and tiny for a large shift, that BH-adjusted
+p-values are monotone, that the real holdout has no alert and Insulin is a watch, that the shifted
+scenario alerts on Glucose only, that the configured PSI bands change the verdict, and that the
+label chi-square p-value is 1.0 on this stratified split.

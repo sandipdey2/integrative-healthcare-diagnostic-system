@@ -11,7 +11,7 @@ every run.
 | Tool | Role here | Code / config | Status |
 |---|---|---|---|
 | MLflow 3.18 | Experiment tracking for the risk model | `ihds/mlops/train_tracked.py` | Implemented, run locally |
-| DVC 3.67 | Data + pipeline versioning (8 stages) | `dvc.yaml`, `params.yaml`, `dvc.lock`, `.dvc/config` | Implemented, `dvc repro` run locally; local remote only. The 8th stage (`cm_analysis`) was added later; see below. |
+| DVC 3.67 | Data + pipeline versioning (9 stages) | `dvc.yaml`, `params.yaml`, `dvc.lock`, `.dvc/config` | Implemented, `dvc repro` run locally; local remote only. `cm_analysis` and `drift_stats` were added later; see below. |
 | Great Expectations 1.25 | Validation of the clinical input data | `ihds/mlops/validate.py` | Implemented, gate in DVC, Prefect and CI |
 | Feast 0.68 | Local feature store (file offline store, SQLite online store) | `feature_repo/`, `ihds/mlops/features.py` | Implemented, local only; the app does not read from Feast |
 | Prefect 3.9 | Orchestration of the stages | `ihds/mlops/flow.py`, `ihds/mlops/deploy.py` | Implemented. The flow runs on a temporary local API, and `flow.serve()` gives a scheduled local deployment (weekly cron) on a local Prefect server. No Prefect Cloud, no work pool or worker, no Docker, not deployed on Azure; the schedule fires only while the serve process runs |
@@ -20,7 +20,8 @@ every run.
 | Docker | Container image | `Dockerfile`, `scripts/start_all.sh` | Already existed; unchanged; rebuilt and smoke-tested |
 | Deepchecks 0.19.1 | Model-quality testing with a pass/fail gate | `ihds/mlops/quality.py` | Implemented |
 | Prometheus + Grafana | API metrics and dashboard | `api/main.py` (`/metrics`), `docker-compose.monitoring.yml`, `monitoring/prometheus/`, `monitoring/grafana/` | Local stack verified on a bridge network; Streamlit → Grafana Cloud push sent to the real stack (HTTP 200; read-back needs a read token); Azure push implemented, not deployed |
-| Evidently 0.7 | Drift detection | `ihds/monitoring.py` (existing), `ihds/mlops/drift.py` | Already existed; also run as a pipeline stage |
+| Evidently 0.7 | Drift detection (KS by default on numeric columns) | `ihds/monitoring.py` (existing), `ihds/mlops/drift.py` | Already existed; also run as a pipeline stage |
+| KS / PSI / chi-square | Explicit drift statistics | `ihds/drift_stats.py` | Implemented as a DVC stage and `python -m ihds.drift_stats`; not a Prefect task |
 | SHAP 0.51 + Fairlearn 0.15 | Explainability and a fairness audit | `ihds/mlops/explain.py` | Implemented |
 
 ## Setup
@@ -42,6 +43,7 @@ prepare ─┬─> train (MLflow) ─┬─> evaluate (Deepchecks)
          │        ^          ├─> cm_analysis (confusion-matrix stats)
          │                   ├─> explain (SHAP + Fairlearn)
 validate ┘ (GX gate)         ├─> drift (Evidently)
+                             ├─> drift_stats (KS, PSI, chi-square)
                              └─> features (Feast)
 ```
 
@@ -50,7 +52,7 @@ validate ┘ (GX gate)         ├─> drift (Evidently)
 | DVC | `dvc repro` (graph: `dvc dag`, metrics: `dvc metrics show`) | Re-runs only the stages whose deps or params changed. Hashes go to `dvc.lock`; outputs go to the local cache `.dvc/cache`. |
 | Prefect | `python -m ihds.mlops.flow` | Runs the same stages as tasks. A failed GX validation or a critical Deepchecks failure raises `QualityGateError`, so the flow ends `Failed` and later tasks do not run. Writes `reports/flow_run.json`. |
 | Prefect (scheduled) | `prefect server start`, then `python -m ihds.mlops.deploy` | Registers the deployment `ihds-mlops-pipeline/weekly-local` on the local server and stays running to fire its schedule (Mondays 06:00 America/Los_Angeles). See the Prefect section. |
-| One stage | `python -m ihds.mlops.<prepare\|validate\|train_tracked\|quality\|explain\|drift\|features>` or `python -m ihds.cm_analysis` | `validate` and `quality` exit 1 on failure. `cm_analysis` is not a quality gate. |
+| One stage | `python -m ihds.mlops.<prepare\|validate\|train_tracked\|quality\|explain\|drift\|features>` or `python -m ihds.cm_analysis` or `python -m ihds.drift_stats` | `validate` and `quality` exit 1 on failure. `cm_analysis` and `drift_stats` are not quality gates. |
 
 ### DVC (data and pipeline versioning)
 
@@ -64,12 +66,14 @@ validate ┘ (GX gate)         ├─> drift (Evidently)
 - The small JSON metrics in `reports/` and `reports/shap_summary.png` are committed (`cache: false`), so
   reviewers can read the results without running anything.
 - `params.yaml` holds the split, validation thresholds, model hyperparameters, the critical Deepchecks checks,
-  the age bands, and the `cm_analysis` bootstrap / permutation counts.
+  the age bands, the `cm_analysis` bootstrap / permutation counts, and the `drift_stats` PSI bands and alpha.
 - Last full `dvc repro -f` (before the confusion-matrix stage existed): 7 of 7 stages ran. After a later edit
   to `ihds/mlops/validate.py`, `dvc repro` re-ran only `validate` and skipped the other 6 stages, because
   `validation.json` came out unchanged. The 8th stage, `cm_analysis`, was added on 2026-11-27 and recorded
-  with `dvc repro cm_analysis` only, so the earlier locked stages were not rewritten. Prefect still runs the
-  original 7 tasks; this analysis is a DVC stage and a `python -m ihds.cm_analysis` command, not a Prefect task.
+  with `dvc repro cm_analysis` only, so the earlier locked stages were not rewritten. The 9th stage,
+  `drift_stats`, was added on 2026-11-27 and recorded with `dvc repro drift_stats` only. Prefect still
+  runs the original 7 tasks; `cm_analysis` and `drift_stats` are DVC stages and `python -m` commands,
+  not Prefect tasks.
 
 ### Great Expectations (data validation)
 
@@ -261,6 +265,70 @@ Monitoring tab keeps using the committed `monitoring/reports/`, which this stage
 - **Holdout:** no drifted features; accuracy 0.7338.
 - **Shifted** (simulated +25 mg/dL glucose meter error): Glucose flagged (1 of 8 columns); precision 0.6032 → 0.5269,
   recall 0.7037 → 0.9074, accuracy 0.6818.
+
+Evidently's `DataDriftPreset` is left at its defaults. For a reference set this small with numeric
+features, that default is a two-sample Kolmogorov–Smirnov test at p < 0.05. PSI and a binned
+chi-square test are not computed there; `python -m ihds.drift_stats` adds them (next section).
+
+### KS, PSI and chi-square (`drift_stats`)
+
+`python -m ihds.drift_stats` (DVC stage `drift_stats`) compares the training split (n = 614) to the
+test split (n = 154) in two scenarios: holdout, and the test split with Glucose increased by
+`monitoring.GLUCOSE_SHIFT` (+25 mg/dL). It writes `reports/drift_stats.json` and
+`reports/drift_stats_psi.png`. A GAN-synthetic scenario is not included: the generator is not
+cheap or deterministic enough for a locked stage.
+
+For each of the eight features, on non-NaN values:
+
+- a two-sample KS test (D and p);
+- PSI with 10 quantile bins taken from the reference, end edges replaced by −∞ / +∞, and
+  proportions clipped at 1×10⁻⁴ (no renormalisation). Tied columns can collapse some cuts
+  (Pregnancies uses 8 bins on this split);
+- a chi-square test of homogeneity on the same bins (empty bins dropped);
+- the missing-rate difference, because Insulin is missing in about half the rows.
+
+KS and chi-square p-values are Benjamini–Hochberg-adjusted across the eight features, separately
+for each test. PSI bands are the usual industry rules of thumb, and they are configurable in
+`params.yaml`: < 0.10 stable, 0.10–0.25 moderate, > 0.25 major. Those cut-offs are not a property
+of this dataset.
+
+**Verdict rule:** a feature is an **alert** if PSI is major or if the BH-adjusted KS or chi-square
+p-value is below 0.05. A **moderate** PSI without a significant test is a **watch**, not an alert.
+The overall scenario alert is true only when at least one feature is an alert. That is why holdout
+Insulin (PSI 0.241, KS p = 0.103, chi-square p = 0.116; BH-adjusted p = 0.822 and 0.928) is a watch
+and does not raise an overall alert. With only 70 finite Insulin values in the test set, that PSI
+is noisy; KS and chi-square do not agree that the shift is significant.
+
+**Holdout** (overall alert: no)
+
+| Feature | KS D (p) | KS p (BH) | PSI | Band | Chi-square p (BH) | Missing-rate diff | Verdict |
+|---|---|---|---|---|---|---|---|
+| Pregnancies | 0.033 (0.998) | 0.999 | 0.048 | stable | 0.577 (0.988) | 0.000 | stable |
+| Glucose | 0.041 (0.979) | 0.999 | 0.023 | stable | 0.972 (0.988) | 0.000 | stable |
+| BloodPressure | 0.053 (0.889) | 0.999 | 0.073 | stable | 0.531 (0.988) | 0.041 | stable |
+| SkinThickness | 0.040 (0.999) | 0.999 | 0.038 | stable | 0.962 (0.988) | 0.053 | stable |
+| Insulin | 0.157 (0.103) | 0.822 | 0.241 | moderate | 0.116 (0.928) | 0.073 | watch |
+| BMI | 0.060 (0.753) | 0.999 | 0.069 | stable | 0.536 (0.988) | −0.002 | stable |
+| DiabetesPedigreeFunction | 0.078 (0.416) | 0.999 | 0.042 | stable | 0.831 (0.988) | 0.000 | stable |
+| Age | 0.045 (0.949) | 0.999 | 0.018 | stable | 0.988 (0.988) | 0.000 | stable |
+
+Insulin missing rates: 47.2% in train (290 / 614) vs 54.5% in test (84 / 154). PSI for Insulin is
+computed on the remaining 324 and 70 finite values.
+
+Label (Outcome) chi-square p = 1.0 (counts 400 / 214 vs 100 / 54). The model's predicted-positive
+rate on train vs test is 0.388 vs 0.409 (two-proportion z p = 0.63, chi-square p = 0.69). Predicted-class
+tests are reported only; they are not part of the per-feature verdict or the overall alert.
+
+**Shifted** (overall alert: yes; Glucose only)
+
+Glucose: KS D = 0.366, p = 4.0×10⁻¹⁵ (BH 3.2×10⁻¹⁴), PSI 0.784 (major), chi-square p = 1.8×10⁻¹²
+(BH 1.5×10⁻¹¹), verdict **alert**. Every other feature is unchanged from the holdout, so Insulin
+stays a watch. Label chi-square p is still 1.0 (labels are not modified). The predicted-positive
+rate rises from 0.388 to 0.604 (z p = 1.3×10⁻⁶), which is the expected effect of adding 25 mg/dL
+to Glucose, not a second feature-level alert.
+
+This stage is not a quality gate and is not part of the Prefect flow. Tests are in
+`tests/test_drift_stats.py`.
 
 ### Feast (feature store)
 

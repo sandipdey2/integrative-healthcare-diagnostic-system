@@ -93,8 +93,9 @@ all 8 features p < 1e-5.
   - Test results: acc 0.7338, prec 0.6032, rec 0.7037, F1 0.6496, ROC-AUC 0.8126; TN75 FP25 FN16 TP38.
   - CV ROC-AUC 0.8444 ± 0.0161.
   - Run IDs: `dvc repro -f` → 8b95d9818eae4b4d94177879cdde1f3c; Prefect → b1085973ece0449c93940c9b9d94725c.
-- DVC 3.67: 8 stages (the 8th, `cm_analysis`, was added 2026-11-27). Local remote `dvc-storage/` (gitignored). Raw CSV stays in git, hashed in dvc.lock. The earlier full `dvc repro -f` ran the original 7 stages; the new stage was locked with `dvc repro cm_analysis`. Prefect still has 7 tasks.
+- DVC 3.67: 9 stages (the 8th, `cm_analysis`, and the 9th, `drift_stats`, were added 2026-11-27). Local remote `dvc-storage/` (gitignored). Raw CSV stays in git, hashed in dvc.lock. The earlier full `dvc repro -f` ran the original 7 stages; the new stages were locked with `dvc repro cm_analysis` and `dvc repro drift_stats` only. Prefect still has 7 tasks.
 - Confusion-matrix analysis (`python -m ihds.cm_analysis`): test CM TN 75 FP 25 FN 16 TP 38; sensitivity 0.704 (Wilson 0.572–0.809); AUC 0.8126 (DeLong 0.746–0.880); accuracy vs NIR exact binomial two-sided p = 0.028; McNemar vs majority two-sided p = 0.13; Youden threshold from train OOF is 0.559 (test CM 78/22/21/33, recall 0.611); 21–29 recall 0.438 (Wilson 0.231–0.668); Brier 0.181, mean predicted 0.445 vs prevalence 0.351. Details in TESTING.md §8 and reports/confusion_matrix_analysis.json.
+- Drift statistics (`python -m ihds.drift_stats`): holdout has no overall alert. PSI < 0.10 on every feature except Insulin 0.241 (moderate, watch): KS p = 0.103, chi-square p = 0.116, BH-adjusted 0.822 and 0.928. Label chi-square p = 1.0. Shifted (+25 mg/dL Glucose): Glucose alert only (KS D = 0.366, p = 4.0×10⁻¹⁵, PSI 0.784, chi-square p = 1.8×10⁻¹²). A moderate PSI is a watch, not an alert, unless KS or chi-square agrees. Details in TESTING.md §9 and reports/drift_stats.json.
 - Deepchecks 0.19.1 (with NumPy 2 alias shim): gate passed, 0 critical failures.
   - data_integrity: 11/12 pass.
   - train_test_validation: 8/12 pass, 1 fail (Feature Label Correlation Change, Insulin PPS diff 0.3).
