@@ -39,6 +39,16 @@ explain:
   age_bins: [21, 30, 45, 120]          # right-open bins -> 21-29, 30-44, 45+
   age_labels: ["21-29", "30-44", "45+"]
 
+
+cm_analysis:
+  # python -m ihds.cm_analysis (also a DVC stage). Not read by the Streamlit app.
+  bootstrap_resamples: 2000
+  permutation_resamples: 2000
+  coefficient_bootstraps: 1000
+  seed: 42
+  n_cv_folds: 5
+  n_calibration_bins: 10
+
 deploy:
   # Scheduled local Prefect deployment (ihds/mlops/deploy.py, `python -m ihds.mlops.deploy`). Not read by dvc.yaml.
   name: weekly-local

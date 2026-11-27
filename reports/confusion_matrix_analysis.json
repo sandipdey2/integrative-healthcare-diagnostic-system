@@ -1,0 +1,1268 @@
+{
+  "model_source": "models/risk_model.joblib",
+  "split": {
+    "train_rows": 614,
+    "test_rows": 154,
+    "seed": 42,
+    "threshold": 0.5,
+    "test_positives": 54,
+    "test_negatives": 100
+  },
+  "test_confusion_matrix": {
+    "tn": 75,
+    "fp": 25,
+    "fn": 16,
+    "tp": 38
+  },
+  "test_confusion_matrix_normalized_by_true_class": {
+    "tn": 0.75,
+    "fp": 0.25,
+    "fn": 0.2963,
+    "tp": 0.7037
+  },
+  "test_metrics": {
+    "n": 154,
+    "support_0": 100,
+    "support_1": 54,
+    "accuracy": 0.7338,
+    "balanced_accuracy": 0.7269,
+    "precision": 0.6032,
+    "recall": 0.7037,
+    "f1": 0.6496,
+    "sensitivity": 0.7037,
+    "specificity": 0.75,
+    "ppv": 0.6032,
+    "npv": 0.8242,
+    "fpr": 0.25,
+    "fnr": 0.2963,
+    "mcc": 0.4403,
+    "cohens_kappa": 0.437,
+    "lr_plus": 2.8148,
+    "lr_minus": 0.3951,
+    "per_class": {
+      "0": {
+        "precision": 0.8242,
+        "recall": 0.75,
+        "f1": 0.7853,
+        "support": 100
+      },
+      "1": {
+        "precision": 0.6032,
+        "recall": 0.7037,
+        "f1": 0.6496,
+        "support": 54
+      }
+    }
+  },
+  "wilson_cis": {
+    "sensitivity": {
+      "metric": "sensitivity",
+      "estimate": 0.7037,
+      "successes": 38,
+      "n": 54,
+      "ci_low": 0.5717,
+      "ci_high": 0.8086,
+      "method": "wilson",
+      "level": 0.95
+    },
+    "specificity": {
+      "metric": "specificity",
+      "estimate": 0.75,
+      "successes": 75,
+      "n": 100,
+      "ci_low": 0.657,
+      "ci_high": 0.8245,
+      "method": "wilson",
+      "level": 0.95
+    },
+    "ppv": {
+      "metric": "ppv",
+      "estimate": 0.6032,
+      "successes": 38,
+      "n": 63,
+      "ci_low": 0.4798,
+      "ci_high": 0.7147,
+      "method": "wilson",
+      "level": 0.95
+    },
+    "npv": {
+      "metric": "npv",
+      "estimate": 0.8242,
+      "successes": 75,
+      "n": 91,
+      "ci_low": 0.7333,
+      "ci_high": 0.8888,
+      "method": "wilson",
+      "level": 0.95
+    },
+    "accuracy": {
+      "metric": "accuracy",
+      "estimate": 0.7338,
+      "successes": 113,
+      "n": 154,
+      "ci_low": 0.6589,
+      "ci_high": 0.7973,
+      "method": "wilson",
+      "level": 0.95
+    }
+  },
+  "bootstrap_cis": {
+    "n_boot": 2000,
+    "seed": 42,
+    "stratified": true,
+    "level": 0.95,
+    "method": "percentile, stratified by Outcome",
+    "roc_auc": {
+      "estimate": 0.8126,
+      "ci_low": 0.7383,
+      "ci_high": 0.8741,
+      "n_valid": 2000
+    },
+    "average_precision": {
+      "estimate": 0.6727,
+      "ci_low": 0.5708,
+      "ci_high": 0.781,
+      "n_valid": 2000
+    },
+    "f1": {
+      "estimate": 0.6496,
+      "ci_low": 0.5573,
+      "ci_high": 0.7368,
+      "n_valid": 2000
+    },
+    "mcc": {
+      "estimate": 0.4403,
+      "ci_low": 0.2933,
+      "ci_high": 0.5833,
+      "n_valid": 2000
+    },
+    "balanced_accuracy": {
+      "estimate": 0.7269,
+      "ci_low": 0.6506,
+      "ci_high": 0.7989,
+      "n_valid": 2000
+    }
+  },
+  "auc_delong": {
+    "estimate": 0.8126,
+    "ci_low": 0.7456,
+    "ci_high": 0.8796,
+    "se": 0.0342,
+    "n_positive": 54,
+    "n_negative": 100,
+    "method": "deLong",
+    "level": 0.95
+  },
+  "average_precision": {
+    "estimate": 0.6727,
+    "prevalence_baseline": 0.3506,
+    "bootstrap": {
+      "estimate": 0.6727,
+      "ci_low": 0.5708,
+      "ci_high": 0.781,
+      "n_valid": 2000
+    }
+  },
+  "significance": {
+    "accuracy_vs_no_information_rate": {
+      "n": 154,
+      "correct": 113,
+      "accuracy": 0.7338,
+      "no_information_rate": 0.6494,
+      "majority_class": 0,
+      "majority_count": 100,
+      "p_value_greater": 0.015932327474821727,
+      "p_value_two_sided": 0.028126445062423178,
+      "method": "exact binomial (binomtest)"
+    },
+    "mcnemar_vs_majority_baseline": {
+      "baseline": "always 0 (majority)",
+      "model_correct_baseline_wrong": 38,
+      "model_wrong_baseline_correct": 25,
+      "discordant": 63,
+      "p_value_two_sided": 0.12991792302255253,
+      "p_value_greater": 0.06495896151127627,
+      "method": "exact McNemar (binomial on discordant pairs)"
+    },
+    "permutation_auc_vs_chance": {
+      "estimate": 0.8126,
+      "null_value": 0.5,
+      "n_perm": 2000,
+      "n_ge_observed": 0,
+      "p_value": 0.0004997501249375312,
+      "seed": 42,
+      "method": "permutation of labels; p = (#{AUC_perm >= AUC_obs} + 1) / (n_perm + 1)"
+    }
+  },
+  "threshold_analysis": {
+    "note": "The Youden threshold is chosen on out-of-fold predictions from 5-fold stratified CV on the training split, then applied to the test split. The grid table below is reported on the test split and is descriptive, not used for selection.",
+    "grid_on_test": [
+      {
+        "threshold": 0.3,
+        "tn": 60,
+        "fp": 40,
+        "fn": 6,
+        "tp": 48,
+        "accuracy": 0.7013,
+        "recall": 0.8889,
+        "precision": 0.5455,
+        "specificity": 0.6,
+        "f1": 0.6761,
+        "mcc": 0.4714,
+        "balanced_accuracy": 0.7444
+      },
+      {
+        "threshold": 0.35,
+        "tn": 64,
+        "fp": 36,
+        "fn": 6,
+        "tp": 48,
+        "accuracy": 0.7273,
+        "recall": 0.8889,
+        "precision": 0.5714,
+        "specificity": 0.64,
+        "f1": 0.6957,
+        "mcc": 0.5068,
+        "balanced_accuracy": 0.7644
+      },
+      {
+        "threshold": 0.4,
+        "tn": 66,
+        "fp": 34,
+        "fn": 9,
+        "tp": 45,
+        "accuracy": 0.7208,
+        "recall": 0.8333,
+        "precision": 0.5696,
+        "specificity": 0.66,
+        "f1": 0.6767,
+        "mcc": 0.471,
+        "balanced_accuracy": 0.7467
+      },
+      {
+        "threshold": 0.45,
+        "tn": 71,
+        "fp": 29,
+        "fn": 12,
+        "tp": 42,
+        "accuracy": 0.7338,
+        "recall": 0.7778,
+        "precision": 0.5915,
+        "specificity": 0.71,
+        "f1": 0.672,
+        "mcc": 0.4669,
+        "balanced_accuracy": 0.7439
+      },
+      {
+        "threshold": 0.5,
+        "tn": 75,
+        "fp": 25,
+        "fn": 16,
+        "tp": 38,
+        "accuracy": 0.7338,
+        "recall": 0.7037,
+        "precision": 0.6032,
+        "specificity": 0.75,
+        "f1": 0.6496,
+        "mcc": 0.4403,
+        "balanced_accuracy": 0.7269
+      },
+      {
+        "threshold": 0.55,
+        "tn": 78,
+        "fp": 22,
+        "fn": 20,
+        "tp": 34,
+        "accuracy": 0.7273,
+        "recall": 0.6296,
+        "precision": 0.6071,
+        "specificity": 0.78,
+        "f1": 0.6182,
+        "mcc": 0.4063,
+        "balanced_accuracy": 0.7048
+      },
+      {
+        "threshold": 0.6,
+        "tn": 79,
+        "fp": 21,
+        "fn": 23,
+        "tp": 31,
+        "accuracy": 0.7143,
+        "recall": 0.5741,
+        "precision": 0.5962,
+        "specificity": 0.79,
+        "f1": 0.5849,
+        "mcc": 0.3674,
+        "balanced_accuracy": 0.682
+      },
+      {
+        "threshold": 0.65,
+        "tn": 81,
+        "fp": 19,
+        "fn": 27,
+        "tp": 27,
+        "accuracy": 0.7013,
+        "recall": 0.5,
+        "precision": 0.587,
+        "specificity": 0.81,
+        "f1": 0.54,
+        "mcc": 0.3232,
+        "balanced_accuracy": 0.655
+      },
+      {
+        "threshold": 0.7,
+        "tn": 84,
+        "fp": 16,
+        "fn": 28,
+        "tp": 26,
+        "accuracy": 0.7143,
+        "recall": 0.4815,
+        "precision": 0.619,
+        "specificity": 0.84,
+        "f1": 0.5417,
+        "mcc": 0.3444,
+        "balanced_accuracy": 0.6607
+      }
+    ],
+    "youden_from_train_oof": {
+      "threshold": 0.5592,
+      "youden_j": 0.5247,
+      "train_oof_metrics": {
+        "tn": 337,
+        "fp": 63,
+        "fn": 68,
+        "tp": 146,
+        "sensitivity": 0.6822,
+        "specificity": 0.8425
+      }
+    },
+    "youden_applied_to_test": {
+      "threshold": 0.5592,
+      "confusion_matrix": {
+        "tn": 78,
+        "fp": 22,
+        "fn": 21,
+        "tp": 33
+      },
+      "metrics": {
+        "n": 154,
+        "support_0": 100,
+        "support_1": 54,
+        "accuracy": 0.7208,
+        "balanced_accuracy": 0.6956,
+        "precision": 0.6,
+        "recall": 0.6111,
+        "f1": 0.6055,
+        "sensitivity": 0.6111,
+        "specificity": 0.78,
+        "ppv": 0.6,
+        "npv": 0.7879,
+        "fpr": 0.22,
+        "fnr": 0.3889,
+        "mcc": 0.3895,
+        "cohens_kappa": 0.3895,
+        "lr_plus": 2.7778,
+        "lr_minus": 0.4986,
+        "per_class": {
+          "0": {
+            "precision": 0.7879,
+            "recall": 0.78,
+            "f1": 0.7839,
+            "support": 100
+          },
+          "1": {
+            "precision": 0.6,
+            "recall": 0.6111,
+            "f1": 0.6055,
+            "support": 54
+          }
+        }
+      }
+    }
+  },
+  "cv_pooled_train": {
+    "note": "Pooled out-of-fold predictions, 5-fold stratified CV on the 614-row training split, threshold 0.5. Compared with the single 154-row test matrix to show split-to-split variation.",
+    "n_folds": 5,
+    "n": 614,
+    "confusion_matrix": {
+      "tn": 318,
+      "fp": 82,
+      "fn": 64,
+      "tp": 150
+    },
+    "metrics": {
+      "n": 614,
+      "support_0": 400,
+      "support_1": 214,
+      "accuracy": 0.7622,
+      "balanced_accuracy": 0.748,
+      "precision": 0.6466,
+      "recall": 0.7009,
+      "f1": 0.6726,
+      "sensitivity": 0.7009,
+      "specificity": 0.795,
+      "ppv": 0.6466,
+      "npv": 0.8325,
+      "fpr": 0.205,
+      "fnr": 0.2991,
+      "mcc": 0.4874,
+      "cohens_kappa": 0.4864,
+      "lr_plus": 3.4192,
+      "lr_minus": 0.3762,
+      "per_class": {
+        "0": {
+          "precision": 0.8325,
+          "recall": 0.795,
+          "f1": 0.8133,
+          "support": 400
+        },
+        "1": {
+          "precision": 0.6466,
+          "recall": 0.7009,
+          "f1": 0.6726,
+          "support": 214
+        }
+      }
+    },
+    "roc_auc": 0.8453
+  },
+  "age_bands": {
+    "bins": [
+      21,
+      30,
+      45,
+      120
+    ],
+    "labels": [
+      "21-29",
+      "30-44",
+      "45+"
+    ],
+    "split": "test",
+    "threshold": 0.5,
+    "note": "Test bands are small (tens of patients, 12\u201326 positives). A recall of 1.00 in 45+ is 12/12 and is not a precise rate. The 21\u201329 band has the lowest recall.",
+    "by_band": [
+      {
+        "age_band": "21-29",
+        "n": 85,
+        "positives": 16,
+        "confusion_matrix": {
+          "tn": 56,
+          "fp": 13,
+          "fn": 9,
+          "tp": 7
+        },
+        "recall": 0.4375,
+        "precision": 0.35,
+        "specificity": 0.8116,
+        "accuracy": 0.7412,
+        "recall_wilson": {
+          "metric": "sensitivity",
+          "estimate": 0.4375,
+          "successes": 7,
+          "n": 16,
+          "ci_low": 0.231,
+          "ci_high": 0.6682,
+          "method": "wilson",
+          "level": 0.95
+        },
+        "specificity_wilson": {
+          "metric": "specificity",
+          "estimate": 0.8116,
+          "successes": 56,
+          "n": 69,
+          "ci_low": 0.7039,
+          "ci_high": 0.8865,
+          "method": "wilson",
+          "level": 0.95
+        },
+        "accuracy_wilson": {
+          "metric": "accuracy",
+          "estimate": 0.7412,
+          "successes": 63,
+          "n": 85,
+          "ci_low": 0.6391,
+          "ci_high": 0.8224,
+          "method": "wilson",
+          "level": 0.95
+        }
+      },
+      {
+        "age_band": "30-44",
+        "n": 40,
+        "positives": 26,
+        "confusion_matrix": {
+          "tn": 9,
+          "fp": 5,
+          "fn": 7,
+          "tp": 19
+        },
+        "recall": 0.7308,
+        "precision": 0.7917,
+        "specificity": 0.6429,
+        "accuracy": 0.7,
+        "recall_wilson": {
+          "metric": "sensitivity",
+          "estimate": 0.7308,
+          "successes": 19,
+          "n": 26,
+          "ci_low": 0.5392,
+          "ci_high": 0.863,
+          "method": "wilson",
+          "level": 0.95
+        },
+        "specificity_wilson": {
+          "metric": "specificity",
+          "estimate": 0.6429,
+          "successes": 9,
+          "n": 14,
+          "ci_low": 0.3876,
+          "ci_high": 0.8366,
+          "method": "wilson",
+          "level": 0.95
+        },
+        "accuracy_wilson": {
+          "metric": "accuracy",
+          "estimate": 0.7,
+          "successes": 28,
+          "n": 40,
+          "ci_low": 0.5457,
+          "ci_high": 0.8193,
+          "method": "wilson",
+          "level": 0.95
+        }
+      },
+      {
+        "age_band": "45+",
+        "n": 29,
+        "positives": 12,
+        "confusion_matrix": {
+          "tn": 10,
+          "fp": 7,
+          "fn": 0,
+          "tp": 12
+        },
+        "recall": 1.0,
+        "precision": 0.6316,
+        "specificity": 0.5882,
+        "accuracy": 0.7586,
+        "recall_wilson": {
+          "metric": "sensitivity",
+          "estimate": 1.0,
+          "successes": 12,
+          "n": 12,
+          "ci_low": 0.7575,
+          "ci_high": 1.0,
+          "method": "wilson",
+          "level": 0.95
+        },
+        "specificity_wilson": {
+          "metric": "specificity",
+          "estimate": 0.5882,
+          "successes": 10,
+          "n": 17,
+          "ci_low": 0.3601,
+          "ci_high": 0.7839,
+          "method": "wilson",
+          "level": 0.95
+        },
+        "accuracy_wilson": {
+          "metric": "accuracy",
+          "estimate": 0.7586,
+          "successes": 22,
+          "n": 29,
+          "ci_low": 0.5789,
+          "ci_high": 0.8778,
+          "method": "wilson",
+          "level": 0.95
+        }
+      }
+    ],
+    "recall_heterogeneity": {
+      "table": [
+        {
+          "age_band": "21-29",
+          "tp": 7,
+          "fn": 9
+        },
+        {
+          "age_band": "30-44",
+          "tp": 19,
+          "fn": 7
+        },
+        {
+          "age_band": "45+",
+          "tp": 12,
+          "fn": 0
+        }
+      ],
+      "chi2": 10.5819,
+      "df": 2,
+      "p_value_chi2": 0.005037000774270569,
+      "expected": [
+        [
+          11.26,
+          4.74
+        ],
+        [
+          18.3,
+          7.7
+        ],
+        [
+          8.44,
+          3.56
+        ]
+      ],
+      "p_value_permutation": 0.00599880023995201,
+      "n_perm": 5000,
+      "pairwise_fisher": [
+        {
+          "bands": [
+            "21-29",
+            "30-44"
+          ],
+          "table": [
+            [
+              7,
+              9
+            ],
+            [
+              19,
+              7
+            ]
+          ],
+          "p_value_fisher": 0.10087780719584269,
+          "p_value_fisher_bh": 0.10087780719584268
+        },
+        {
+          "bands": [
+            "21-29",
+            "45+"
+          ],
+          "table": [
+            [
+              7,
+              9
+            ],
+            [
+              12,
+              0
+            ]
+          ],
+          "p_value_fisher": 0.0028348463131071823,
+          "p_value_fisher_bh": 0.008504538939321547
+        },
+        {
+          "bands": [
+            "30-44",
+            "45+"
+          ],
+          "table": [
+            [
+              19,
+              7
+            ],
+            [
+              12,
+              0
+            ]
+          ],
+          "p_value_fisher": 0.07448470141968594,
+          "p_value_fisher_bh": 0.10087780719584268
+        }
+      ],
+      "note": "Chi-square can be unreliable with a zero cell (e.g. 12/12 detected in 45+). The permutation p-value and pairwise Fisher tests are the more appropriate summaries here."
+    }
+  },
+  "calibration": {
+    "brier_score": 0.1814,
+    "intercept": -0.5939,
+    "slope": 0.7397,
+    "intercept_se": 0.1983,
+    "slope_se": 0.1332,
+    "intercept_p_value": 0.002740670786652739,
+    "slope_p_value_vs_zero": 2.7909104864232115e-08,
+    "calibration_in_the_large_mean_predicted_minus_base_rate": 0.0939,
+    "calibration_in_the_large_intercept": -0.6384,
+    "mean_predicted": 0.4445,
+    "base_rate": 0.3506,
+    "method": "statsmodels Logit MLE",
+    "note": "Perfect calibration is intercept 0 and slope 1. The deployed model uses class_weight=balanced, which can shift probabilities upward.",
+    "hosmer_lemeshow": {
+      "statistic": 36.4041,
+      "df": 8,
+      "p_value": 1.4807405711764994e-05,
+      "n_groups_requested": 10,
+      "n_groups": 10,
+      "bins": [
+        {
+          "bin": "(0.016399999999999998, 0.0755]",
+          "n": 16,
+          "observed": 0.0,
+          "expected": 0.8203,
+          "mean_predicted": 0.0513,
+          "observed_rate": 0.0
+        },
+        {
+          "bin": "(0.0755, 0.125]",
+          "n": 15,
+          "observed": 1.0,
+          "expected": 1.4584,
+          "mean_predicted": 0.0972,
+          "observed_rate": 0.0667
+        },
+        {
+          "bin": "(0.125, 0.185]",
+          "n": 15,
+          "observed": 0.0,
+          "expected": 2.4057,
+          "mean_predicted": 0.1604,
+          "observed_rate": 0.0
+        },
+        {
+          "bin": "(0.185, 0.273]",
+          "n": 16,
+          "observed": 4.0,
+          "expected": 3.5195,
+          "mean_predicted": 0.22,
+          "observed_rate": 0.25
+        },
+        {
+          "bin": "(0.273, 0.406]",
+          "n": 15,
+          "observed": 5.0,
+          "expected": 5.1552,
+          "mean_predicted": 0.3437,
+          "observed_rate": 0.3333
+        },
+        {
+          "bin": "(0.406, 0.51]",
+          "n": 15,
+          "observed": 7.0,
+          "expected": 6.9955,
+          "mean_predicted": 0.4664,
+          "observed_rate": 0.4667
+        },
+        {
+          "bin": "(0.51, 0.646]",
+          "n": 16,
+          "observed": 10.0,
+          "expected": 9.2878,
+          "mean_predicted": 0.5805,
+          "observed_rate": 0.625
+        },
+        {
+          "bin": "(0.646, 0.804]",
+          "n": 15,
+          "observed": 5.0,
+          "expected": 10.9521,
+          "mean_predicted": 0.7301,
+          "observed_rate": 0.3333
+        },
+        {
+          "bin": "(0.804, 0.898]",
+          "n": 15,
+          "observed": 11.0,
+          "expected": 12.8014,
+          "mean_predicted": 0.8534,
+          "observed_rate": 0.7333
+        },
+        {
+          "bin": "(0.898, 0.998]",
+          "n": 16,
+          "observed": 11.0,
+          "expected": 15.0581,
+          "mean_predicted": 0.9411,
+          "observed_rate": 0.6875
+        }
+      ],
+      "method": "Hosmer-Lemeshow, quantile bins of predicted probability, df = G-2"
+    },
+    "expected_calibration_error": {
+      "ece": 0.1237,
+      "n_bins": 10,
+      "scheme": "equal-width on [0, 1]",
+      "bins": [
+        {
+          "bin": 0,
+          "bin_left": 0.0,
+          "bin_right": 0.1,
+          "n": 25,
+          "mean_predicted": 0.0648,
+          "observed_rate": 0.04
+        },
+        {
+          "bin": 1,
+          "bin_left": 0.1,
+          "bin_right": 0.2,
+          "n": 26,
+          "mean_predicted": 0.1546,
+          "observed_rate": 0.0
+        },
+        {
+          "bin": 2,
+          "bin_left": 0.2,
+          "bin_right": 0.3,
+          "n": 15,
+          "mean_predicted": 0.2459,
+          "observed_rate": 0.3333
+        },
+        {
+          "bin": 3,
+          "bin_left": 0.3,
+          "bin_right": 0.4,
+          "n": 9,
+          "mean_predicted": 0.3586,
+          "observed_rate": 0.3333
+        },
+        {
+          "bin": 4,
+          "bin_left": 0.4,
+          "bin_right": 0.5,
+          "n": 16,
+          "mean_predicted": 0.4557,
+          "observed_rate": 0.4375
+        },
+        {
+          "bin": 5,
+          "bin_left": 0.5,
+          "bin_right": 0.6,
+          "n": 11,
+          "mean_predicted": 0.5469,
+          "observed_rate": 0.6364
+        },
+        {
+          "bin": 6,
+          "bin_left": 0.6,
+          "bin_right": 0.7,
+          "n": 10,
+          "mean_predicted": 0.641,
+          "observed_rate": 0.5
+        },
+        {
+          "bin": 7,
+          "bin_left": 0.7,
+          "bin_right": 0.8,
+          "n": 10,
+          "mean_predicted": 0.7518,
+          "observed_rate": 0.3
+        },
+        {
+          "bin": 8,
+          "bin_left": 0.8,
+          "bin_right": 0.9,
+          "n": 16,
+          "mean_predicted": 0.8502,
+          "observed_rate": 0.75
+        },
+        {
+          "bin": 9,
+          "bin_left": 0.9,
+          "bin_right": 1.0,
+          "n": 16,
+          "mean_predicted": 0.9411,
+          "observed_rate": 0.6875
+        }
+      ],
+      "n": 154
+    }
+  },
+  "decision_curve": {
+    "note": "Net benefit on the test split. treat-none is 0; treat-all is prevalence - (1-prevalence)*pt/(1-pt). Positive net benefit above both references would support using the model at that threshold. This is a descriptive plot on n=154, not a decision-policy recommendation.",
+    "table": [
+      {
+        "threshold": 0.1,
+        "net_benefit": 0.2893,
+        "treat_all": 0.2785,
+        "treat_none": 0.0,
+        "tp": 53,
+        "fp": 76
+      },
+      {
+        "threshold": 0.15,
+        "net_benefit": 0.2674,
+        "treat_all": 0.2361,
+        "treat_none": 0.0,
+        "tp": 53,
+        "fp": 67
+      },
+      {
+        "threshold": 0.2,
+        "net_benefit": 0.263,
+        "treat_all": 0.1883,
+        "treat_none": 0.0,
+        "tp": 53,
+        "fp": 50
+      },
+      {
+        "threshold": 0.25,
+        "net_benefit": 0.2294,
+        "treat_all": 0.1342,
+        "treat_none": 0.0,
+        "tp": 50,
+        "fp": 44
+      },
+      {
+        "threshold": 0.3,
+        "net_benefit": 0.2004,
+        "treat_all": 0.0724,
+        "treat_none": 0.0,
+        "tp": 48,
+        "fp": 40
+      },
+      {
+        "threshold": 0.35,
+        "net_benefit": 0.1858,
+        "treat_all": 0.001,
+        "treat_none": 0.0,
+        "tp": 48,
+        "fp": 36
+      },
+      {
+        "threshold": 0.4,
+        "net_benefit": 0.145,
+        "treat_all": -0.0823,
+        "treat_none": 0.0,
+        "tp": 45,
+        "fp": 34
+      },
+      {
+        "threshold": 0.45,
+        "net_benefit": 0.1187,
+        "treat_all": -0.1806,
+        "treat_none": 0.0,
+        "tp": 42,
+        "fp": 29
+      },
+      {
+        "threshold": 0.5,
+        "net_benefit": 0.0844,
+        "treat_all": -0.2987,
+        "treat_none": 0.0,
+        "tp": 38,
+        "fp": 25
+      },
+      {
+        "threshold": 0.55,
+        "net_benefit": 0.0462,
+        "treat_all": -0.443,
+        "treat_none": 0.0,
+        "tp": 34,
+        "fp": 22
+      },
+      {
+        "threshold": 0.6,
+        "net_benefit": -0.0032,
+        "treat_all": -0.6234,
+        "treat_none": 0.0,
+        "tp": 31,
+        "fp": 21
+      },
+      {
+        "threshold": 0.65,
+        "net_benefit": -0.0538,
+        "treat_all": -0.8553,
+        "treat_none": 0.0,
+        "tp": 27,
+        "fp": 19
+      },
+      {
+        "threshold": 0.7,
+        "net_benefit": -0.0736,
+        "treat_all": -1.1645,
+        "treat_none": 0.0,
+        "tp": 26,
+        "fp": 16
+      }
+    ]
+  },
+  "coefficients": {
+    "space": "standardized features (StandardScaler inside the app pipeline)",
+    "model": "sklearn LogisticRegression(C=1, class_weight='balanced', max_iter=1000)",
+    "n_boot": 1000,
+    "seed": 42,
+    "level": 0.95,
+    "method": "percentile CI from a stratified bootstrap of the full training pipeline",
+    "intercept": {
+      "coefficient": -0.257,
+      "ci_low": -0.3476,
+      "ci_high": -0.1991
+    },
+    "features": [
+      {
+        "feature": "Glucose",
+        "coefficient": 1.1835,
+        "odds_ratio_per_sd": 3.2657,
+        "ci_low": 0.9695,
+        "ci_high": 1.4886,
+        "odds_ratio_ci_low": 2.6365,
+        "odds_ratio_ci_high": 4.4309
+      },
+      {
+        "feature": "BMI",
+        "coefficient": 0.7096,
+        "odds_ratio_per_sd": 2.0332,
+        "ci_low": 0.4566,
+        "ci_high": 0.9921,
+        "odds_ratio_ci_low": 1.5787,
+        "odds_ratio_ci_high": 2.697
+      },
+      {
+        "feature": "Pregnancies",
+        "coefficient": 0.3729,
+        "odds_ratio_per_sd": 1.4519,
+        "ci_low": 0.1054,
+        "ci_high": 0.6434,
+        "odds_ratio_ci_low": 1.1111,
+        "odds_ratio_ci_high": 1.9029
+      },
+      {
+        "feature": "DiabetesPedigreeFunction",
+        "coefficient": 0.2877,
+        "odds_ratio_per_sd": 1.3334,
+        "ci_low": 0.0463,
+        "ci_high": 0.5652,
+        "odds_ratio_ci_low": 1.0474,
+        "odds_ratio_ci_high": 1.7598
+      },
+      {
+        "feature": "Age",
+        "coefficient": 0.1864,
+        "odds_ratio_per_sd": 1.2049,
+        "ci_low": -0.0816,
+        "ci_high": 0.4803,
+        "odds_ratio_ci_low": 0.9216,
+        "odds_ratio_ci_high": 1.6166
+      },
+      {
+        "feature": "Insulin",
+        "coefficient": -0.0446,
+        "odds_ratio_per_sd": 0.9564,
+        "ci_low": -0.3144,
+        "ci_high": 0.2462,
+        "odds_ratio_ci_low": 0.7302,
+        "odds_ratio_ci_high": 1.2792
+      },
+      {
+        "feature": "BloodPressure",
+        "coefficient": -0.0146,
+        "odds_ratio_per_sd": 0.9855,
+        "ci_low": -0.2406,
+        "ci_high": 0.1919,
+        "odds_ratio_ci_low": 0.7862,
+        "odds_ratio_ci_high": 1.2116
+      },
+      {
+        "feature": "SkinThickness",
+        "coefficient": 0.014,
+        "odds_ratio_per_sd": 1.0141,
+        "ci_low": -0.229,
+        "ci_high": 0.2942,
+        "odds_ratio_ci_low": 0.7953,
+        "odds_ratio_ci_high": 1.342
+      }
+    ],
+    "unregularized_mle": {
+      "rows": [
+        {
+          "feature": "intercept",
+          "coefficient": -0.8772,
+          "odds_ratio": 0.4159,
+          "ci_low": -1.0936,
+          "ci_high": -0.6608,
+          "p_value": 1.9543476571912453e-15,
+          "se": 0.1104
+        },
+        {
+          "feature": "Pregnancies",
+          "coefficient": 0.3857,
+          "odds_ratio": 1.4706,
+          "ci_low": 0.143,
+          "ci_high": 0.6284,
+          "p_value": 0.0018380873922298588,
+          "se": 0.1238
+        },
+        {
+          "feature": "Glucose",
+          "coefficient": 1.207,
+          "odds_ratio": 3.3433,
+          "ci_low": 0.9387,
+          "ci_high": 1.4752,
+          "p_value": 1.1559786250070207e-18,
+          "se": 0.1369
+        },
+        {
+          "feature": "BloodPressure",
+          "coefficient": -0.0507,
+          "odds_ratio": 0.9505,
+          "ci_low": -0.282,
+          "ci_high": 0.1805,
+          "p_value": 0.667072728393897,
+          "se": 0.118
+        },
+        {
+          "feature": "SkinThickness",
+          "coefficient": 0.0214,
+          "odds_ratio": 1.0217,
+          "ci_low": -0.2377,
+          "ci_high": 0.2806,
+          "p_value": 0.8711944266797083,
+          "se": 0.1322
+        },
+        {
+          "feature": "Insulin",
+          "coefficient": -0.0761,
+          "odds_ratio": 0.9267,
+          "ci_low": -0.3062,
+          "ci_high": 0.1539,
+          "p_value": 0.5165730180095692,
+          "se": 0.1174
+        },
+        {
+          "feature": "BMI",
+          "coefficient": 0.706,
+          "odds_ratio": 2.0258,
+          "ci_low": 0.4306,
+          "ci_high": 0.9813,
+          "p_value": 5.023564864220326e-07,
+          "se": 0.1405
+        },
+        {
+          "feature": "DiabetesPedigreeFunction",
+          "coefficient": 0.2366,
+          "odds_ratio": 1.2669,
+          "ci_low": 0.0188,
+          "ci_high": 0.4543,
+          "p_value": 0.03320799856620457,
+          "se": 0.1111
+        },
+        {
+          "feature": "Age",
+          "coefficient": 0.1466,
+          "odds_ratio": 1.1579,
+          "ci_low": -0.0957,
+          "ci_high": 0.3889,
+          "p_value": 0.2357868666891818,
+          "se": 0.1236
+        }
+      ],
+      "note": "Unregularized, unweighted Logit MLE on the imputed and standardized training matrix. This is not the deployed model (which uses C=1 L2 and class_weight='balanced'), so coefficients and p-values will not match the sklearn / bootstrap columns."
+    }
+  },
+  "welch_tests": {
+    "note": "Welch two-sample t-tests per feature on the published 768-row cleaned table (not the holdout alone), with Cohen's d and Bonferroni / Benjamini-Hochberg adjustments over the eight features.",
+    "rows": [
+      {
+        "feature": "Glucose",
+        "mean_no_diabetes": 110.64,
+        "mean_diabetes": 142.32,
+        "t_stat": 14.884,
+        "p_value": 2.8439261927745043e-41,
+        "cohens_d": 1.161,
+        "significant": true,
+        "p_value_bonferroni": 2.2751409542196034e-40,
+        "p_value_bh": 2.2751409542196034e-40,
+        "significant_bonferroni": true,
+        "significant_bh": true
+      },
+      {
+        "feature": "BMI",
+        "mean_no_diabetes": 30.86,
+        "mean_diabetes": 35.41,
+        "t_stat": 9.055,
+        "p_value": 2.4835713809715772e-18,
+        "cohens_d": 0.69,
+        "significant": true,
+        "p_value_bonferroni": 1.9868571047772618e-17,
+        "p_value_bh": 9.934285523886309e-18,
+        "significant_bonferroni": true,
+        "significant_bh": true
+      },
+      {
+        "feature": "Age",
+        "mean_no_diabetes": 31.19,
+        "mean_diabetes": 37.07,
+        "t_stat": 6.921,
+        "p_value": 1.2015125273113399e-11,
+        "cohens_d": 0.519,
+        "significant": true,
+        "p_value_bonferroni": 9.612100218490719e-11,
+        "p_value_bh": 3.204033406163573e-11,
+        "significant_bonferroni": true,
+        "significant_bh": true
+      },
+      {
+        "feature": "SkinThickness",
+        "mean_no_diabetes": 27.24,
+        "mean_diabetes": 33.0,
+        "t_stat": 6.177,
+        "p_value": 1.8255271175007797e-09,
+        "cohens_d": 0.566,
+        "significant": true,
+        "p_value_bonferroni": 1.4604216940006237e-08,
+        "p_value_bh": 3.6510542350015593e-09,
+        "significant_bonferroni": true,
+        "significant_bh": true
+      },
+      {
+        "feature": "Pregnancies",
+        "mean_no_diabetes": 3.3,
+        "mean_diabetes": 4.87,
+        "t_stat": 5.907,
+        "p_value": 6.821925600457095e-09,
+        "cohens_d": 0.461,
+        "significant": true,
+        "p_value_bonferroni": 5.457540480365676e-08,
+        "p_value_bh": 1.0915080960731352e-08,
+        "significant_bonferroni": true,
+        "significant_bh": true
+      },
+      {
+        "feature": "Insulin",
+        "mean_no_diabetes": 130.29,
+        "mean_diabetes": 206.85,
+        "t_stat": 5.783,
+        "p_value": 2.6721163998761417e-08,
+        "cohens_d": 0.646,
+        "significant": true,
+        "p_value_bonferroni": 2.1376931199009134e-07,
+        "p_value_bh": 3.5628218665015225e-08,
+        "significant_bonferroni": true,
+        "significant_bh": true
+      },
+      {
+        "feature": "BloodPressure",
+        "mean_no_diabetes": 70.88,
+        "mean_diabetes": 75.32,
+        "t_stat": 4.664,
+        "p_value": 3.971544637191292e-06,
+        "cohens_d": 0.363,
+        "significant": true,
+        "p_value_bonferroni": 3.177235709753034e-05,
+        "p_value_bh": 4.538908156790048e-06,
+        "significant_bonferroni": true,
+        "significant_bh": true
+      },
+      {
+        "feature": "DiabetesPedigreeFunction",
+        "mean_no_diabetes": 0.43,
+        "mean_diabetes": 0.55,
+        "t_stat": 4.577,
+        "p_value": 6.100481424240327e-06,
+        "cohens_d": 0.358,
+        "significant": true,
+        "p_value_bonferroni": 4.8803851393922614e-05,
+        "p_value_bh": 6.100481424240327e-06,
+        "significant_bonferroni": true,
+        "significant_bh": true
+      }
+    ]
+  },
+  "plots": {
+    "confusion_matrix.png": "reports/confusion_matrix.png",
+    "roc_curve.png": "reports/roc_curve.png",
+    "pr_curve.png": "reports/pr_curve.png",
+    "calibration_curve.png": "reports/calibration_curve.png",
+    "decision_curve.png": "reports/decision_curve.png"
+  }
+}

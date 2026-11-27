@@ -11,7 +11,7 @@ every run.
 | Tool | Role here | Code / config | Status |
 |---|---|---|---|
 | MLflow 3.18 | Experiment tracking for the risk model | `ihds/mlops/train_tracked.py` | Implemented, run locally |
-| DVC 3.67 | Data + pipeline versioning (7 stages) | `dvc.yaml`, `params.yaml`, `dvc.lock`, `.dvc/config` | Implemented, `dvc repro` run locally; local remote only |
+| DVC 3.67 | Data + pipeline versioning (8 stages) | `dvc.yaml`, `params.yaml`, `dvc.lock`, `.dvc/config` | Implemented, `dvc repro` run locally; local remote only. The 8th stage (`cm_analysis`) was added later; see below. |
 | Great Expectations 1.25 | Validation of the clinical input data | `ihds/mlops/validate.py` | Implemented, gate in DVC, Prefect and CI |
 | Feast 0.68 | Local feature store (file offline store, SQLite online store) | `feature_repo/`, `ihds/mlops/features.py` | Implemented, local only; the app does not read from Feast |
 | Prefect 3.9 | Orchestration of the stages | `ihds/mlops/flow.py`, `ihds/mlops/deploy.py` | Implemented. The flow runs on a temporary local API, and `flow.serve()` gives a scheduled local deployment (weekly cron) on a local Prefect server. No Prefect Cloud, no work pool or worker, no Docker, not deployed on Azure; the schedule fires only while the serve process runs |
@@ -39,7 +39,8 @@ Run every command below from the repo root with this environment active.
 
 ```
 prepare ─┬─> train (MLflow) ─┬─> evaluate (Deepchecks)
-         │        ^          ├─> explain (SHAP + Fairlearn)
+         │        ^          ├─> cm_analysis (confusion-matrix stats)
+         │                   ├─> explain (SHAP + Fairlearn)
 validate ┘ (GX gate)         ├─> drift (Evidently)
                              └─> features (Feast)
 ```
@@ -49,7 +50,7 @@ validate ┘ (GX gate)         ├─> drift (Evidently)
 | DVC | `dvc repro` (graph: `dvc dag`, metrics: `dvc metrics show`) | Re-runs only the stages whose deps or params changed. Hashes go to `dvc.lock`; outputs go to the local cache `.dvc/cache`. |
 | Prefect | `python -m ihds.mlops.flow` | Runs the same stages as tasks. A failed GX validation or a critical Deepchecks failure raises `QualityGateError`, so the flow ends `Failed` and later tasks do not run. Writes `reports/flow_run.json`. |
 | Prefect (scheduled) | `prefect server start`, then `python -m ihds.mlops.deploy` | Registers the deployment `ihds-mlops-pipeline/weekly-local` on the local server and stays running to fire its schedule (Mondays 06:00 America/Los_Angeles). See the Prefect section. |
-| One stage | `python -m ihds.mlops.<prepare\|validate\|train_tracked\|quality\|explain\|drift\|features>` | `validate` and `quality` exit 1 on failure. |
+| One stage | `python -m ihds.mlops.<prepare\|validate\|train_tracked\|quality\|explain\|drift\|features>` or `python -m ihds.cm_analysis` | `validate` and `quality` exit 1 on failure. `cm_analysis` is not a quality gate. |
 
 ### DVC (data and pipeline versioning)
 
@@ -62,11 +63,13 @@ validate ┘ (GX gate)         ├─> drift (Evidently)
   `feature_repo/data/patient_features.parquet`, `models/risk_model.joblib`, `reports/deepchecks/`, `reports/drift/`.
 - The small JSON metrics in `reports/` and `reports/shap_summary.png` are committed (`cache: false`), so
   reviewers can read the results without running anything.
-- `params.yaml` holds the split, validation thresholds, model hyperparameters, the critical Deepchecks checks
-  and the age bands.
-- Last `dvc repro -f`: 7 of 7 stages ran. After a later edit to `ihds/mlops/validate.py`, `dvc repro` re-ran
-  only `validate` and skipped the other 6 stages, because `validation.json` came out unchanged. `dvc status`
-  then reported "Data and pipelines are up to date."
+- `params.yaml` holds the split, validation thresholds, model hyperparameters, the critical Deepchecks checks,
+  the age bands, and the `cm_analysis` bootstrap / permutation counts.
+- Last full `dvc repro -f` (before the confusion-matrix stage existed): 7 of 7 stages ran. After a later edit
+  to `ihds/mlops/validate.py`, `dvc repro` re-ran only `validate` and skipped the other 6 stages, because
+  `validation.json` came out unchanged. The 8th stage, `cm_analysis`, was added on 2026-11-27 and recorded
+  with `dvc repro cm_analysis` only, so the earlier locked stages were not rewritten. Prefect still runs the
+  original 7 tasks; this analysis is a DVC stage and a `python -m ihds.cm_analysis` command, not a Prefect task.
 
 ### Great Expectations (data validation)
 
@@ -143,6 +146,68 @@ fails on Train Test Samples Mix.
 **Compatibility note:** deepchecks 0.19.1 is the latest release and still uses NumPy aliases that NumPy 2
 removed (`np.Inf`, …). `quality._numpy2_aliases()` re-adds those aliases before the import. It only adds
 names; it changes no values.
+
+
+### Confusion-matrix statistical analysis
+
+`python -m ihds.cm_analysis` (DVC stage `cm_analysis`) writes `reports/confusion_matrix_analysis.json`
+and five PNGs under `reports/`. It uses the saved `models/risk_model.joblib` and the same 614 / 154
+split as the rest of the pipeline. The test-set matrix at threshold 0.5 is TN 75, FP 25, FN 16, TP 38,
+matching `reports/train_metrics.json`. This is a holdout analysis of one model on 154 rows; the
+intervals are wide.
+
+Per-class metrics and 95% Wilson intervals (threshold 0.5):
+
+| Metric | Estimate | 95% Wilson CI |
+|---|---|---|
+| Sensitivity | 0.704 (38/54) | 0.572–0.809 |
+| Specificity | 0.750 (75/100) | 0.657–0.825 |
+| PPV | 0.603 (38/63) | 0.480–0.715 |
+| NPV | 0.824 (75/91) | 0.733–0.889 |
+| Accuracy | 0.734 (113/154) | 0.659–0.797 |
+
+Class-0 F1 is 0.785; class-1 F1 is 0.650. MCC 0.440 (stratified bootstrap 95% CI 0.293–0.583),
+Cohen's κ 0.437, balanced accuracy 0.727 (0.651–0.799). ROC-AUC 0.8126, DeLong 95% CI 0.746–0.880,
+bootstrap 0.738–0.874. PR-AUC 0.673 (0.571–0.781) vs prevalence 0.351. A permutation test of AUC vs
+0.5 (2,000 shuffles) gave p = 0.00050.
+
+Accuracy vs the no-information rate (0.649): exact binomial one-sided p = 0.016, two-sided p = 0.028.
+An exact McNemar test vs "always predict non-diabetic" (38 vs 25 discordant pairs) is not significant
+(two-sided p = 0.13).
+
+The Youden threshold is selected on training-split out-of-fold probabilities (5-fold stratified CV),
+not on the test labels. That cut is 0.559. Applied to the test split it yields TN 78, FP 22, FN 21,
+TP 33 (recall 0.611, accuracy 0.721), which does not beat the app's operating point of 0.5 on this
+holdout. The app still uses 0.5. A pooled CV confusion matrix on the 614 training rows at 0.5 is
+TN 318, FP 82, FN 64, TP 150 (recall 0.701, accuracy 0.762, AUC 0.845).
+
+Per-age-band test matrices, with Wilson intervals on recall (same bands as the Fairlearn audit):
+
+| Age band | n | Diabetic | TN, FP, FN, TP | Recall (95% Wilson) |
+|---|---|---|---|---|
+| 21–29 | 85 | 16 | 56, 13, 9, 7 | 0.438 (0.231–0.668) |
+| 30–44 | 40 | 26 | 9, 5, 7, 19 | 0.731 (0.539–0.863) |
+| 45+ | 29 | 12 | 10, 7, 0, 12 | 1.00 (0.758–1.00) |
+
+Recall differs across bands (permutation p = 0.006), driven by 21–29 vs 45+ (Fisher, BH-adjusted
+p = 0.0085). The other pairwise tests are not significant after adjustment. The 21–29 interval is
+wide (16 positives); 45+ is 12/12.
+
+Calibration: Brier 0.181, mean predicted probability 0.445 vs prevalence 0.351, slope 0.74,
+intercept −0.59, Hosmer–Lemeshow p = 1.5×10⁻⁵, ECE 0.124. The scores are not well calibrated;
+`class_weight=balanced` shifts probabilities upward. On a decision curve, net benefit stays above
+treat-all and treat-none from threshold 0.10 through 0.55 on this split, and drops below treat-none
+at 0.60 and above. That plot is descriptive, not a treatment policy.
+
+Standardized-feature odds ratios for the deployed pipeline (1,000-bootstrap CIs): Glucose 3.27
+(2.64–4.43), BMI 2.03 (1.58–2.70), Pregnancies 1.45 (1.11–1.90), DiabetesPedigreeFunction 1.33
+(1.05–1.76). Age, Insulin, BloodPressure and SkinThickness CIs include 1. Welch t-tests on the
+published 768-row table, with Bonferroni and BH corrections, are in the same JSON; all eight
+features remain significant after Bonferroni.
+
+Plots: `reports/confusion_matrix.png`, `reports/roc_curve.png`, `reports/pr_curve.png`,
+`reports/calibration_curve.png`, `reports/decision_curve.png`. Tests live in
+`tests/test_cm_analysis.py`. This stage is not a quality gate and is not part of the Prefect flow.
 
 ### SHAP and Fairlearn (explainability and fairness)
 

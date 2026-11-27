@@ -44,7 +44,7 @@ def reports_tmp(tmp_path, monkeypatch):
 def test_params_and_dvc_pipeline_are_consistent():
     params = yaml.safe_load((ROOT / "params.yaml").read_text())
     dvc = yaml.safe_load((ROOT / "dvc.yaml").read_text())
-    assert list(dvc["stages"]) == ["prepare", "validate", "train", "evaluate", "explain", "drift", "features"]
+    assert list(dvc["stages"]) == ["prepare", "validate", "train", "evaluate", "cm_analysis", "explain", "drift", "features"]
     for name, st in dvc["stages"].items():
         mod = re.match(r"python -m ([\w.]+)", st["cmd"]).group(1)
         assert (ROOT / (mod.replace(".", "/") + ".py")).exists(), name

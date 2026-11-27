@@ -36,7 +36,7 @@ curl -s localhost:8000/health
 docker compose -f docker-compose.monitoring.yml up -d --build   # Grafana on :3000, Prometheus on :9090
 ```
 
-**Optional MLOps layer** (separate venv): run `pip install -r requirements-mlops.txt`, then either `dvc repro` (7 stages) or `python -m ihds.mlops.flow` (Prefect, one-off). For the scheduled local Prefect deployment, run `prefect server start` and then `python -m ihds.mlops.deploy` in another terminal (local only: no Prefect Cloud, work pool, Docker or Azure). See `docs/MLOPS.md`.
+**Optional MLOps layer** (separate venv): run `pip install -r requirements-mlops.txt`, then either `dvc repro` (8 stages, including `cm_analysis`) or `python -m ihds.mlops.flow` (Prefect, one-off, still 7 tasks). For the scheduled local Prefect deployment, run `prefect server start` and then `python -m ihds.mlops.deploy` in another terminal (local only: no Prefect Cloud, work pool, Docker or Azure). See `docs/MLOPS.md`.
 
 ## 3. Secrets (all optional; placeholders only, never commit real values)
 

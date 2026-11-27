@@ -255,3 +255,78 @@ stages:
       hash: md5
       md5: 2056aab8a61367cec5e2ecb5c5e6ffbc
       size: 741
+  cm_analysis:
+    cmd: python -m ihds.cm_analysis
+    deps:
+    - path: data/processed/test.parquet
+      hash: md5
+      md5: 9ba5ab9c553667048fa087c7d7fa8016
+      size: 9363
+    - path: data/processed/train.parquet
+      hash: md5
+      md5: af932e307d4d6241c37b83af77782f21
+      size: 15102
+    - path: ihds/cm_analysis.py
+      hash: md5
+      md5: faebffeab2897ff719737e8b3fb7fbe9
+      size: 43724
+    - path: ihds/data.py
+      hash: md5
+      md5: a2080a0a7d07c1426fa4a715d049971d
+      size: 1733
+    - path: ihds/model.py
+      hash: md5
+      md5: 9c6fbdd9ebb17caa65ed890394582a46
+      size: 3347
+    - path: ihds/stats_analysis.py
+      hash: md5
+      md5: 499b849bd0c26c51e597938b4c4370e7
+      size: 2650
+    - path: models/risk_model.joblib
+      hash: md5
+      md5: 62c0e0b7094bc7c3c30012c6dd3be324
+      size: 2289
+    params:
+      params.yaml:
+        cm_analysis:
+          bootstrap_resamples: 2000
+          permutation_resamples: 2000
+          coefficient_bootstraps: 1000
+          seed: 42
+          n_cv_folds: 5
+          n_calibration_bins: 10
+        explain.age_bins:
+        - 21
+        - 30
+        - 45
+        - 120
+        explain.age_labels:
+        - 21-29
+        - 30-44
+        - 45+
+        train.threshold: 0.5
+    outs:
+    - path: reports/calibration_curve.png
+      hash: md5
+      md5: b26f355f291c8d95d50dde7877841e92
+      size: 51815
+    - path: reports/confusion_matrix.png
+      hash: md5
+      md5: 20ea8ce53907c6ae9011ee5aa90a942d
+      size: 32797
+    - path: reports/confusion_matrix_analysis.json
+      hash: md5
+      md5: 5000be4e0e369a78540addaa26dbf89b
+      size: 31596
+    - path: reports/decision_curve.png
+      hash: md5
+      md5: 0503897e956446e075f2336afcee1ee3
+      size: 45307
+    - path: reports/pr_curve.png
+      hash: md5
+      md5: 3a8787551b744171844bace678d9d36b
+      size: 36277
+    - path: reports/roc_curve.png
+      hash: md5
+      md5: f813023b0973e9c3ad232d9598d57a49
+      size: 34989

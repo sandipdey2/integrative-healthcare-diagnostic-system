@@ -149,7 +149,9 @@ Full commands and results are in [`docs/MLOPS.md`](docs/MLOPS.md).
 | Runtime (`requirements.txt` + dev deps, now with chromadb/onnxruntime/langsmith/sqlalchemy/psycopg) | `pytest -q -rs` | After the grounding/tracing change: **80 passed, 15 skipped** with no LangSmith or OpenAI key; **86 passed, 9 skipped** with both keys (skips: MLOps tools not installed, promtool, live Grafana). The audit log adds **7 SQLite tests** in `tests/test_audit_log.py` plus 1 live Postgres test skipped unless `DATABASE_URL` is set (and skipped if this host cannot reach Postgres). Measured on this box after the rebase: **88 passed, 15 skipped** without running the live Vocareum, live Postgres, or live LangSmith+LLM tests (10 other skips + 4 vocareum + 1 postgres). After the hot-reload, LangSmith-fallback and audit-count changes, with no LangSmith, OpenAI or Postgres settings at all: **89 passed, 16 skipped** (the one extra skip is the live LangSmith tracing test). The original 56 tests all still pass. Run with the new test files ignored (`test_metrics_agent.py`, `test_metrics_push.py`, `test_retrieval.py`, `test_tracing.py`, `test_embedded_api.py`, `test_audit_log.py`), the subset gives 57 passed, 11 skipped: the 56 plus the new grounding test in `test_workflow.py`. `test_e2e.py`'s AppTest goes through the embedded API. Since the grounding/tracing change: 1 grounding test in `test_workflow.py`, 4 tracing tests in `test_tracing.py` (1 of them live) and 1 LangSmith-link test in `test_embedded_api.py`. |
 | Runtime, final readiness pass (2026-11-25, HEAD c20199d) | `pytest -q -rs` | **89 passed, 16 skipped** with no keys and no `DATABASE_URL`; **95 passed, 10 skipped** with the Vocareum and LangSmith keys (skips: 7 MLOps tools not installed, promtool, live Grafana, live Postgres) |
 | App venv, after the Prefect deployment (2026-11-27) | `pytest -q -rs` | **89 passed, 21 skipped** with no keys (the 5 new Prefect deployment tests skip because Prefect is not in this venv) |
+| App venv, after the confusion-matrix analysis (2026-11-27) | `pytest -q -rs` | **102 passed, 21 skipped** with no keys (12 new tests in `tests/test_cm_analysis.py` and 1 new multiplicity-correction test in `tests/test_data_stats.py`) |
 | MLOps venv, after the Prefect deployment (2026-11-27) | `.venv-mlops/bin/python -m pytest tests/test_mlops.py -q` | **15 passed** (10 before; 5 new Prefect deployment/retry tests). The whole `tests/` folder is not collected in that venv (no langchain) |
+| MLOps venv, after the confusion-matrix analysis (2026-11-27) | `.venv-mlops/bin/python -m pytest tests/test_mlops.py -q` | **15 passed**. The DVC consistency test now expects 8 stages (`cm_analysis` added after `evaluate`). Prefect still has the original 7 tasks. |
 | MLOps (`requirements-mlops.txt`, separate venv) | `pytest -q tests/test_mlops.py tests/test_metrics_agent.py tests/test_metrics_push.py` | **17 passed, 2 skipped** (promtool not on PATH; live Grafana test without creds) |
 | MLOps | `pip install -r requirements-mlops.txt` in a fresh venv, then `pip check` | installs with pip; "No broken requirements found" |
 | Both | `ruff check .` (`ruff.toml`: E, F, W; E501/E702 ignored) | All checks passed. Fixing it removed 9 unused imports and invalid escapes from existing files; there were no behaviour changes |
@@ -250,7 +252,7 @@ End-to-end runs on the box:
 
 | Tool | Run | Observed |
 |---|---|---|
-| DVC | `dvc repro -f`, `dvc status`, `dvc push` (local folder remote) | 7/7 stages ran; "Data and pipelines are up to date"; cached outputs pushed |
+| DVC | `dvc repro -f`, `dvc status`, `dvc push` (local folder remote) | On 2026-11-25: 7/7 stages ran; "Data and pipelines are up to date"; cached outputs pushed. On 2026-11-27 the 8th stage `cm_analysis` was added and locked with `dvc repro cm_analysis` only. |
 | Prefect | `python -m ihds.mlops.flow` | flow `Completed`, 7/7 tasks `Completed`, 37 s |
 | Prefect deployment (local `serve()`, 2026-11-27) | `prefect server start`; `python -m ihds.mlops.deploy --run-now`; `prefect deployment run 'ihds-mlops-pipeline/weekly-local'` | run `f4aa95d0-936f-40c3-88eb-929a4d51f717` `Completed` 7/7, 21.9 s; run `fe2ae45e-0868-4b2d-a121-33ff5abe9ae1` `Completed` 7/7, 19.5 s. Scheduled runs were created (next: 2026-11-30 14:00 UTC) but not waited for |
 | MLflow | DVC train stage | run `8b95d9818eae4b4d94177879cdde1f3c`: ROC-AUC 0.8126, CV 0.8444 ± 0.0161 |
@@ -285,3 +287,146 @@ See docs/MLOPS.md.
 45556540515 (2026-11-25 05:52 UTC). lint, test, data-validation and docker passed, and deploy was skipped. The
 `monitoring-stack` job exists only in `docs/ci.yml.example` so far. Its steps were run by hand on the box (see the
 table above).
+
+## 8. Confusion-matrix statistical analysis (2026-11-27)
+
+`python -m ihds.cm_analysis` (and the DVC stage `cm_analysis`) scores the saved risk model on the same
+614 / 154 stratified split used everywhere else. It writes `reports/confusion_matrix_analysis.json` and
+the PNG plots listed below. The Streamlit app and the agent graph do not import this module. The test-set
+confusion matrix at threshold 0.5 matches `reports/train_metrics.json`: TN 75, FP 25, FN 16, TP 38
+(100 non-diabetic, 54 diabetic).
+
+This is a holdout analysis of one logistic regression on 154 rows. The intervals are wide, and nothing
+here is a diagnostic-device validation.
+
+**Per-class metrics at threshold 0.5**
+
+| Class | Support | Precision | Recall | F1 |
+|---|---|---|---|---|
+| 0 (non-diabetic) | 100 | 0.824 | 0.750 | 0.785 |
+| 1 (diabetic) | 54 | 0.603 | 0.704 | 0.650 |
+
+Overall: accuracy 0.734, balanced accuracy 0.727, MCC 0.440, Cohen's κ 0.437, LR+ 2.81, LR− 0.40,
+specificity 0.750, NPV 0.824, FPR 0.250, FNR 0.296.
+
+**95% confidence intervals**
+
+Wilson intervals for the binomial proportions:
+
+| Metric | Estimate | 95% Wilson CI |
+|---|---|---|
+| Sensitivity (recall) | 0.704 (38/54) | 0.572–0.809 |
+| Specificity | 0.750 (75/100) | 0.657–0.825 |
+| PPV | 0.603 (38/63) | 0.480–0.715 |
+| NPV | 0.824 (75/91) | 0.733–0.889 |
+| Accuracy | 0.734 (113/154) | 0.659–0.797 |
+
+The lower bound of the sensitivity interval is above 0.50; a test checks that floor on this split.
+Stratified bootstrap (2,000 resamples, seed 42) percentile intervals:
+
+| Metric | Estimate | 95% bootstrap CI |
+|---|---|---|
+| ROC-AUC | 0.8126 | 0.738–0.874 |
+| PR-AUC (average precision) | 0.673 | 0.571–0.781 |
+| F1 (class 1) | 0.650 | 0.557–0.737 |
+| MCC | 0.440 | 0.293–0.583 |
+| Balanced accuracy | 0.727 | 0.651–0.799 |
+
+The DeLong 95% CI for AUC is 0.746–0.880 (SE 0.034), close to the bootstrap. PR-AUC 0.673 is above the
+prevalence baseline of 0.351; the bootstrap interval stays above that baseline.
+
+**Significance tests**
+
+- Accuracy vs the no-information rate (majority class 0, 100/154 = 0.649): exact binomial, one-sided
+  p = 0.016, two-sided p = 0.028.
+- McNemar (exact) vs the same majority baseline: 38 cases the model catches and the baseline misses,
+  25 the model flags and the baseline gets right; two-sided p = 0.13. The accuracy gain is not a
+  significant improvement over "always predict non-diabetic" on the discordant pairs.
+- Permutation test of AUC vs 0.5 (2,000 shuffles of the labels): 0 of 2,000 permutations reached 0.8126;
+  p = 0.00050 ((0+1)/(2000+1)). The model ranks better than chance; that is a weaker claim than "the
+  0.5 threshold beats the majority classifier."
+
+**Thresholds and Youden**
+
+The Youden threshold (max sensitivity + specificity − 1) is chosen on out-of-fold predictions from
+5-fold stratified CV on the 614-row training split, then applied to the test split. That cut is 0.559
+(train-OOF J = 0.525). On the test split it yields TN 78, FP 22, FN 21, TP 33: accuracy 0.721, recall
+0.611, specificity 0.780 — lower recall and slightly lower accuracy than the app's operating point of
+0.5. The app still uses 0.5. The test-set grid (0.30–0.70, not used for selection) is monotone in
+recall as the threshold rises, as a test checks.
+
+**CV-pooled training matrix**
+
+Pooled out-of-fold predictions on the 614 training rows, threshold 0.5: TN 318, FP 82, FN 64, TP 150;
+recall 0.701 (vs 0.704 on the holdout), accuracy 0.762 (vs 0.734), AUC 0.845 (vs 0.813 on the holdout,
+and vs the 5-fold mean 0.8444 ± 0.0161 already in `train_metrics.json`). Recall is stable; holdout
+accuracy is a little lower than the CV figure.
+
+**Per-age-band confusion matrices** (same bands as the Fairlearn audit)
+
+| Age band | n | Diabetic | CM (TN, FP, FN, TP) | Recall (95% Wilson) |
+|---|---|---|---|---|
+| 21–29 | 85 | 16 | 56, 13, 9, 7 | 0.438 (0.231–0.668) |
+| 30–44 | 40 | 26 | 9, 5, 7, 19 | 0.731 (0.539–0.863) |
+| 45+ | 29 | 12 | 10, 7, 0, 12 | 1.00 (0.758–1.00) |
+
+The 21–29 band has the lowest recall, but the interval is very wide (16 positives). 45+ is 12/12, not
+a precise rate. A 2×3 test of "detected vs missed" among the 54 test positives: χ² p = 0.005,
+permutation p = 0.006. Pairwise Fisher tests, BH-adjusted: 21–29 vs 45+ p = 0.0085; the other two
+pairs are not significant after adjustment (p_BH = 0.10). The zero cell in 45+ makes the χ²
+approximation less reliable; the permutation and Fisher results are the better summaries.
+
+**Calibration and decision curve**
+
+Brier score 0.181. Mean predicted probability 0.445 vs test prevalence 0.351 (difference 0.094).
+Calibration slope 0.74, intercept −0.59. Hosmer–Lemeshow (10 quantile bins, df = 8) statistic 36.4,
+p = 1.5×10⁻⁵. ECE (10 equal-width bins) 0.124. The model is not well calibrated: `class_weight=balanced`
+pushes probabilities up, which is expected and is why 0.5 is a classification cut, not a calibrated
+risk. Plots: `reports/calibration_curve.png`.
+
+Decision-curve analysis on the test split: the model's net benefit sits above both treat-all and
+treat-none from threshold 0.10 through 0.55; at 0.60 and above it falls below treat-none (negative).
+This is a descriptive plot on 154 rows, not a treatment-policy recommendation. Plot:
+`reports/decision_curve.png`. ROC and PR curves are `reports/roc_curve.png` and `reports/pr_curve.png`.
+The confusion-matrix heatmap (raw and row-normalized) is `reports/confusion_matrix.png`.
+
+**Coefficients (standardized features, deployed pipeline)**
+
+Stratified bootstrap (1,000 resamples) of the full training pipeline (median impute, StandardScaler,
+LogisticRegression with C=1 and `class_weight=balanced`). Odds ratios are per 1 SD.
+
+| Feature | Coefficient | OR per SD (95% CI) |
+|---|---|---|
+| Glucose | 1.18 | 3.27 (2.64–4.43) |
+| BMI | 0.71 | 2.03 (1.58–2.70) |
+| Pregnancies | 0.37 | 1.45 (1.11–1.90) |
+| DiabetesPedigreeFunction | 0.29 | 1.33 (1.05–1.76) |
+| Age | 0.19 | 1.20 (0.92–1.62) |
+| Insulin | −0.04 | 0.96 (0.73–1.28) |
+| BloodPressure | −0.01 | 0.99 (0.79–1.21) |
+| SkinThickness | 0.01 | 1.01 (0.80–1.34) |
+
+The intercept is −0.26 (bootstrap CI −0.35 to −0.20). Age, Insulin, BloodPressure and SkinThickness
+CIs include an odds ratio of 1. An optional unregularized, unweighted statsmodels Logit on the same
+standardized matrix is stored in the JSON for p-values; those coefficients are not the deployed model
+and should not be quoted as if they were.
+
+**Welch tests on features** (`ihds/stats_analysis.py`, extended, not reimplemented)
+
+Two-sample Welch t-tests and Cohen's d, now with Bonferroni and Benjamini–Hochberg adjustments over
+the eight features. These run on the published 768-row cleaned table, so they are descriptive of that
+table, not a holdout confirmatory test. All eight features remain significant after Bonferroni
+(largest adjusted p is DiabetesPedigreeFunction, 4.9×10⁻⁵). Glucose has the largest effect (d = 1.16,
+unadjusted p = 2.8×10⁻⁴¹).
+
+**Not added, and why**
+
+- No cross-model DeLong test: the repo deploys one logistic regression. The offline six-model
+  comparison lives outside this commit.
+- No sex or race tests: the Pima table has no such columns.
+- The analysis is a DVC stage and a `python -m` command, not a Prefect task, so the tested 7-task
+  Prefect flow is unchanged.
+
+Tests in `tests/test_cm_analysis.py` check the confusion-matrix counts, the metric formulas on a
+hand-built matrix, Wilson interval bounds, bootstrap determinism, a monotone recall sweep,
+per-class supports, and that the report JSON and PNGs are written.

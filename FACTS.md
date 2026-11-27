@@ -93,7 +93,8 @@ all 8 features p < 1e-5.
   - Test results: acc 0.7338, prec 0.6032, rec 0.7037, F1 0.6496, ROC-AUC 0.8126; TN75 FP25 FN16 TP38.
   - CV ROC-AUC 0.8444 ± 0.0161.
   - Run IDs: `dvc repro -f` → 8b95d9818eae4b4d94177879cdde1f3c; Prefect → b1085973ece0449c93940c9b9d94725c.
-- DVC 3.67: 7 stages; local remote `dvc-storage/` (gitignored). Raw CSV stays in git, hashed in dvc.lock. `dvc repro -f` ran 7/7 stages; status up to date.
+- DVC 3.67: 8 stages (the 8th, `cm_analysis`, was added 2026-11-27). Local remote `dvc-storage/` (gitignored). Raw CSV stays in git, hashed in dvc.lock. The earlier full `dvc repro -f` ran the original 7 stages; the new stage was locked with `dvc repro cm_analysis`. Prefect still has 7 tasks.
+- Confusion-matrix analysis (`python -m ihds.cm_analysis`): test CM TN 75 FP 25 FN 16 TP 38; sensitivity 0.704 (Wilson 0.572–0.809); AUC 0.8126 (DeLong 0.746–0.880); accuracy vs NIR exact binomial two-sided p = 0.028; McNemar vs majority two-sided p = 0.13; Youden threshold from train OOF is 0.559 (test CM 78/22/21/33, recall 0.611); 21–29 recall 0.438 (Wilson 0.231–0.668); Brier 0.181, mean predicted 0.445 vs prevalence 0.351. Details in TESTING.md §8 and reports/confusion_matrix_analysis.json.
 - Deepchecks 0.19.1 (with NumPy 2 alias shim): gate passed, 0 critical failures.
   - data_integrity: 11/12 pass.
   - train_test_validation: 8/12 pass, 1 fail (Feature Label Correlation Change, Insulin PPS diff 0.3).

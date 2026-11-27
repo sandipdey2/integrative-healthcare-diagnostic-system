@@ -64,6 +64,37 @@ stages:
       - reports/deepchecks_summary.json:
           cache: false
 
+
+  cm_analysis:
+    cmd: python -m ihds.cm_analysis
+    deps:
+      - data/processed/train.parquet
+      - data/processed/test.parquet
+      - models/risk_model.joblib
+      - ihds/cm_analysis.py
+      - ihds/model.py
+      - ihds/data.py
+      - ihds/stats_analysis.py
+    params:
+      - train.threshold
+      - explain.age_bins
+      - explain.age_labels
+      - cm_analysis
+    metrics:
+      - reports/confusion_matrix_analysis.json:
+          cache: false
+    plots:
+      - reports/confusion_matrix.png:
+          cache: false
+      - reports/roc_curve.png:
+          cache: false
+      - reports/pr_curve.png:
+          cache: false
+      - reports/calibration_curve.png:
+          cache: false
+      - reports/decision_curve.png:
+          cache: false
+
   explain:
     cmd: python -m ihds.mlops.explain
     deps:

@@ -84,7 +84,8 @@ runtime does not install or import them, apart from `prometheus-client`, which s
 |---|---|---|
 | Great Expectations | `python -m ihds.mlops.validate`: a 30-expectation suite on the clinical CSV (schema, row count, dtypes, non-null shares, ranges, label set) | 30 / 30 passed |
 | MLflow | `python -m ihds.mlops.train_tracked`: logs params, metrics, coefficients and the model to `mlruns/` (SQLite + artifacts, gitignored) | ROC-AUC 0.8126, CV 0.8444 ± 0.0161; run `8b95d9818eae4b4d94177879cdde1f3c` |
-| DVC | `dvc repro`: 7 stages (prepare, validate, train, evaluate, explain, drift, features), `params.yaml`, local cache and a local folder remote | 7 / 7 stages ran; `dvc status` up to date |
+| Confusion-matrix analysis | `python -m ihds.cm_analysis` (also a DVC stage): test-set CM, per-class metrics, Wilson and bootstrap CIs, Youden threshold from train CV, age-band CMs, calibration and a decision curve | Test CM TN 75, FP 25, FN 16, TP 38 (matches `train_metrics.json`); sensitivity 0.704 (Wilson 0.57–0.81); AUC 0.8126 (DeLong 0.75–0.88); McNemar vs majority p = 0.13; 21–29 recall 0.44 with a wide CI. See `TESTING.md` §8. |
+| DVC | `dvc repro`: 8 stages (prepare, validate, train, evaluate, cm_analysis, explain, drift, features), `params.yaml`, local cache and a local folder remote | First 7 stages ran earlier; `cm_analysis` was added 2026-11-27 (`dvc repro cm_analysis`). Prefect still runs 7 tasks. |
 | Deepchecks | `python -m ihds.mlops.quality`: data-integrity, train-test and model-evaluation suites; exits 1 on a critical check | Gate passed. Non-critical fails: Feature Label Correlation Change (Insulin), Simple Model Comparison |
 | SHAP | `LinearExplainer`: global and local explanations | Top features: Glucose 1.01, BMI 0.59, Pregnancies 0.33 (mean \|SHAP\|, log-odds) |
 | Fairlearn | `MetricFrame` by age band. The data has no sex or race column, so age is the only attribute available | Demographic parity diff 0.420, equalized odds diff 0.563; recall 0.44 for ages 21–29 |
@@ -164,10 +165,10 @@ Streamlit Community Cloud serves the `main` branch. LLM drafts vary from run to 
 | `mcp_server/` | MCP server exposing the five tools (stdio / streamable HTTP) |
 | `api/` | FastAPI service (`/assess`, `/health`, `/assessments/recent`, `/monitoring/summary`, Prometheus `/metrics`) |
 | `app.py` | Streamlit UI (risk assessment, model & data, synthetic stress test, monitoring, architecture, limits, audit log) |
-| `ihds/` | `agents.py` (LangGraph), `tools.py` (the five tool functions), `tool_backends.py` (MCP client / fallback), `workflow.py` (guard/RAG/reviewer blocks), `vector_store.py` (ChromaDB), `tracing.py` (LangSmith), `embedded_api.py` (FastAPI inside Streamlit), `metrics_push.py` (Grafana Cloud remote write), `audit_log.py` (Postgres/SQLite assessment log), `model.py`, `gan.py`, `stats_analysis.py`, `data.py`, `monitoring.py`, `pipeline.py` |
+| `ihds/` | `agents.py` (LangGraph), `tools.py` (the five tool functions), `tool_backends.py` (MCP client / fallback), `workflow.py` (guard/RAG/reviewer blocks), `vector_store.py` (ChromaDB), `tracing.py` (LangSmith), `embedded_api.py` (FastAPI inside Streamlit), `metrics_push.py` (Grafana Cloud remote write), `audit_log.py` (Postgres/SQLite assessment log), `model.py`, `gan.py`, `stats_analysis.py`, `cm_analysis.py`, `data.py`, `monitoring.py`, `pipeline.py` |
 | `data/` | Pima CSV, clinical knowledge base, data card |
 | `notebooks/integrated_diagnostic_system.ipynb` | Executed walkthrough of the same code |
-| `tests/` | 110 pytest tests: the original 56 (units, every agent node, routing, loop cap, Evidently, end-to-end, Streamlit AppTest, real MCP server over stdio and HTTP, FastAPI, 4 live `vocareum`) plus retrieval, tracing, metrics push/agent, embedded API, audit log, grounding and `test_mlops.py`. Without keys: 89 passed, 21 skipped (5 of the skips are the Prefect deployment tests added later; the tests/test_mlops.py file has 15 tests, all passing in the MLOps venv) |
+| `tests/` | 110 pytest tests: the original 56 (units, every agent node, routing, loop cap, Evidently, end-to-end, Streamlit AppTest, real MCP server over stdio and HTTP, FastAPI, 4 live `vocareum`) plus retrieval, tracing, metrics push/agent, embedded API, audit log, grounding and `test_mlops.py`. Without keys: 102 passed, 21 skipped (5 of the skips are the Prefect deployment tests; `tests/test_mlops.py` has 15 tests, all passing in the MLOps venv). The 102 includes 12 tests in `tests/test_cm_analysis.py` and one multiplicity-correction test in `tests/test_data_stats.py`. |
 | `agentic_system.ipynb` | Live run of the multi-agent graph (low / borderline / high risk, refusal, revision loop) with traces |
 | `scripts/` | `export_graph.py` (diagrams from code), `start_all.sh` (MCP + API + UI), `run_llm_eval.py` (live LLM vs template, Evidently), `eval_grounding.py` (reviewer grounding batch), `compare_retrieval.py` (Chroma vs keyword) |
 | `monitoring/reports/` | Evidently HTML/JSON reports |
@@ -183,6 +184,7 @@ Streamlit Community Cloud serves the `main` branch. LLM drafts vary from run to 
 ## Limitations
 
 - **Data:** a single public dataset from one population (Pima women aged 21 and over); a small hand-written knowledge base of 14 cards.
+- **Risk model:** logistic regression with `class_weight=balanced`. On the 154-row holdout the mean predicted probability is 0.45 against a prevalence of 0.35, so 0.5 is a classification cut, not a calibrated risk. The 21–29 age band has recall 0.44 with only 16 positives (Wilson 0.23–0.67).
 - **Safety guard:** a keyword guard, which a paraphrase can bypass (one miss among 19 labelled cases).
 - **GAN:** does not reproduce the imputation-heavy features, so synthetic rows are used only for stress tests.
 - **Grounding check:** token overlap with the evidence cards and case data, not semantic entailment. It cannot detect a valid citation attached to the wrong claim. The 0.4 threshold was calibrated on one 15-case batch per retriever and a few hand-written invented drafts.
