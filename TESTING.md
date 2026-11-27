@@ -151,6 +151,7 @@ Full commands and results are in [`docs/MLOPS.md`](docs/MLOPS.md).
 | App venv, after the Prefect deployment (2026-11-27) | `pytest -q -rs` | **89 passed, 21 skipped** with no keys (the 5 new Prefect deployment tests skip because Prefect is not in this venv) |
 | App venv, after the confusion-matrix analysis (2026-11-27) | `pytest -q -rs` | **102 passed, 21 skipped** with no keys (12 new tests in `tests/test_cm_analysis.py` and 1 new multiplicity-correction test in `tests/test_data_stats.py`) |
 | App venv, after the Loki logging layer (2026-11-27) | `pytest -q -rs` (LANGSMITH_API_KEY unset) | **122 passed, 21 skipped** with no keys: 20 new tests in `tests/test_logging.py`; `tests/test_mlops.py::test_prometheus_grafana_configs_reference_real_metrics` now expects the `loki` and `alloy` services. With a LangSmith key whose monthly trace quota was exhausted, `test_live_run_is_traced_with_tags_and_metadata` failed on HTTP 429 from LangSmith (not related to this change), so this run was done without the key |
+| App venv, after Arize tracing (2026-11-27, on top of Loki) | `pytest -q -rs` (LANGSMITH_API_KEY unset) | **135 passed, 21 skipped** with no keys (the 13 new `tests/test_arize_tracing.py` tests pass; run with `LANGSMITH_API_KEY` unset: with it set, the live LangSmith test needs network and can hit LangSmith's rate limit). MLOps venv: `pytest tests/test_mlops.py` 15 passed; `ruff check .` clean |
 | MLOps venv, after the Prefect deployment (2026-11-27) | `.venv-mlops/bin/python -m pytest tests/test_mlops.py -q` | **15 passed** (10 before; 5 new Prefect deployment/retry tests). The whole `tests/` folder is not collected in that venv (no langchain) |
 | MLOps venv, after the confusion-matrix analysis (2026-11-27) | `.venv-mlops/bin/python -m pytest tests/test_mlops.py -q` | **15 passed**. The DVC consistency test now expects 8 stages (`cm_analysis` added after `evaluate`). Prefect still has the original 7 tasks. |
 | MLOps venv, after the Loki logging layer (2026-11-27) | `.venv-mlops/bin/python -m pytest tests/test_mlops.py -q` | **15 passed** |
@@ -230,6 +231,24 @@ What `tests/test_tracing.py` checks:
 `tests/test_embedded_api.py` also checks that a run id and URL produced in the embedded API's thread reach the
 Streamlit trace panel as **View trace in LangSmith** (AppTest).
 
+What `tests/test_arize_tracing.py` checks (offline; fakes for `register`, the instrumentor and `TraceConfig`, plus
+the real instrumentor with an in-memory exporter):
+
+- with no `ARIZE_*` variables, with only one of them, or with `IHDS_ARIZE=0`, `configure()` returns `None` and calls
+  nothing; the assessment span is a no-op that never reads the result;
+- with both set, `register` receives the space ID, key and project (default `ihds-diagnostic-agents`, or
+  `ARIZE_PROJECT_NAME`), the instrumentor is called with that provider and a `TraceConfig`, and a second call does
+  not register again;
+- every hide flag is on by default and all are off with `IHDS_ARIZE_CAPTURE_CONTENT=1`;
+- missing packages and a failing `register` leave tracing off; neither the key nor the space ID appears in the log;
+- the returned config and the span attributes carry no key, no patient value and no free text;
+- the MCP stdio child env has no `ARIZE_*` variables;
+- real instrumentor, in-memory exporter, template writer: one `ihds-assessment` span with the band and rounded
+  probability, LangGraph spans nested under it, no patient value, question text or draft text in any attribute, `input.value`
+  and `output.value` only `__REDACTED__`; a fake chat model call exports no prompt or completion.
+
+These tests do not reach Arize. The live export is in the table below.
+
 What `tests/test_metrics_push.py` checks (stdlib only):
 
 - the hand-written protobuf and snappy round-trip through reference decoders (and `cramjam` when installed);
@@ -286,6 +305,7 @@ End-to-end runs on the box:
 | Deepchecks | evaluate stage | gate passed, 0 critical failures (non-critical: Feature Label Correlation Change, Simple Model Comparison) |
 | SHAP / Fairlearn | explain stage | top 3: Glucose, BMI, Pregnancies; DP diff 0.420, EO diff 0.563 across age bands |
 | Feast | features stage | patient 0 and 5 fetched online, matching the source; p = 0.826 / 0.2059 |
+| Arize AX tracing | 3 live `/assess` calls (`use_llm=true`, gpt-4o-mini, tools via MCP stdio) with `ARIZE_SPACE_ID`/`ARIZE_API_KEY` set, OTLP exporter calls counted | 4 export calls, 79 spans, all `SpanExportResult.SUCCESS`, `force_flush` true, no exporter errors on stderr; project `ihds-diagnostic-agents`. Arize UI not opened, so the display there is not verified |
 | Docker | `docker compose -f docker-compose.monitoring.yml build`, then `docker run --network host ihds:local` (default CMD = `scripts/start_all.sh`) | image built; Streamlit `/_stcore/health` `ok`; API `/health` showed `tools_transport: mcp-http`; `/metrics` served 18 `ihds_` lines; container healthcheck `healthy`; `mlflow` is not in the image |
 | Prometheus + Grafana | unmodified `docker-compose.monitoring.yml` on a bridge network (after `scripts/fix_docker_bridge_forward.sh`, box only), 104 `/assess` calls | `ihds-api up http://api:8000/metrics`; ok 95, blocked 9; high 35, low 33, moderate 27; escalations 0; p95 0.0486 s; Grafana datasource health OK; every panel returned series; `docs/screenshots/10_grafana_dashboard.png` |
 | CI `monitoring-stack` job (by hand) | the job's steps from `docs/ci.yml.example` | `compose config -q` and `promtool check config` OK; `up --wait` with 3/3 healthy; targets `{'ihds-api': 'up', 'prometheus': 'up'}`; `sum(ihds_predictions_total)` = 20; Grafana health, datasource health and dashboard search OK |

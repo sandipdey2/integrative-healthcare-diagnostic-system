@@ -329,7 +329,17 @@ class AdvisoryResult:
 
 
 def run(graph, record: dict, question: str = "") -> AdvisoryResult:
-    """Run the graph once. With LangSmith tracing on, the run is one root trace "ihds-assessment"."""
+    """Run the graph once. With LangSmith tracing on, the run is one root trace "ihds-assessment"; with Arize
+    tracing on (ihds/arize_tracing.py), it is also one parent span of that name. Both are optional and independent."""
+    from . import arize_tracing
+
+    with arize_tracing.assessment_span() as span:
+        res = _run_langsmith(graph, record, question)
+        span.annotate(res)
+        return res
+
+
+def _run_langsmith(graph, record: dict, question: str) -> AdvisoryResult:
     from . import tracing
 
     if tracing.enabled():

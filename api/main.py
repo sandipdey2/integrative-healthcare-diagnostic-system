@@ -33,10 +33,11 @@ from fastapi.concurrency import run_in_threadpool
 from prometheus_client import CONTENT_TYPE_LATEST, REGISTRY, Counter, Gauge, Histogram, generate_latest
 from pydantic import BaseModel, Field
 
-from ihds import agents, audit_log, logging_config, monitoring, tracing, workflow
+from ihds import agents, arize_tracing, audit_log, logging_config, monitoring, tracing, workflow
 from ihds.config import FEATURES, LLM_MODEL, REPORTS_DIR
 
 tracing.configure()  # LangSmith tracing only when LANGSMITH_API_KEY is in the environment
+arize_tracing.configure()  # Arize AX tracing only when ARIZE_SPACE_ID and ARIZE_API_KEY are set
 LOG = logging_config.configure()  # JSON lines to stdout and, with IHDS_LOG_FILE, to a file that Alloy ships to Loki
 
 STATE: dict = {}

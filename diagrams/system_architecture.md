@@ -38,6 +38,11 @@ pushes it to Loki, and Grafana reads Loki (`docker-compose.monitoring.yml`, loca
 On Streamlit Cloud, `app.py` hashes the project source and rebuilds the cached System, LLM graph and
 embedded API after a code push, so a push never leaves the old reviewer running.
 
+Arize AX tracing (`ihds/arize_tracing.py`) is a second optional trace sink next to LangSmith, on only when
+`ARIZE_SPACE_ID` and `ARIZE_API_KEY` are set. `agents.run()` opens one `ihds-assessment` parent span and the
+OpenInference LangChain instrumentor nests the LangGraph, node, tool and gpt-4o-mini spans under it, with inputs
+and outputs hidden by default. The generated `docs/deployment.mmd/.png` graph above does not draw it.
+
 - **MCP server** (`mcp_server/server.py`): official `mcp` Python SDK 1.30, `FastMCP("ihds-tools")`. At start-up it
   runs `ihds.pipeline.build_core` (same seeds as the app), then registers the five functions from
   `ihds/tools.py` as MCP tools: `risk_score`, `explain_contributions`, `rag_search`, `population_context`,

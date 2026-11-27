@@ -65,7 +65,8 @@ if _PREV_VERSION not in (None, CODE_VERSION) or _STALE_PROCESS:
 _live()["version"] = CODE_VERSION
 
 from ihds import (  # noqa: E402
-    agents, audit_log, data, embedded_api, metrics_push, model, monitoring, stats_analysis, tracing, workflow,
+    agents, arize_tracing, audit_log, data, embedded_api, metrics_push, model, monitoring, stats_analysis, tracing,
+    workflow,
 )
 from ihds.config import FEATURES, LLM_MODEL, REPORTS_DIR, ROOT, TARGET, VALID_RANGES  # noqa: E402
 from ihds.pipeline import build_system  # noqa: E402
@@ -121,6 +122,17 @@ def _start_tracing():
 
 
 TRACING = _start_tracing()
+
+
+def _start_arize():
+    """Optional Arize AX tracing (on only with ARIZE_SPACE_ID and ARIZE_API_KEY in the environment)."""
+    try:
+        return arize_tracing.configure()
+    except Exception:
+        return None
+
+
+ARIZE = _start_arize()
 
 
 def _start_audit_log():
@@ -273,6 +285,9 @@ with st.sidebar:
             st.caption("Metrics push: off (no GRAFANA_RW_URL secret)")
     st.caption(f"LangSmith tracing: on (project {TRACING['project']})" if TRACING
                else "LangSmith tracing: off (no LANGSMITH_API_KEY)")
+    st.caption(f"Arize tracing: on (project {ARIZE['project']}; inputs/outputs hidden)" if ARIZE and ARIZE["content_hidden"]
+               else f"Arize tracing: on (project {ARIZE['project']}; content capture ON)" if ARIZE
+               else "Arize tracing: off (no ARIZE_SPACE_ID / ARIZE_API_KEY)")
     AUDIT_SLOT = st.empty()  # filled now and again after an assessment, so the row count includes it
     _render_audit_status(AUDIT_SLOT)
     st.divider()

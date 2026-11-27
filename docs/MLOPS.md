@@ -1007,6 +1007,73 @@ the default case and the first 14 held-out cases with glucose and BMI. Results a
 - **Older numbers:** the retrieval comparison (`scripts/compare_retrieval.py`) used the earlier cards-only score
   with the 0.2 threshold and was not rerun.
 
+## Arize AX tracing (optional)
+
+`ihds/arize_tracing.py` adds a second, independent tracing path next to LangSmith. Either, both or neither can be
+on. It is **off unless both `ARIZE_SPACE_ID` and `ARIZE_API_KEY` are set in the environment** (and `IHDS_ARIZE` is
+not `0`/`false`/`off`). Off, nothing is imported and no span is created. `requirements.txt` pins `arize-otel==0.14.1`
+and `openinference-instrumentation-langchain==0.1.90`; if they are not installed, `configure()` logs a warning and
+the app runs with tracing off.
+
+**Turning it on** (placeholders; never commit real values):
+
+```bash
+pip install -r requirements.txt
+export ARIZE_SPACE_ID=<your Arize space ID>
+export ARIZE_API_KEY=<your Arize API key>
+export ARIZE_PROJECT_NAME=ihds-diagnostic-agents   # optional; this is the default
+uvicorn api.main:app            # or: streamlit run app.py
+```
+
+**What is traced.** `configure()` calls `arize.otel.register(...)` and then
+`LangChainInstrumentor().instrument(...)`. That instrumentor patches LangChain's callback system, so it also
+covers the LangGraph run, each node, the tool calls and the `ChatOpenAI` (gpt-4o-mini) writer call. No separate
+OpenAI instrumentor is used. `agents.run()` wraps each assessment in one parent span `ihds-assessment` (kind
+`AGENT`) with these attributes, set from the finished result:
+
+| Attribute | Value |
+|---|---|
+| `ihds.status`, `ihds.risk_band`, `ihds.borderline` | workflow status, band (`none` when blocked), borderline flag |
+| `ihds.probability` | model probability rounded to 2 decimals (absent when the guard blocked the case) |
+| `ihds.escalated`, `ihds.revisions` | clinician escalation, number of reviewer-requested redrafts |
+| `ihds.draft_source`, `ihds.retrieval` | `llm` or `template`; `chroma` or `keyword` |
+| `ihds.grounding_score` | the reviewer's final grounding score, 3 decimals |
+| `ihds.llm_total_tokens` | sum of the writer calls' token usage |
+
+**What is hidden.** The module sets the instrumentor's `TraceConfig` to hide inputs, outputs, input and output
+messages, prompts, choices and LLM invocation parameters. In the exported spans `input.value` and `output.value`
+are the placeholder `__REDACTED__`, and the LLM spans carry no messages. Patient feature values and the free-text
+question are never added as attributes by this module. Still exported: span names and timing, the tool names and
+descriptions, token counts, the model name and LangGraph metadata (step number, node name). This is a default, not
+a guarantee about everything a future dependency version might record: `tests/test_arize_tracing.py` checks it
+against the pinned versions. `IHDS_ARIZE_CAPTURE_CONTENT=1` turns the hiding off (prompts then include the patient
+values and the retrieved evidence); do not use it with real patient data.
+
+**Keys.** They are read from the environment only (no Streamlit secrets table is wired), never logged, and not
+passed to the MCP tool server (its env is an allow-list; `scripts/start_all.sh` also unsets them for the MCP HTTP
+server). A failed registration logs only the exception type.
+
+**Where it starts.** `api/main.py` (REST service, also the embedded API inside Streamlit) and `app.py`
+(sidebar caption `Arize tracing: on (project ...; inputs/outputs hidden)` or off). The MCP server process is not
+instrumented: its tool calls show up as TOOL spans from the agent side.
+
+**Verified on the box (2026-11-27, PST).** With the Arize and Vocareum keys loaded in a subshell (not printed),
+three `POST /assess` cases through the FastAPI `TestClient` with `use_llm=true` (gpt-4o-mini, tools via MCP stdio):
+bands high, low, moderate, all `ok`, `draft_source=llm`, 0 revisions, grounding 0.521 / 0.667 / 0.809, 557 / 576 /
+583 LLM tokens. Counting the OTLP exporter's calls: 4 export calls, 79 spans, every one `SpanExportResult.SUCCESS`,
+a successful `force_flush`, nothing on stderr. Project `ihds-diagnostic-agents`. **I did not open the Arize UI**, so
+the traces' appearance there is not verified from the box; the exporter reporting success is the evidence.
+
+**Limits.**
+- It is not enabled on Azure or Streamlit Cloud unless you set `ARIZE_SPACE_ID` and `ARIZE_API_KEY` there (the Azure
+  script and the Cloud app do not set them today).
+- No Arize evaluations, online monitors, datasets or dashboards are built; this is tracing only.
+- With content hidden, the Arize UI shows structure, timing, tokens and the `ihds.*` attributes, not what the model
+  was asked or answered. For reading prompts, use LangSmith locally or the capture switch on non-patient data.
+- Export is batched and asynchronous; a short-lived process should call `arize_tracing.flush()` before exiting.
+- The tests use a fake `register` and an in-memory exporter, so they prove what is attached and hidden, not delivery
+  to Arize.
+
 ## LangSmith tracing (optional)
 
 `ihds/tracing.py` turns tracing on only when a key is present: `LANGSMITH_API_KEY` (or `LANGCHAIN_API_KEY`) in

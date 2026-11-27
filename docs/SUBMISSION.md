@@ -19,7 +19,7 @@ Status as of 2026-11-25. Every claim below links to a file in this repo. Results
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-pytest -q                                    # 89 passed, 21 skipped with no keys (MLOps tests skip here; run them in the MLOps venv)
+pytest -q                                    # 135 passed, 21 skipped with no keys (MLOps tests skip here; run them in the MLOps venv)
 streamlit run app.py --server.headless true  # http://localhost:8501 (embedded API + MCP stdio tools)
 ```
 
@@ -52,6 +52,9 @@ OPENAI_API_BASE = "https://openai.vocareum.com/v1"  # omit for api.openai.com
 LANGSMITH_API_KEY = "<lsv2_... key>"
 LANGSMITH_PROJECT = "ihds"
 
+# Arize AX tracing is read from environment variables only (not a secrets table):
+#   ARIZE_SPACE_ID=<space ID>  ARIZE_API_KEY=<API key>  (project ihds-diagnostic-agents; inputs/outputs hidden)
+
 [grafana]
 GRAFANA_RW_URL   = "https://<your-stack>.grafana.net/api/prom/push"
 GRAFANA_RW_USER  = "<Prometheus instance ID>"
@@ -76,10 +79,10 @@ url = "postgresql://<user>:<password>@<host>/<db>?sslmode=require"   # or the DA
 | UI | `app.py` | Streamlit AppTest in `tests/test_e2e.py`; `docs/screenshots/` |
 | Safety | `workflow.input_guard`, reviewer, revision cap with escalation | Guard accuracy 0.947 on 19 labelled cases (1 paraphrase miss); loop-cap test |
 | Persistence and audit | `ihds/audit_log.py` (Postgres/Neon or SQLite; the eight features plus run metadata, no free text) | `tests/test_audit_log.py`; Neon read-back in `TESTING.md` §5 |
-| LLM observability | `ihds/tracing.py` (LangSmith root `ihds-assessment` with a `writer_llm` child) | `tests/test_tracing.py`; live run in `TESTING.md` §6 |
+| LLM observability | `ihds/tracing.py` (LangSmith root `ihds-assessment` with a `writer_llm` child); optional `ihds/arize_tracing.py` (Arize AX spans, content hidden by default) | `tests/test_tracing.py`, `tests/test_arize_tracing.py`; live runs in `TESTING.md` |
 | Monitoring | `ihds/monitoring.py` (Evidently), `/metrics`, `ihds/metrics_push.py`, `ihds/logging_config.py` (JSON logs to Loki through Alloy), `monitoring/` | `monitoring/reports/`; Grafana dashboard screenshot `docs/screenshots/10_grafana_dashboard.png` |
 | MLOps | `ihds/mlops/`, `dvc.yaml`, `feature_repo/` (GX, MLflow, DVC, Deepchecks, SHAP/Fairlearn, Feast, Prefect) | `reports/*.json`; `docs/MLOPS.md` |
-| Testing and CI | `tests/`, `.github/workflows/ci.yml`, `ruff.toml` | 122 passed / 21 skipped with no keys (2026-11-27); MLOps venv `test_mlops.py` 15 passed; CI status: see the repository's Actions tab |
+| Testing and CI | `tests/`, `.github/workflows/ci.yml`, `ruff.toml` | 135 passed / 21 skipped with no keys (2026-11-27); MLOps venv `test_mlops.py` 15 passed; CI status: see the repository's Actions tab |
 | Deployment | `Dockerfile`, `scripts/start_all.sh`, `deploy/azure/` | Streamlit Cloud is live. Azure was deployed and is now offline (see §1) |
 | Documentation | `README.md`, `diagrams/system_architecture.md`, `docs/MLOPS.md`, `TESTING.md`, `FACTS.md` | This file |
 
