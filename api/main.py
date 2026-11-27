@@ -11,10 +11,17 @@ GET /metrics serves Prometheus metrics (prometheus_client): request count and la
 outcomes by risk band and status, and escalations. Scraped by docker-compose.monitoring.yml (local only);
 in the Azure Container Apps deployment only Streamlit's port 8501 is public, so /metrics is not reachable
 there. IHDS_METRICS=0 turns the endpoint off (404); deploy/azure/deploy_aci.sh sets it because ACI publishes 8000.
+
+Logs: one JSON object per line (ihds/logging_config.py) to stdout, and to IHDS_LOG_FILE when set. Each request
+gets an X-Request-ID; a "request" line (route template, status, latency_ms) is written per call (not for
+/metrics) and an "assessment" line (risk band, draft source, escalation, revisions, trace node names) per
+/assess. Patient values, the question, LLM text and secrets are never logged. docker-compose.monitoring.yml
+ships the file to Loki (local only).
 """
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from contextlib import asynccontextmanager
@@ -26,10 +33,11 @@ from fastapi.concurrency import run_in_threadpool
 from prometheus_client import CONTENT_TYPE_LATEST, REGISTRY, Counter, Gauge, Histogram, generate_latest
 from pydantic import BaseModel, Field
 
-from ihds import agents, audit_log, monitoring, tracing, workflow
+from ihds import agents, audit_log, logging_config, monitoring, tracing, workflow
 from ihds.config import FEATURES, LLM_MODEL, REPORTS_DIR
 
 tracing.configure()  # LangSmith tracing only when LANGSMITH_API_KEY is in the environment
+LOG = logging_config.configure()  # JSON lines to stdout and, with IHDS_LOG_FILE, to a file that Alloy ships to Loki
 
 STATE: dict = {}
 WORKFLOW_ROUTE = "rest-api"  # set to "embedded-api" by ihds/embedded_api.py
@@ -160,6 +168,47 @@ async def prometheus_middleware(request: Request, call_next):
             REQUESTS.labels(request.method, path, str(status)).inc()
 
 
+@app.middleware("http")
+async def request_log_middleware(request: Request, call_next):
+    """Outermost middleware: sets the request id, then writes one "request" log line per call."""
+    rid = logging_config.new_request_id(request.headers.get("x-request-id"))
+    token = logging_config.request_id_var.set(rid)
+    start = time.perf_counter()
+    status, exc_type = 500, None
+    try:
+        response = await call_next(request)
+        status = response.status_code
+        response.headers["X-Request-ID"] = rid
+        return response
+    except Exception as exc:  # noqa: BLE001 - logged by class name only, then re-raised
+        exc_type = type(exc).__name__
+        raise
+    finally:
+        route = request.scope.get("route")
+        path = getattr(route, "path", None) or "unmatched"  # route template: no ids, no query string
+        if path != "/metrics":
+            level = logging.ERROR if status >= 500 else logging.WARNING if status >= 400 else logging.INFO
+            extra = {"event": "request", "method": request.method, "route": path, "status": status,
+                     "latency_ms": round((time.perf_counter() - start) * 1000, 1)}
+            if exc_type:
+                extra["exc_type"] = exc_type
+            LOG.log(level, "request", extra=extra)
+        logging_config.request_id_var.reset(token)
+
+
+def log_assessment(res, req: "AssessRequest", seconds: float) -> None:
+    """One "assessment" line: outcome metadata only (no feature values, question, draft or guard-reason text)."""
+    LOG.info("assessment", extra={
+        "event": "assessment", "assess_status": res.status or "unknown", "band": res.band or "none",
+        "draft_source": res.draft_source or "none", "escalated": bool(res.escalated), "revisions": res.revisions,
+        "borderline": bool(res.borderline), "blocked": res.status == "blocked",
+        "guard_reason_count": len(res.guard_reasons or []), "imputed_count": len(res.imputed or []),
+        "evidence_count": len(res.evidence or []), "tool_calls": len(res.tool_calls or []),
+        "llm_tokens": res.llm_tokens, "use_llm": req.use_llm,
+        "trace_nodes": [t.split(":", 1)[0] for t in res.trace],  # node names only; the text after ":" has numbers
+        "latency_ms": round(seconds * 1000, 1)})
+
+
 def record_assessment(res, seconds: float | None = None) -> None:
     # same names and labels as ihds/metrics_push.py (Streamlit -> Grafana Cloud), so one dashboard covers both
     ASSESS_STATUS.labels(res.status or "unknown", res.draft_source or "none").inc()
@@ -192,6 +241,7 @@ def assess(req: AssessRequest):
     t0 = time.perf_counter()
     res = agents.run(get_graph(req.use_llm), req.record.model_dump(), req.question)
     record_assessment(res, time.perf_counter() - t0)
+    log_assessment(res, req, time.perf_counter() - t0)
     audit_log.record(res, req.record.model_dump(), workflow_route=WORKFLOW_ROUTE)
     out = asdict(res)
     out["transport"] = res.transport or get_system().tools.transport

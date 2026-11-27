@@ -22,3 +22,5 @@ reports/drift/
 data/audit.db
 # Prefect local state (only if PREFECT_HOME is pointed at the repo)
 .prefect/
+# JSON application logs written by IHDS_LOG_FILE (shipped to Loki by docker-compose.monitoring.yml)
+logs/

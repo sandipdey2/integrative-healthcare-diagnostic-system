@@ -1,0 +1,669 @@
+{
+  "uid": "ihds-logs",
+  "title": "IHDS logs (Loki)",
+  "tags": [
+    "ihds",
+    "loki"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "request_id",
+        "label": "Request id",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "hide": 0
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "description": "Structured JSON logs from the IHDS FastAPI service, shipped by Grafana Alloy to Loki (docker-compose.monitoring.yml, local only). Labels: job, source, level, route. Everything else (request_id, status, latency_ms, band, escalated, ...) is read with | json. No patient values, questions or LLM text are logged.",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Log lines (in range)",
+      "datasource": {
+        "type": "loki",
+        "uid": "ihds-loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "ihds-loki"
+          },
+          "expr": "sum(count_over_time({job=\"ihds-api\"}[$__range])) or vector(0)",
+          "queryType": "instant"
+        }
+      ],
+      "description": "All lines shipped by Alloy in the selected time range."
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Errors (level=error, 5xx)",
+      "datasource": {
+        "type": "loki",
+        "uid": "ihds-loki"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "ihds-loki"
+          },
+          "expr": "sum(count_over_time({job=\"ihds-api\", level=\"error\"}[$__range])) or vector(0)",
+          "queryType": "instant"
+        }
+      ],
+      "description": ""
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Warnings (level=warning, 4xx)",
+      "datasource": {
+        "type": "loki",
+        "uid": "ihds-loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "ihds-loki"
+          },
+          "expr": "sum(count_over_time({job=\"ihds-api\", level=\"warning\"}[$__range])) or vector(0)",
+          "queryType": "instant"
+        }
+      ],
+      "description": ""
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Escalations (in range)",
+      "datasource": {
+        "type": "loki",
+        "uid": "ihds-loki"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "purple",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "ihds-loki"
+          },
+          "expr": "sum(count_over_time({job=\"ihds-api\"} | json | event=\"assessment\" | escalated=\"true\" [$__range])) or vector(0)",
+          "queryType": "instant"
+        }
+      ],
+      "description": "Assessments the workflow escalated to human review (revision cap reached)."
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Log volume by level",
+      "datasource": {
+        "type": "loki",
+        "uid": "ihds-loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 40,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "ihds-loki"
+          },
+          "expr": "sum by (level) (count_over_time({job=\"ihds-api\"}[$__auto]))",
+          "legendFormat": "{{level}}",
+          "queryType": "range"
+        }
+      ],
+      "description": ""
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Errors and warnings by route",
+      "datasource": {
+        "type": "loki",
+        "uid": "ihds-loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 40,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "ihds-loki"
+          },
+          "expr": "sum by (level, route) (count_over_time({job=\"ihds-api\", level=~\"error|warning\"}[$__auto]))",
+          "legendFormat": "{{level}} {{route}}",
+          "queryType": "range"
+        }
+      ],
+      "description": "route is the route template (/assess, unmatched, ...), never a raw path."
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Requests by route",
+      "datasource": {
+        "type": "loki",
+        "uid": "ihds-loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "ihds-loki"
+          },
+          "expr": "sum by (route) (count_over_time({job=\"ihds-api\", route=~\".+\"} | json | event=\"request\" [$__auto]))",
+          "legendFormat": "{{route}}",
+          "queryType": "range"
+        }
+      ],
+      "description": ""
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Request latency p95 by route (ms)",
+      "datasource": {
+        "type": "loki",
+        "uid": "ihds-loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "ihds-loki"
+          },
+          "expr": "quantile_over_time(0.95, {job=\"ihds-api\", route=~\".+\"} | json | event=\"request\" | unwrap latency_ms [$__auto]) by (route)",
+          "legendFormat": "{{route}}",
+          "queryType": "range"
+        }
+      ],
+      "description": "From the latency_ms field in each request line."
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Assessments by risk band",
+      "datasource": {
+        "type": "loki",
+        "uid": "ihds-loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 40,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "ihds-loki"
+          },
+          "expr": "sum by (band) (count_over_time({job=\"ihds-api\"} | json | event=\"assessment\" [$__auto]))",
+          "legendFormat": "{{band}}",
+          "queryType": "range"
+        }
+      ],
+      "description": "band is none for blocked requests."
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Escalations and blocked requests",
+      "datasource": {
+        "type": "loki",
+        "uid": "ihds-loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 20,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 40,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "ihds-loki"
+          },
+          "expr": "sum by (assess_status, escalated) (count_over_time({job=\"ihds-api\"} | json | event=\"assessment\" | escalated=\"true\" or blocked=\"true\" [$__auto]))",
+          "legendFormat": "status={{assess_status}} escalated={{escalated}}",
+          "queryType": "range"
+        }
+      ],
+      "description": ""
+    },
+    {
+      "id": 11,
+      "type": "logs",
+      "title": "Escalated assessments",
+      "datasource": {
+        "type": "loki",
+        "uid": "ihds-loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 12,
+        "h": 10
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "enableLogDetails": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "ihds-loki"
+          },
+          "expr": "{job=\"ihds-api\"} | json | event=\"assessment\" | escalated=\"true\"",
+          "queryType": "range",
+          "maxLines": 200
+        }
+      ],
+      "description": ""
+    },
+    {
+      "id": 12,
+      "type": "logs",
+      "title": "Errors and warnings",
+      "datasource": {
+        "type": "loki",
+        "uid": "ihds-loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 28,
+        "w": 12,
+        "h": 10
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "enableLogDetails": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "ihds-loki"
+          },
+          "expr": "{job=\"ihds-api\", level=~\"error|warning\"}",
+          "queryType": "range",
+          "maxLines": 200
+        }
+      ],
+      "description": ""
+    },
+    {
+      "id": 13,
+      "type": "logs",
+      "title": "Recent logs (filter by request id above)",
+      "datasource": {
+        "type": "loki",
+        "uid": "ihds-loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 38,
+        "w": 24,
+        "h": 12
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "enableLogDetails": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "ihds-loki"
+          },
+          "expr": "{job=\"ihds-api\"} |= \"$request_id\"",
+          "queryType": "range",
+          "maxLines": 200
+        }
+      ],
+      "description": "Type a request id in the box at the top (the X-Request-ID response header) to follow one request."
+    }
+  ]
+}

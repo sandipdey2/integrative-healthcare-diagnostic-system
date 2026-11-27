@@ -63,7 +63,7 @@ def test_prometheus_grafana_configs_reference_real_metrics():
     prom = yaml.safe_load((ROOT / "monitoring/prometheus/prometheus.yml").read_text())
     assert prom["scrape_configs"][0]["static_configs"][0]["targets"] == ["api:8000"]
     compose = yaml.safe_load((ROOT / "docker-compose.monitoring.yml").read_text())
-    assert set(compose["services"]) == {"api", "prometheus", "grafana", "postgres"}
+    assert set(compose["services"]) == {"api", "prometheus", "grafana", "postgres", "loki", "alloy"}  # loki + alloy: logs (tests/test_logging.py)
     assert all(p.startswith("127.0.0.1:") for s in compose["services"].values() for p in s.get("ports", []))
     assert all(s["networks"] == ["ihds-monitoring"] for s in compose["services"].values())
     assert compose["services"]["prometheus"]["depends_on"]["api"]["condition"] == "service_healthy"

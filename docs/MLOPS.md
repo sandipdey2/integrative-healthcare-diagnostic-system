@@ -401,8 +401,9 @@ docker compose -f docker-compose.monitoring.yml up -d --build --wait
 docker compose -f docker-compose.monitoring.yml down -v
 ```
 
-- **Services:** `api` (the app image, FastAPI only, on 0.0.0.0:8000 inside the container), `prom/prometheus:v3.5.0`
-  and `grafana/grafana:12.1.0`.
+- **Services:** `api` (the app image, FastAPI only, on 0.0.0.0:8000 inside the container), `postgres:17`,
+  `prom/prometheus:v3.5.0`, `grafana/grafana:12.1.0`, and for logs `grafana/loki:3.7.10` and `grafana/alloy:v1.22.0`
+  (see the next section).
 - **Network:** all three are on one user-defined bridge network, `ihds-monitoring`. Prometheus scrapes
   `api:8000/metrics` by service name every 15 s.
 - **Grafana:** gets its datasource URL from `PROMETHEUS_URL=http://prometheus:9090`. It provisions the datasource
@@ -411,6 +412,113 @@ docker compose -f docker-compose.monitoring.yml down -v
   `depends_on: service_healthy` starts them in the order api → prometheus → grafana, and `--wait` returns only
   when all three are healthy.
 - **Ports:** all bind to 127.0.0.1. Grafana's admin login keeps its default, so the stack is for local use only.
+
+### Logs: structured JSON, Grafana Alloy and Loki
+
+The API writes one JSON object per line. Grafana Alloy tails the log file and pushes the lines to Loki, and
+Grafana shows them next to the metrics. This is a local stack only: it is not part of the Azure deployment and
+nothing ships logs from Streamlit Community Cloud.
+
+**What the API logs** (`ihds/logging_config.py`, standard-library `logging`, no new dependency; middleware in
+`api/main.py`):
+
+- every request except `/metrics` gets an `X-Request-ID` (a caller's value is kept only if it is 1–64 characters
+  of `A-Za-z0-9._-`, otherwise a random 16-hex-digit id is generated) and one `request` line with
+  `timestamp, level, logger, message, request_id, event, method, route, status, latency_ms`. `route` is the route
+  template (`/assess`, `unmatched`), never the raw path or query string. The level is `info` below 400,
+  `warning` for 4xx and `error` for 5xx;
+- every `/assess` call also writes one `assessment` line with `request_id, assess_status, band, draft_source,
+  escalated, revisions, borderline, blocked, guard_reason_count, imputed_count, evidence_count, tool_calls,
+  llm_tokens, use_llm, trace_nodes, latency_ms`. `trace_nodes` are the node names only (`safety_guard`,
+  `supervisor`, `risk_agent`, ..., `finalize`), without the trace text;
+- an unhandled exception is logged as `exc_type` (the class name) with status 500.
+
+**What is deliberately not logged:** the eight patient feature values, the probability, the question text, guard
+reason text (it can contain values, so only a count is logged), the draft, LLM prompts and outputs, and any
+key, token or connection string. The formatter writes only the fields listed in `ALLOWED_FIELDS`, so a log call
+cannot add anything else by passing it as `extra=`, and exception messages and tracebacks are not written.
+`tests/test_logging.py` asserts this with a distinctive question, the feature values and the draft text.
+
+**Where the lines go:** stdout (turn off with `IHDS_LOG_JSON=0`) and, when `IHDS_LOG_FILE` is set, a rotating file
+(10 MB, 3 backups). `IHDS_LOG_LEVEL` sets the level (default `INFO`). If the file cannot be written, the API
+prints one warning to stderr and keeps running.
+
+**Shipping:**
+
+- `grafana/loki:3.7.10` (single binary, filesystem storage, 72 h retention via the compactor,
+  `monitoring/loki/loki-config.yaml`) on 127.0.0.1:3100;
+- `grafana/alloy:v1.22.0` (`monitoring/loki/alloy-config.alloy`; Promtail is deprecated, so Alloy is used). It tails
+  `*.jsonl` in two places and pushes to `http://loki:3100`: the `ihds-logs` volume that the compose `api` service
+  writes (`source="container"`), and `./logs` on the host (`source="host"`), for an API you start yourself;
+- labels are `job="ihds-api"`, `source`, `level` and `route`. Everything else, including `request_id`, stays in the
+  line and is read with `| json`, so label cardinality stays low (about 10 route values, 3 levels). The log
+  timestamp from the application line is used as the entry time;
+- Grafana gets a `Loki` datasource (uid `ihds-loki`, `monitoring/grafana/provisioning/datasources/loki.yml`) and
+  the dashboard `IHDS logs (Loki)` (`monitoring/grafana/dashboards/ihds_logs.json`, 13 panels): log lines,
+  errors, warnings and escalations in the time range; log volume by level; errors and warnings by route;
+  requests by route; p95 latency by route (from `latency_ms`); assessments by risk band; escalations and blocked
+  requests; and three log panels (escalated assessments, errors and warnings, recent logs with a request-id box).
+  The datasource and dashboard are listed in `.dockerignore`, so the Azure Option B Grafana image does not get them.
+
+```bash
+git pull
+mkdir -p logs                                   # so Docker does not create ./logs as root
+docker compose -f docker-compose.monitoring.yml up -d --build --wait
+# the compose `api` service already logs to the ihds-logs volume. To ship an API you run on the host instead:
+#   (stop the compose api first, or use another port)
+IHDS_LOG_FILE=logs/ihds.jsonl uvicorn api.main:app --port 8001
+# Grafana http://127.0.0.1:3000 -> Dashboards -> IHDS -> "IHDS logs (Loki)"; Loki http://127.0.0.1:3100; Alloy UI http://127.0.0.1:12345
+curl -s -G http://127.0.0.1:3100/loki/api/v1/query_range --data-urlencode 'query={job="ihds-api"}' --data-urlencode limit=5
+docker compose -f docker-compose.monitoring.yml down -v
+```
+
+Example LogQL (Grafana Explore, datasource Loki):
+
+```logql
+{job="ihds-api"}                                                         # everything
+{job="ihds-api", level=~"error|warning"}                                 # 4xx and 5xx requests
+{job="ihds-api"} | json | event="assessment" | escalated="true"          # escalations
+{job="ihds-api"} | json | event="assessment" | band="high"               # high-risk assessments
+{job="ihds-api"} |= "<request id from the X-Request-ID header>"          # follow one request
+sum by (route) (count_over_time({job="ihds-api", route=~".+"}[5m]))      # requests per route
+quantile_over_time(0.95, {job="ihds-api", route="/assess"} | json | unwrap latency_ms [5m])
+```
+
+**Limits.**
+
+- Local only. It is not deployed on Azure Container Apps or Streamlit Cloud, and there is no push to Grafana Cloud
+  Loki (not added: the existing Grafana Cloud push covers metrics only).
+- No authentication on Loki, Alloy or Grafana, ports on 127.0.0.1, 72 h retention. Do not expose it.
+- Logs are metadata only, so they cannot be used to reconstruct a patient case or to debug a wrong answer from
+  the text. Use the audit log (`/assessments/recent`) or LangSmith for that.
+- `/health` is logged too, so the compose healthcheck adds a line every 10 s.
+- Escalations need the reviewer's revision cap to be hit with a live LLM draft; the template writer never
+  escalates, so the escalation panels are empty in the demo below.
+- The compose file in this commit was checked offline (YAML parse, tests) but **not run under Docker**: the box
+  has no Docker. The log pipeline was run on the box with the same Loki 3.7.10 and Alloy v1.22.0 binaries and
+  Grafana 12.1.0 outside Docker (results below). The Docker volumes, the `loki -health` check and the container
+  paths are untested.
+- `docker-compose.monitoring.yml` had no top-level `volumes:` entry for `ihds-pgdata` before this change; it is
+  now declared, together with the three new volumes.
+
+**Measured on the box (2026-11-27), outside Docker.** Loki 3.7.10, Alloy v1.22.0 and Grafana 12.1.0 were run as
+plain binaries with the repo's configs (only the paths and `loki` host name changed to local ones). The API ran on
+the host with `IHDS_LOG_FILE=logs/ihds.jsonl`. After 16 requests (9 `GET /health`, 5 `POST /assess` of which one was
+blocked by the guard and one returned 422, one 404, one `GET /assessments/recent`), the API file had 20
+lines (16 `request` lines plus 4 `assessment` lines) and Loki returned 20 (`{job="ihds-api"}` via `/loki/api/v1/query_range`), split the same way: 16 `request` and 4 `assessment`. Loki's label list was `job, level, route, source` (plus `filename` and `service_name`, which
+Alloy and Loki add themselves); `route` had the values `/assess`, `/assessments/recent`, `/health` and `unmatched`.
+`loki -health` reported unhealthy at 8 s ("waiting for 15s after being ready") and healthy by about 20 s. A search of the file for the test question and the feature
+values found nothing. Grafana provisioned the datasource (its health check returned "Data source successfully
+connected") and the dashboard, and all 13 panel queries returned results through Grafana's query API. The
+escalation panels returned 0 / no lines, because no run escalated. No dashboard screenshot was captured.
+What this does not show: the Docker Compose services themselves (no Docker on the box), the named volumes, or
+the `api` container writing to `ihds-logs`.
+
+A real line (the guard blocked this request; nothing from the request body is in it):
+
+```json
+{"timestamp":"2026-11-27T12:30:05.133+00:00","level":"info","logger":"ihds.api","message":"assessment","request_id":"57eea0dc70f8440c","event":"assessment","latency_ms":2.8,"band":"none","draft_source":"refusal","assess_status":"blocked","escalated":false,"revisions":0,"borderline":false,"blocked":true,"guard_reason_count":3,"imputed_count":2,"evidence_count":0,"tool_calls":0,"llm_tokens":0,"use_llm":false,"trace_nodes":["safety_guard","refuse"]}
+```
 
 ### Why bridge networking failed on the box, and the fix
 

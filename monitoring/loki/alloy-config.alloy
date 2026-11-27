@@ -1,0 +1,49 @@
+// Grafana Alloy: tail the IHDS JSON log files and push them to Loki (docker-compose.monitoring.yml).
+//   /var/log/ihds-host       <- ./logs on the host (API run with IHDS_LOG_FILE=logs/ihds.jsonl)
+//   /var/log/ihds-container  <- the ihds-logs volume the compose `api` service writes to
+// Labels are kept low-cardinality: job, source, level and route (the route template, e.g. /assess).
+// request_id and every other field stay inside the log line, where `| json` can read them.
+
+local.file_match "ihds" {
+  path_targets = [
+    {"__path__" = "/var/log/ihds-host/*.jsonl", "job" = "ihds-api", "source" = "host"},
+    {"__path__" = "/var/log/ihds-container/*.jsonl", "job" = "ihds-api", "source" = "container"},
+  ]
+}
+
+loki.source.file "ihds" {
+  targets    = local.file_match.ihds.targets
+  forward_to = [loki.process.ihds.receiver]
+}
+
+loki.process "ihds" {
+  // parse the JSON line; `route` is missing on non-request lines and then simply produces no label
+  stage.json {
+    expressions = {
+      ts    = "timestamp",
+      level = "level",
+      route = "route",
+    }
+  }
+
+  // use the application's own timestamp so replayed lines keep their original time
+  stage.timestamp {
+    source = "ts"
+    format = "RFC3339Nano"
+  }
+
+  stage.labels {
+    values = {
+      level = "",
+      route = "",
+    }
+  }
+
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

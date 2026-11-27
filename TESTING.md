@@ -150,11 +150,37 @@ Full commands and results are in [`docs/MLOPS.md`](docs/MLOPS.md).
 | Runtime, final readiness pass (2026-11-25, HEAD c20199d) | `pytest -q -rs` | **89 passed, 16 skipped** with no keys and no `DATABASE_URL`; **95 passed, 10 skipped** with the Vocareum and LangSmith keys (skips: 7 MLOps tools not installed, promtool, live Grafana, live Postgres) |
 | App venv, after the Prefect deployment (2026-11-27) | `pytest -q -rs` | **89 passed, 21 skipped** with no keys (the 5 new Prefect deployment tests skip because Prefect is not in this venv) |
 | App venv, after the confusion-matrix analysis (2026-11-27) | `pytest -q -rs` | **102 passed, 21 skipped** with no keys (12 new tests in `tests/test_cm_analysis.py` and 1 new multiplicity-correction test in `tests/test_data_stats.py`) |
+| App venv, after the Loki logging layer (2026-11-27) | `pytest -q -rs` (LANGSMITH_API_KEY unset) | **122 passed, 21 skipped** with no keys: 20 new tests in `tests/test_logging.py`; `tests/test_mlops.py::test_prometheus_grafana_configs_reference_real_metrics` now expects the `loki` and `alloy` services. With a LangSmith key whose monthly trace quota was exhausted, `test_live_run_is_traced_with_tags_and_metadata` failed on HTTP 429 from LangSmith (not related to this change), so this run was done without the key |
 | MLOps venv, after the Prefect deployment (2026-11-27) | `.venv-mlops/bin/python -m pytest tests/test_mlops.py -q` | **15 passed** (10 before; 5 new Prefect deployment/retry tests). The whole `tests/` folder is not collected in that venv (no langchain) |
 | MLOps venv, after the confusion-matrix analysis (2026-11-27) | `.venv-mlops/bin/python -m pytest tests/test_mlops.py -q` | **15 passed**. The DVC consistency test now expects 8 stages (`cm_analysis` added after `evaluate`). Prefect still has the original 7 tasks. |
+| MLOps venv, after the Loki logging layer (2026-11-27) | `.venv-mlops/bin/python -m pytest tests/test_mlops.py -q` | **15 passed** |
 | MLOps (`requirements-mlops.txt`, separate venv) | `pytest -q tests/test_mlops.py tests/test_metrics_agent.py tests/test_metrics_push.py` | **17 passed, 2 skipped** (promtool not on PATH; live Grafana test without creds) |
 | MLOps | `pip install -r requirements-mlops.txt` in a fresh venv, then `pip check` | installs with pip; "No broken requirements found" |
 | Both | `ruff check .` (`ruff.toml`: E, F, W; E501/E702 ignored) | All checks passed. Fixing it removed 9 unused imports and invalid escapes from existing files; there were no behaviour changes |
+
+What `tests/test_logging.py` checks (20 tests, no Docker and no Loki needed):
+
+- **Formatter:** valid JSON with `timestamp, level, logger, message`; only the fields in `ALLOWED_FIELDS` are written
+  (an unknown `extra=` such as `Glucose`, `question`, `prompt` or `api_key` is dropped); an exception is logged by
+  class name only, with no message or traceback; the allow-list has no feature, question, prompt, draft,
+  probability or key field.
+- **Request id:** a safe `X-Request-ID` is kept and returned, an unsafe one (spaces, quotes, newline, over 64
+  characters) is replaced by a generated one.
+- **API lines (FastAPI `TestClient`):** a `request` line has `request_id, route, status, method, latency_ms`; levels
+  follow the status (404 and 422 are `warning`, an unhandled error is `error` with `exc_type`); an unmatched path logs
+  `unmatched`, not the raw path or query; `/metrics` scrapes are not logged; `/assess` writes an `assessment` line
+  with the same request id, whose band, draft source, escalation and revision count equal the response, and whose
+  `trace_nodes` are node names only.
+- **No PHI:** a request with a distinctive question, feature values and the draft text, plus a guard-blocked one,
+  leaves none of those strings (nor any key or connection-string prefix) in the log output; a blocked request logs
+  `guard_reason_count`, not the reasons.
+- **File and config:** `IHDS_LOG_FILE` writes JSONL and `configure()` is idempotent; an unwritable path does not stop
+  the API; the Loki config, the Grafana datasource, the compose file (pinned images, localhost ports, Alloy waits for
+  Loki, the API writes the file Alloy tails, every named volume is declared), the Alloy config (labels are only
+  `level` and `route`, `request_id` is not a label) and `.gitignore`/`.dockerignore` are checked; every LogQL
+  expression in the dashboard uses only labels Alloy creates and only log fields that exist.
+- **Not covered:** a live Loki, Alloy, Grafana or Docker run. That was done by hand on the box without Docker; see
+  `docs/MLOPS.md`.
 
 What `tests/test_mlops.py` checks:
 

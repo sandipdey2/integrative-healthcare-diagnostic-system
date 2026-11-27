@@ -33,8 +33,10 @@ curl -s localhost:8000/health
 **Monitoring stack** (Prometheus, Grafana and Postgres on a bridge network):
 
 ```bash
-docker compose -f docker-compose.monitoring.yml up -d --build   # Grafana on :3000, Prometheus on :9090
+docker compose -f docker-compose.monitoring.yml up -d --build   # Grafana on :3000, Prometheus on :9090, Loki on :3100
 ```
+
+The stack also runs Loki and Grafana Alloy for the API's JSON logs (dashboard `IHDS logs (Loki)`). Run `mkdir -p logs` first. Local only. The log pipeline was run on the box with the same binaries outside Docker; the compose services were not run under Docker. See `docs/MLOPS.md`.
 
 **Optional MLOps layer** (separate venv): run `pip install -r requirements-mlops.txt`, then either `dvc repro` (8 stages, including `cm_analysis`) or `python -m ihds.mlops.flow` (Prefect, one-off, still 7 tasks). For the scheduled local Prefect deployment, run `prefect server start` and then `python -m ihds.mlops.deploy` in another terminal (local only: no Prefect Cloud, work pool, Docker or Azure). See `docs/MLOPS.md`.
 
@@ -75,9 +77,9 @@ url = "postgresql://<user>:<password>@<host>/<db>?sslmode=require"   # or the DA
 | Safety | `workflow.input_guard`, reviewer, revision cap with escalation | Guard accuracy 0.947 on 19 labelled cases (1 paraphrase miss); loop-cap test |
 | Persistence and audit | `ihds/audit_log.py` (Postgres/Neon or SQLite; the eight features plus run metadata, no free text) | `tests/test_audit_log.py`; Neon read-back in `TESTING.md` §5 |
 | LLM observability | `ihds/tracing.py` (LangSmith root `ihds-assessment` with a `writer_llm` child) | `tests/test_tracing.py`; live run in `TESTING.md` §6 |
-| Monitoring | `ihds/monitoring.py` (Evidently), `/metrics`, `ihds/metrics_push.py`, `monitoring/` | `monitoring/reports/`; Grafana dashboard screenshot `docs/screenshots/10_grafana_dashboard.png` |
+| Monitoring | `ihds/monitoring.py` (Evidently), `/metrics`, `ihds/metrics_push.py`, `ihds/logging_config.py` (JSON logs to Loki through Alloy), `monitoring/` | `monitoring/reports/`; Grafana dashboard screenshot `docs/screenshots/10_grafana_dashboard.png` |
 | MLOps | `ihds/mlops/`, `dvc.yaml`, `feature_repo/` (GX, MLflow, DVC, Deepchecks, SHAP/Fairlearn, Feast, Prefect) | `reports/*.json`; `docs/MLOPS.md` |
-| Testing and CI | `tests/`, `.github/workflows/ci.yml`, `ruff.toml` | 89 passed / 16 skipped with no keys; 95 / 10 with the LLM and LangSmith keys; MLOps venv 17 / 2; CI green |
+| Testing and CI | `tests/`, `.github/workflows/ci.yml`, `ruff.toml` | 122 passed / 21 skipped with no keys (2026-11-27); MLOps venv `test_mlops.py` 15 passed; CI status: see the repository's Actions tab |
 | Deployment | `Dockerfile`, `scripts/start_all.sh`, `deploy/azure/` | Streamlit Cloud is live. Azure was deployed and is now offline (see §1) |
 | Documentation | `README.md`, `diagrams/system_architecture.md`, `docs/MLOPS.md`, `TESTING.md`, `FACTS.md` | This file |
 
@@ -91,3 +93,4 @@ url = "postgresql://<user>:<password>@<host>/<db>?sslmode=require"   # or the DA
 - **Deployments:** the Azure deployment is offline since the lab reset. On Streamlit Cloud, a cold start or the first load after a code push retrains the model.
 - **Data pipeline:** batch only (DVC, GX, Prefect flow with a local weekly schedule that fires only while the serve process runs, Feast file source). There is no streaming and no lakehouse, by design, for a static CSV.
 - **Grafana Cloud:** the pushed series were not read back, because the token is write-only.
+- **Logs:** the Loki and Alloy services are local only (not on Azure or Streamlit Cloud) and were not run under Docker; logs hold request metadata only (no patient values, questions or LLM text).

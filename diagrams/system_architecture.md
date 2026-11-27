@@ -31,7 +31,10 @@ names the MCP server lists over a real MCP session, and the agent→tool pairs i
 The "Optional services" box shows what is on only when configured: the gpt-4o-mini writer, LangSmith traces
 (an `ihds-assessment` root run with a `writer_llm` child per LLM call), the audit log (Postgres/Neon or
 SQLite, written by `POST /assess`, read by `GET /assessments/recent`) and the metrics path (`GET /metrics`
-scraped by Prometheus in Docker, or pushed by `ihds/metrics_push.py` to Grafana Cloud from Streamlit Cloud).
+scraped by Prometheus in Docker, or pushed by `ihds/metrics_push.py` to Grafana Cloud from Streamlit Cloud). Logs follow
+a second local path: `api/main.py` writes JSON lines (`ihds/logging_config.py`: request and assessment metadata
+only, no patient values, questions or LLM text) to stdout and `IHDS_LOG_FILE`; Grafana Alloy tails the file and
+pushes it to Loki, and Grafana reads Loki (`docker-compose.monitoring.yml`, local only).
 On Streamlit Cloud, `app.py` hashes the project source and rebuilds the cached System, LLM graph and
 embedded API after a code push, so a push never leaves the old reviewer running.
 

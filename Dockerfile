@@ -20,7 +20,8 @@ COPY . .
 
 # Pre-generate the Evidently reports so the Monitoring tab has content on first load.
 
-RUN useradd --create-home appuser && chown -R appuser /app
+# log directory for the compose api service: IHDS_LOG_FILE=/app/logs/ihds.jsonl on a named volume (inherits this owner)
+RUN mkdir -p /app/logs && useradd --create-home appuser && chown -R appuser /app
 USER appuser
 RUN python -m ihds.pipeline
 # Bake chromadb's all-MiniLM-L6-v2 ONNX model (~80 MB) into the image for the evidence retriever, so the

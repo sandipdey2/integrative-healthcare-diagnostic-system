@@ -23,3 +23,8 @@ data/processed
 models
 reports
 feature_repo/data
+# Loki logs: local files, and the Loki datasource/dashboard only apply to docker-compose.monitoring.yml
+logs
+monitoring/loki
+monitoring/grafana/provisioning/datasources/loki.yml
+monitoring/grafana/dashboards/ihds_logs.json

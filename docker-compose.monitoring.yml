@@ -2,12 +2,17 @@
 #   docker compose -f docker-compose.monitoring.yml up -d --build --wait
 #   API http://127.0.0.1:8000/docs   metrics http://127.0.0.1:8000/metrics
 #   Prometheus http://127.0.0.1:9090  Grafana http://127.0.0.1:3000 (dashboard "IHDS API", anonymous viewer)
+#   Loki http://127.0.0.1:3100 (logs; Grafana dashboard "IHDS logs (Loki)", datasource "Loki")
 #   docker compose -f docker-compose.monitoring.yml down
 # Services share the user-defined bridge network `ihds-monitoring`; Prometheus scrapes the API by service name
 # (api:8000). Host ports bind to 127.0.0.1 only. The api service reuses the app image and runs just the FastAPI
 # layer on 0.0.0.0:8000 inside the container (tools via an MCP stdio subprocess); no OPENAI_API_KEY is passed,
 # so the writer uses the template. A Postgres 17 service holds the assessment audit log (DATABASE_URL on the api
 # service; local credentials ihds/ihds, not for production).
+# Logs: the API writes JSON lines to a file (IHDS_LOG_FILE). Grafana Alloy tails two places and pushes to Loki:
+# the `ihds-logs` volume (the `api` service below) and ./logs on the host (an API started with
+# IHDS_LOG_FILE=logs/ihds.jsonl, e.g. `uvicorn api.main:app`). Run `mkdir -p logs` first so Docker does not create
+# ./logs as root. Loki keeps 72 h on the ihds-loki-data volume.
 # If containers cannot reach each other on a host whose kernel runs BOTH iptables-legacy and nftables rules,
 # see scripts/fix_docker_bridge_forward.sh.
 name: ihds-monitoring
@@ -41,6 +46,9 @@ services:
     environment:
       IHDS_METRICS: "1"
       DATABASE_URL: "postgresql://ihds:ihds@postgres:5432/ihds"
+      IHDS_LOG_FILE: /app/logs/ihds.jsonl
+    volumes:
+      - ihds-logs:/app/logs
     networks: [ihds-monitoring]
     ports:
       - "127.0.0.1:8000:8000"
@@ -53,6 +61,39 @@ services:
       timeout: 5s
       start_period: 120s
       retries: 12
+
+  loki:
+    image: grafana/loki:3.7.10
+    command: ["-config.file=/etc/loki/loki-config.yaml"]
+    volumes:
+      - ./monitoring/loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - ihds-loki-data:/loki
+    networks: [ihds-monitoring]
+    ports:
+      - "127.0.0.1:3100:3100"
+    healthcheck:
+      # the image has no shell or wget; -health is Loki's own readiness check (v3.6.5+)
+      test: ["CMD", "/usr/bin/loki", "-health"]
+      start_period: 30s
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  alloy:
+    image: grafana/alloy:v1.22.0
+    command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "--storage.path=/var/lib/alloy/data",
+              "/etc/alloy/config.alloy"]
+    volumes:
+      - ./monitoring/loki/alloy-config.alloy:/etc/alloy/config.alloy:ro
+      - ./logs:/var/log/ihds-host:ro
+      - ihds-logs:/var/log/ihds-container:ro
+      - ihds-alloy-data:/var/lib/alloy/data
+    networks: [ihds-monitoring]
+    ports:
+      - "127.0.0.1:12345:12345"
+    depends_on:
+      loki:
+        condition: service_healthy
 
   prometheus:
     image: prom/prometheus:v3.5.0
@@ -93,3 +134,11 @@ services:
     depends_on:
       prometheus:
         condition: service_healthy
+      loki:
+        condition: service_healthy
+
+volumes:
+  ihds-pgdata:
+  ihds-logs:
+  ihds-loki-data:
+  ihds-alloy-data:
