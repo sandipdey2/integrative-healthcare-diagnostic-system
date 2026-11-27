@@ -20,3 +20,5 @@ reports/drift/
 .chroma/
 # Assessment audit log (local SQLite fallback when DATABASE_URL is unset)
 data/audit.db
+# Prefect local state (only if PREFECT_HOME is pointed at the repo)
+.prefect/

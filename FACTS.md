@@ -106,6 +106,7 @@ all 8 features p < 1e-5.
   - DP diff 0.4199 (ratio 0.3591); EO diff 0.5625 (ratio 0.4375). Reported, not mitigated.
 - Feast 0.68: patient 0 online features match the parquet; model p = 0.826 (patient 5: 0.2059). patient_id = CSV row; one fixed timestamp.
 - Prefect 3.9.5: flow `ihds-mlops-pipeline` Completed, 7/7 tasks, 37 s, temporary local API.
+- Prefect deployment: `python -m ihds.mlops.deploy` serves `ihds-mlops-pipeline/weekly-local` (cron `0 6 * * 1`, America/Los_Angeles, `with_feast: true`) with `flow.serve()` against a local `prefect server start`. Tasks retry twice (10 s apart) except on `QualityGateError`. Demo 2026-11-27: runs `f4aa95d0-936f-40c3-88eb-929a4d51f717` (21.9 s) and `fe2ae45e-0868-4b2d-a121-33ff5abe9ae1` (19.5 s) both Completed, 7/7 tasks, triggered by hand; scheduled runs not waited for. No Prefect Cloud, work pool, worker, Docker or Azure deployment; the schedule fires only while the serve process runs.
 - Prometheus/Grafana: `/metrics` plus the compose stack.
   - Box result (unmodified compose, bridge network): 104 /assess calls → ok 95, blocked 9; high 35, low 33, moderate 27; escalations 0; p95 0.0486 s; target `ihds-api up`.
   - Box bridge failure root cause: stale iptables-legacy FORWARD policy DROP (no br-* rules). The box-only fix is scripts/fix_docker_bridge_forward.sh (not persistent).

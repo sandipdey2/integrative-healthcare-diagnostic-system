@@ -19,7 +19,7 @@ Status as of 2026-11-25. Every claim below links to a file in this repo. Results
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-pytest -q                                    # 89 passed, 16 skipped with no keys
+pytest -q                                    # 89 passed, 21 skipped with no keys (MLOps tests skip here; run them in the MLOps venv)
 streamlit run app.py --server.headless true  # http://localhost:8501 (embedded API + MCP stdio tools)
 ```
 
@@ -36,7 +36,7 @@ curl -s localhost:8000/health
 docker compose -f docker-compose.monitoring.yml up -d --build   # Grafana on :3000, Prometheus on :9090
 ```
 
-**Optional MLOps layer** (separate venv): run `pip install -r requirements-mlops.txt`, then either `dvc repro` (7 stages) or `python -m ihds.mlops.flow` (Prefect). See `docs/MLOPS.md`.
+**Optional MLOps layer** (separate venv): run `pip install -r requirements-mlops.txt`, then either `dvc repro` (7 stages) or `python -m ihds.mlops.flow` (Prefect, one-off). For the scheduled local Prefect deployment, run `prefect server start` and then `python -m ihds.mlops.deploy` in another terminal (local only: no Prefect Cloud, work pool, Docker or Azure). See `docs/MLOPS.md`.
 
 ## 3. Secrets (all optional; placeholders only, never commit real values)
 
@@ -89,5 +89,5 @@ url = "postgresql://<user>:<password>@<host>/<db>?sslmode=require"   # or the DA
 - **Routing:** the supervisor is rule-based. The LLM only writes the draft text.
 - **No authentication:** the MCP server and the API have none (use them on localhost or a private network only). There is no EHR integration.
 - **Deployments:** the Azure deployment is offline since the lab reset. On Streamlit Cloud, a cold start or the first load after a code push retrains the model.
-- **Data pipeline:** batch only (DVC, GX, Prefect, Feast file source). There is no streaming and no lakehouse, by design, for a static CSV.
+- **Data pipeline:** batch only (DVC, GX, Prefect flow with a local weekly schedule that fires only while the serve process runs, Feast file source). There is no streaming and no lakehouse, by design, for a static CSV.
 - **Grafana Cloud:** the pushed series were not read back, because the token is write-only.

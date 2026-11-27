@@ -14,7 +14,7 @@ every run.
 | DVC 3.67 | Data + pipeline versioning (7 stages) | `dvc.yaml`, `params.yaml`, `dvc.lock`, `.dvc/config` | Implemented, `dvc repro` run locally; local remote only |
 | Great Expectations 1.25 | Validation of the clinical input data | `ihds/mlops/validate.py` | Implemented, gate in DVC, Prefect and CI |
 | Feast 0.68 | Local feature store (file offline store, SQLite online store) | `feature_repo/`, `ihds/mlops/features.py` | Implemented, local only; the app does not read from Feast |
-| Prefect 3.9 | Orchestration of the stages | `ihds/mlops/flow.py` | Implemented, runs locally on a temporary Prefect API (no Prefect Cloud) |
+| Prefect 3.9 | Orchestration of the stages | `ihds/mlops/flow.py`, `ihds/mlops/deploy.py` | Implemented. The flow runs on a temporary local API, and `flow.serve()` gives a scheduled local deployment (weekly cron) on a local Prefect server. No Prefect Cloud, no work pool or worker, no Docker, not deployed on Azure; the schedule fires only while the serve process runs |
 | GitHub Actions | CI/CD | `docs/ci.yml.example`, active copy in `.github/workflows/ci.yml` | Active; first run passed (lint, test, data-validation, docker). The new `monitoring-stack` job is in the example only (see below) |
 | FastAPI | Model-serving API | `api/main.py` | Already existed; unchanged apart from `/metrics` |
 | Docker | Container image | `Dockerfile`, `scripts/start_all.sh` | Already existed; unchanged; rebuilt and smoke-tested |
@@ -48,6 +48,7 @@ validate ┘ (GX gate)         ├─> drift (Evidently)
 |---|---|---|
 | DVC | `dvc repro` (graph: `dvc dag`, metrics: `dvc metrics show`) | Re-runs only the stages whose deps or params changed. Hashes go to `dvc.lock`; outputs go to the local cache `.dvc/cache`. |
 | Prefect | `python -m ihds.mlops.flow` | Runs the same stages as tasks. A failed GX validation or a critical Deepchecks failure raises `QualityGateError`, so the flow ends `Failed` and later tasks do not run. Writes `reports/flow_run.json`. |
+| Prefect (scheduled) | `prefect server start`, then `python -m ihds.mlops.deploy` | Registers the deployment `ihds-mlops-pipeline/weekly-local` on the local server and stays running to fire its schedule (Mondays 06:00 America/Los_Angeles). See the Prefect section. |
 | One stage | `python -m ihds.mlops.<prepare\|validate\|train_tracked\|quality\|explain\|drift\|features>` | `validate` and `quality` exit 1 on failure. |
 
 ### DVC (data and pipeline versioning)
@@ -226,17 +227,71 @@ feast apply && feast materialize-incremental "$(date -u +%Y-%m-%dT%H:%M:%S)"
 
 ### Prefect (orchestration)
 
-`python -m ihds.mlops.flow` ran the flow `ihds-mlops-pipeline` on a temporary local Prefect API; no Prefect
-Cloud and no `PREFECT_API_URL` were needed.
+There are two ways to run the flow `ihds-mlops-pipeline`, and both use the same seven tasks.
 
-**Result:** all 7 tasks reached `Completed` (prepare, validate-gx, train-mlflow, evaluate-deepchecks,
-explain-shap-fairlearn, drift-evidently, feature-store-feast), and the flow state was **Completed**. It took
-37 s wall time, including the temporary server's start-up.
+**1. One-off run, no server to start:** `python -m ihds.mlops.flow`. With no `PREFECT_API_URL` set, Prefect starts a
+temporary local API for the run and stops it afterwards. This is the run recorded in `reports/flow_run.json`
+(MLflow run `b1085973ece0449c93940c9b9d94725c`): all 7 tasks (prepare, validate-gx, train-mlflow,
+evaluate-deepchecks, explain-shap-fairlearn, drift-evidently, feature-store-feast) reached `Completed`, and the
+flow state was **Completed**. It took 37 s wall time, including the temporary server's start-up. This is the
+earlier run, kept as history; its behaviour is unchanged.
 
-A test uses a throwaway Prefect API (`prefect_test_harness`) and checks two things:
+**2. Scheduled local deployment (added later):** `ihds/mlops/deploy.py` calls Prefect 3 `flow.serve()` through
+`flow.to_deployment()`.
 
-- the task order;
-- that a failing GX result stops the flow at `validate`, leaving it `Failed`.
+```bash
+# terminal 1: a local Prefect API + UI (http://127.0.0.1:4200)
+prefect server start
+# terminal 2: register the deployment and keep running so the schedule can fire
+export PREFECT_API_URL=http://127.0.0.1:4200/api
+python -m ihds.mlops.deploy               # add --run-now to also trigger one run right away
+# terminal 3 (optional): trigger a run by hand
+prefect deployment run 'ihds-mlops-pipeline/weekly-local'
+```
+
+`python -m ihds.mlops.deploy --dry-run` prints the deployment (name, cron, timezone, parameters, tags) and
+registers nothing. `--name`, `--cron`, `--timezone`, `--no-feast` and `--paused` override the defaults, which come
+from the `deploy:` section of `params.yaml`.
+
+| Setting | Value |
+|---|---|
+| Deployment | `ihds-mlops-pipeline/weekly-local` |
+| Schedule | cron `0 6 * * 1` (Mondays 06:00), timezone `America/Los_Angeles` |
+| Parameters | `with_feast: true` |
+| Tags | `ihds`, `mlops`, `local` |
+| Retries | every task: 2 retries, 10 s apart, on an unexpected error (for example a locked file) |
+| No retry | a `QualityGateError` (failed GX validation, critical Deepchecks failure) is never retried: the task and the flow fail at once and later tasks do not run |
+
+**What was run on the box (2026-11-27, Prefect 3.9.5, `prefect server start` on 127.0.0.1:4200):**
+
+- `python -m ihds.mlops.deploy --run-now` registered `ihds-mlops-pipeline/weekly-local`. The triggered run
+  `f4aa95d0-936f-40c3-88eb-929a4d51f717` ended **Completed**, 7/7 tasks `Completed`, 21.9 s of run time.
+- `prefect deployment run 'ihds-mlops-pipeline/weekly-local'` created run
+  `fe2ae45e-0868-4b2d-a121-33ff5abe9ae1`, picked up by the serve process: **Completed**, 7/7 tasks
+  `Completed`, 19.5 s.
+- The server listed three further `Scheduled` runs from the cron schedule, the first for Monday 2026-11-30
+  14:00 UTC (06:00 PST). Those scheduled runs were not waited for, so a scheduler-fired run has not been observed
+  here; the two runs above were triggered by hand. The processes were stopped after the demo.
+
+**Tests** (`tests/test_mlops.py`, skipped when Prefect is not installed):
+
+- the deployment object has the expected name, cron, timezone, parameters, tags and a module-path entrypoint, and
+  CLI overrides work (`--dry-run`);
+- every task has 2 retries and the gate-aware retry condition; the condition says retry for an `OSError`, not for a
+  `QualityGateError`;
+- on a throwaway API (`prefect_test_harness`), a stage that fails once is retried and the flow `Completed`, while a
+  failed GX validation ends `Failed` after prepare and validate only, with validate run once;
+- the deployment is registered on a throwaway API, a run is triggered with `run_deployment`, and the created flow
+  run is executed in the test process with fake stages and ends `Completed` in the task order. `flow.serve()` runs
+  each flow run in a subprocess, where test fakes do not exist, so the real subprocess path is covered only by the
+  manual run above.
+- the original test (task order, failed validation stops at `validate`) is unchanged.
+
+**Limits:** this is a local `serve()` deployment only. There is no Prefect Cloud, no work pool or worker, no Docker
+image, and nothing is deployed on Azure. The schedule fires only while `python -m ihds.mlops.deploy` and the
+Prefect server are both running (a laptop that is asleep or off misses the run). A schedule that runs the same
+pipeline weekly does not retrain on new data: the dataset is a static CSV. Nothing triggers a run from Evidently
+drift. DVC (`dvc repro`) still runs the same stages for reproducibility and caching.
 
 ## Prometheus and Grafana
 

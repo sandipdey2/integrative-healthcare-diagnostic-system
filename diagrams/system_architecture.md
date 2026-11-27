@@ -111,7 +111,8 @@ Outputs: `monitoring/reports/*_report.{html,json}`, `summary.json`, `agent_eval_
   2 escalations), because the reviewer scored against the cards only. Now it scores against the cards plus the
   case data at 0.4 (`reports/grounding_eval.json`: 15/15 first-try approvals per retriever, lowest 0.633).
   Invented drafts still score 0.14–0.32 and are rejected. Tests exercise the loop with an offline stand-in model.
-- Data pipeline scope: batch only (DVC stages, GX validation, Prefect flow, Feast file source). There is no
+- Data pipeline scope: batch only (DVC stages, GX validation, Prefect flow with a local `serve()` weekly schedule that runs only while
+  the serve process is up, Feast file source). There is no
   streaming ingestion and no lakehouse; one static 768-row CSV does not need them.
 - No EHR integration or user authentication. The audit log stores the eight model input features and run
   metadata for completed assessments (not the question or draft).

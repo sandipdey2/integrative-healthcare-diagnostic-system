@@ -6,6 +6,9 @@ prepare -> validate (Great Expectations) -> train (MLflow) -> evaluate (Deepchec
 -> drift (Evidently) -> feature store (Feast). A failed validation or a critical Deepchecks failure raises, so
 the flow ends in state Failed and later tasks do not run. No Prefect Cloud or server is needed: with no
 PREFECT_API_URL set, Prefect starts a temporary local API for the run. Writes reports/flow_run.json.
+
+Every task retries on an unexpected error (TASK_RETRIES times, TASK_RETRY_DELAY_SECONDS apart), but never on a
+QualityGateError: a failed gate fails fast. To run the flow on a schedule see ihds/mlops/deploy.py.
 """
 from __future__ import annotations
 
@@ -15,16 +18,35 @@ from . import drift, explain, features, prepare, quality, train_tracked, validat
 from .common import MLOPS_REPORTS, load_splits, write_json
 
 
+TASK_RETRIES = 2
+TASK_RETRY_DELAY_SECONDS = 10
+
+
 class QualityGateError(RuntimeError):
     pass
 
 
-@task(name="prepare")
+def retry_unless_gate_failure(task, task_run, state) -> bool:
+    """Retry condition: retry a failed task unless it failed a quality gate (that must fail fast)."""
+    try:
+        state.result()
+    except QualityGateError:
+        return False
+    except Exception:  # noqa: BLE001 - any other error may be transient (I/O, locked file, MLflow store)
+        return True
+    return False
+
+
+_retry = {"retries": TASK_RETRIES, "retry_delay_seconds": TASK_RETRY_DELAY_SECONDS,
+          "retry_condition_fn": retry_unless_gate_failure}
+
+
+@task(name="prepare", **_retry)
 def prepare_task() -> dict:
     return prepare.run()
 
 
-@task(name="validate-gx")
+@task(name="validate-gx", **_retry)
 def validate_task() -> dict:
     res = validate.run()
     if not res["success"]:
@@ -32,7 +54,7 @@ def validate_task() -> dict:
     return {k: res[k] for k in ("success", "evaluated", "passed", "failed")}
 
 
-@task(name="train-mlflow")
+@task(name="train-mlflow", **_retry)
 def train_task() -> dict:
     train, test = load_splits()
     res = train_tracked.run(train, test)
@@ -40,7 +62,7 @@ def train_task() -> dict:
     return res
 
 
-@task(name="evaluate-deepchecks")
+@task(name="evaluate-deepchecks", **_retry)
 def evaluate_task() -> dict:
     res = quality.run()
     if not res["passed"]:
@@ -48,7 +70,7 @@ def evaluate_task() -> dict:
     return {k: res[k] for k in ("passed", "critical_failures", "test_roc_auc")}
 
 
-@task(name="explain-shap-fairlearn")
+@task(name="explain-shap-fairlearn", **_retry)
 def explain_task() -> dict:
     res = explain.run()
     f = res["fairness"]
@@ -57,12 +79,12 @@ def explain_task() -> dict:
             "equalized_odds_difference": f["equalized_odds_difference"]}
 
 
-@task(name="drift-evidently")
+@task(name="drift-evidently", **_retry)
 def drift_task() -> dict:
     return drift.run()
 
 
-@task(name="feature-store-feast")
+@task(name="feature-store-feast", **_retry)
 def feast_task() -> dict:
     res = features.run([0])
     return {"patient_ids": res["patient_ids"], "matches_source_parquet": res["matches_source_parquet"],

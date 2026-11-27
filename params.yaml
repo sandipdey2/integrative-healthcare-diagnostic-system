@@ -1,4 +1,4 @@
-# Parameters for the DVC pipeline (dvc.yaml) and the Prefect flow (ihds/mlops/flow.py).
+# Parameters for the DVC pipeline (dvc.yaml), the Prefect flow (ihds/mlops/flow.py) and its local deployment (deploy:).
 # Changing a value here makes `dvc repro` re-run only the stages that read it.
 prepare:
   test_size: 0.2
@@ -38,3 +38,14 @@ explain:
   local_examples: 3
   age_bins: [21, 30, 45, 120]          # right-open bins -> 21-29, 30-44, 45+
   age_labels: ["21-29", "30-44", "45+"]
+
+deploy:
+  # Scheduled local Prefect deployment (ihds/mlops/deploy.py, `python -m ihds.mlops.deploy`). Not read by dvc.yaml.
+  name: weekly-local
+  cron: "0 6 * * 1"                     # Mondays 06:00
+  timezone: America/Los_Angeles
+  paused: false
+  parameters:
+    with_feast: true
+  tags: [ihds, mlops, local]
+  description: "IHDS MLOps pipeline (GX, MLflow, Deepchecks, SHAP/Fairlearn, Evidently, Feast), served locally."

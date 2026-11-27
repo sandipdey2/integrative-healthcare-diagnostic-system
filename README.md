@@ -90,7 +90,7 @@ runtime does not install or import them, apart from `prometheus-client`, which s
 | Fairlearn | `MetricFrame` by age band. The data has no sex or race column, so age is the only attribute available | Demographic parity diff 0.420, equalized odds diff 0.563; recall 0.44 for ages 21–29 |
 | Evidently | Drift stage reusing `ihds/monitoring.py` | Holdout: no drift; +25 mg/dL shift: Glucose flagged |
 | Feast | `feature_repo/` (file source, SQLite online store); `python -m ihds.mlops.features` applies, materializes and fetches | Patient 0's online features match the source; p = 0.826 |
-| Prefect | `python -m ihds.mlops.flow` chains all stages on a temporary local API (no Prefect Cloud) | Flow `Completed`, 7 / 7 tasks, 37 s |
+| Prefect | `python -m ihds.mlops.flow` chains all stages on a temporary local API (no Prefect Cloud). `python -m ihds.mlops.deploy` serves it as a local scheduled deployment (Mondays 06:00 PT, task retries but no retry on a failed quality gate); no work pool, Docker or Azure, and the schedule fires only while the serve process runs | One-off flow `Completed`, 7 / 7 tasks, 37 s; deployment run `Completed`, 7 / 7 tasks, 21.9 s |
 | Prometheus + Grafana | `GET /metrics`; `docker-compose.monitoring.yml` (bridge network, healthchecks, provisioned datasource and dashboard); the Streamlit Cloud app pushes the same `ihds_*` metrics straight to Grafana Cloud (`ihds/metrics_push.py`, remote write, no extra deps, off unless `[grafana]` secrets are set, [setup](docs/MLOPS.md#streamlit-community-cloud--grafana-cloud-direct-push)); optional Container Apps agent push | Unmodified compose on a bridge network: target up, 104 calls scraped, all panels with data. Streamlit push: real pushes to Grafana Cloud returned HTTP 200 (0 failures). The token is write-only, so the data was not read back from Grafana Cloud. Azure push not deployed |
 | GitHub Actions | `docs/ci.yml.example`: lint, tests, data validation with `dvc repro`, Docker build and smoke test, monitoring-stack check (Prometheus targets + Grafana health), optional manual deploy | **Active** as `.github/workflows/ci.yml` (first run passed: lint, test, data-validation, docker). The `monitoring-stack` job is in the example only until the workflow file is updated in the web UI ([steps](docs/MLOPS.md#github-actions-cicd--how-to-turn-it-on)) |
 
@@ -99,7 +99,7 @@ runtime does not install or import them, apart from `prometheus-client`, which s
 ```bash
 python3 -m venv .venv          # Python 3.11–3.14 && source .venv/bin/activate
 pip install -r requirements-dev.txt
-pytest -q                                   # 89 passed, 16 skipped without any keys (live LLM/LangSmith/Grafana/Postgres tests and MLOps tools skip)
+pytest -q                                   # 89 passed, 21 skipped without any keys (live LLM/LangSmith/Grafana/Postgres tests and MLOps tools skip)
 python -m ihds.pipeline                     # evaluation + Evidently reports
 streamlit run app.py --server.headless true # http://localhost:8501 (embedded REST API on 127.0.0.1, tools via MCP stdio)
 ```
@@ -167,7 +167,7 @@ Streamlit Community Cloud serves the `main` branch. LLM drafts vary from run to 
 | `ihds/` | `agents.py` (LangGraph), `tools.py` (the five tool functions), `tool_backends.py` (MCP client / fallback), `workflow.py` (guard/RAG/reviewer blocks), `vector_store.py` (ChromaDB), `tracing.py` (LangSmith), `embedded_api.py` (FastAPI inside Streamlit), `metrics_push.py` (Grafana Cloud remote write), `audit_log.py` (Postgres/SQLite assessment log), `model.py`, `gan.py`, `stats_analysis.py`, `data.py`, `monitoring.py`, `pipeline.py` |
 | `data/` | Pima CSV, clinical knowledge base, data card |
 | `notebooks/integrated_diagnostic_system.ipynb` | Executed walkthrough of the same code |
-| `tests/` | 105 pytest tests: the original 56 (units, every agent node, routing, loop cap, Evidently, end-to-end, Streamlit AppTest, real MCP server over stdio and HTTP, FastAPI, 4 live `vocareum`) plus retrieval, tracing, metrics push/agent, embedded API, audit log, grounding and `test_mlops.py`. Without keys: 89 passed, 16 skipped |
+| `tests/` | 110 pytest tests: the original 56 (units, every agent node, routing, loop cap, Evidently, end-to-end, Streamlit AppTest, real MCP server over stdio and HTTP, FastAPI, 4 live `vocareum`) plus retrieval, tracing, metrics push/agent, embedded API, audit log, grounding and `test_mlops.py`. Without keys: 89 passed, 21 skipped (5 of the skips are the Prefect deployment tests added later; the tests/test_mlops.py file has 15 tests, all passing in the MLOps venv) |
 | `agentic_system.ipynb` | Live run of the multi-agent graph (low / borderline / high risk, refusal, revision loop) with traces |
 | `scripts/` | `export_graph.py` (diagrams from code), `start_all.sh` (MCP + API + UI), `run_llm_eval.py` (live LLM vs template, Evidently), `eval_grounding.py` (reviewer grounding batch), `compare_retrieval.py` (Chroma vs keyword) |
 | `monitoring/reports/` | Evidently HTML/JSON reports |

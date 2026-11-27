@@ -247,3 +247,162 @@ def test_prefect_flow_completes_and_stops_on_failed_validation(monkeypatch):
     assert calls_ok == ["prepare", "validate", "train", "evaluate", "explain", "drift", "feast"]
     assert bad.is_failed() and calls == ["prepare", "validate"]
 
+
+
+# ------------------------------------------------------------------ Prefect deployment (schedule + retries)
+def _fake_stages(monkeypatch, calls):
+    """Replace every stage with a fake that records its name (same fakes as the flow test above)."""
+    from ihds.mlops import drift, explain, features, flow, prepare, quality, train_tracked, validate
+
+    monkeypatch.setattr(prepare, "run", lambda: calls.append("prepare") or {"rows": 768})
+    monkeypatch.setattr(validate, "run", lambda: calls.append("validate") or
+                        {"success": True, "evaluated": 30, "passed": 30, "failed": 0, "failures": []})
+    monkeypatch.setattr(flow, "load_splits", lambda: (None, None))
+    monkeypatch.setattr(train_tracked, "run", lambda tr, te: calls.append("train") or
+                        {"mlflow_run_id": "x", "test_roc_auc": 0.8, "pipe": object()})
+    monkeypatch.setattr(quality, "run", lambda: calls.append("evaluate") or
+                        {"passed": True, "critical_failures": [], "test_roc_auc": 0.8})
+    monkeypatch.setattr(explain, "run", lambda: calls.append("explain") or {
+        "shap": {"global": [{"feature": "Glucose"}]},
+        "fairness": {"demographic_parity_difference": 0.1, "equalized_odds_difference": 0.2}})
+    monkeypatch.setattr(drift, "run", lambda: calls.append("drift") or {})
+    monkeypatch.setattr(features, "run", lambda ids: calls.append("feast") or
+                        {"patient_ids": ids, "matches_source_parquet": True})
+
+
+def _no_retry_wait(monkeypatch):
+    """Keep the retry count and condition, but do not wait 10 s between attempts in a test."""
+    from ihds.mlops import flow
+
+    for name in ("prepare_task", "validate_task", "train_task", "evaluate_task", "explain_task", "drift_task",
+                 "feast_task"):
+        monkeypatch.setattr(flow, name, getattr(flow, name).with_options(retry_delay_seconds=0))
+
+
+@needs["prefect"]
+def test_deployment_object_has_name_schedule_parameters_and_tags():
+    from prefect.flows import EntrypointType
+
+    from ihds.mlops import deploy
+    from ihds.mlops.common import load_params
+
+    cfg = load_params("deploy")
+    dep = deploy.build_deployment()
+    info = deploy.describe(dep)
+    assert info["deployment"] == "ihds-mlops-pipeline/" + cfg["name"] == "ihds-mlops-pipeline/weekly-local"
+    assert (info["cron"], info["timezone"]) == ("0 6 * * 1", "America/Los_Angeles")
+    assert info["parameters"] == {"with_feast": True}
+    assert set(info["tags"]) == {"ihds", "mlops", "local"}
+    assert info["paused"] is False
+    assert dep.entrypoint_type == EntrypointType.MODULE_PATH  # flow.py uses relative imports
+    # explicit arguments override params.yaml
+    other = deploy.describe(deploy.build_deployment("nightly", "30 2 * * *", "UTC", {"with_feast": False}, ["x"], True))
+    assert other == {"deployment": "ihds-mlops-pipeline/nightly", "cron": "30 2 * * *", "timezone": "UTC",
+                     "parameters": {"with_feast": False}, "tags": ["x"], "paused": True}
+
+
+@needs["prefect"]
+def test_deploy_cli_dry_run_prints_the_deployment_and_registers_nothing():
+    import contextlib
+    import io
+    import json
+
+    from ihds.mlops import deploy
+
+    buf = io.StringIO()  # not capsys: it swaps stderr, which breaks Prefect's console log handler in later tests
+    with contextlib.redirect_stdout(buf):
+        assert deploy.main(["--dry-run", "--cron", "0 7 * * 2", "--no-feast", "--paused"]) == 0
+    out = json.loads(buf.getvalue())
+    assert out["cron"] == "0 7 * * 2" and out["parameters"] == {"with_feast": False} and out["paused"] is True
+
+
+@needs["prefect"]
+def test_every_task_retries_but_not_on_a_quality_gate_failure():
+    from ihds.mlops import flow
+
+    tasks = (flow.prepare_task, flow.validate_task, flow.train_task, flow.evaluate_task, flow.explain_task,
+             flow.drift_task, flow.feast_task)
+    assert all(t.retries == flow.TASK_RETRIES == 2 for t in tasks)
+    assert all(t.retry_condition_fn is flow.retry_unless_gate_failure for t in tasks)
+
+    class Failed:
+        def __init__(self, exc):
+            self.exc = exc
+
+        def result(self):
+            raise self.exc
+
+    class Ok:
+        def result(self):
+            return {}
+
+    assert flow.retry_unless_gate_failure(None, None, Failed(OSError("locked"))) is True
+    assert flow.retry_unless_gate_failure(None, None, Failed(flow.QualityGateError("x"))) is False
+    assert flow.retry_unless_gate_failure(None, None, Ok()) is False
+
+
+@needs["prefect"]
+def test_flaky_stage_is_retried_but_failed_validation_fails_fast(monkeypatch):
+    from prefect.testing.utilities import prefect_test_harness
+
+    from ihds.mlops import flow, prepare, validate
+
+    calls = []
+    _fake_stages(monkeypatch, calls)
+    _no_retry_wait(monkeypatch)
+    attempts = {"n": 0}
+
+    def flaky_prepare():
+        calls.append("prepare")
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise OSError("transient")
+        return {"rows": 768}
+
+    monkeypatch.setattr(prepare, "run", flaky_prepare)
+    with prefect_test_harness():
+        ok = flow.ihds_mlops_pipeline(return_state=True)
+        calls_ok = list(calls)
+        calls.clear()
+        monkeypatch.setattr(prepare, "run", lambda: calls.append("prepare") or {"rows": 768})
+        monkeypatch.setattr(validate, "run", lambda: calls.append("validate") or
+                            {"success": False, "evaluated": 30, "passed": 29, "failed": 1, "failures": [{"x": 1}]})
+        bad = flow.ihds_mlops_pipeline(return_state=True)
+    assert ok.is_completed() and calls_ok[:3] == ["prepare", "prepare", "validate"]  # prepare retried once
+    assert bad.is_failed() and calls == ["prepare", "validate"]  # gate failure: validate ran once, nothing after it
+
+
+@needs["prefect"]
+def test_deployment_registers_and_a_triggered_run_completes(monkeypatch):
+    """Register the deployment on a throwaway API, trigger it, and execute the created run in this process.
+
+    `flow.serve()` itself runs each flow run in a subprocess, where the monkeypatched fake stages would not
+    exist, so the run is executed in-process with the flow engine. That is the same code path (deployment ->
+    flow run -> flow function); the real subprocess path was checked by hand (docs/MLOPS.md)."""
+    import asyncio
+
+    from prefect import get_client
+    from prefect.deployments import run_deployment
+    from prefect.flow_engine import run_flow
+    from prefect.testing.utilities import prefect_test_harness
+
+    from ihds.mlops import deploy, flow
+
+    calls = []
+    _fake_stages(monkeypatch, calls)
+    with prefect_test_harness():
+        dep = deploy.build_deployment()
+        dep_id = dep.apply()
+        fr = run_deployment("ihds-mlops-pipeline/weekly-local", timeout=0)
+
+        async def read():
+            async with get_client() as c:
+                return await c.read_deployment(dep_id)
+
+        stored = asyncio.run(read())
+        assert fr.deployment_id == stored.id and fr.parameters == {"with_feast": True}
+        state = run_flow(flow.ihds_mlops_pipeline, flow_run=fr, parameters=fr.parameters, return_type="state")
+    assert stored.name == "weekly-local" and set(stored.tags) == {"ihds", "mlops", "local"}
+    assert [(s.schedule.cron, s.schedule.timezone) for s in stored.schedules] == [("0 6 * * 1", "America/Los_Angeles")]
+    assert state.is_completed()
+    assert calls == ["prepare", "validate", "train", "evaluate", "explain", "drift", "feast"]

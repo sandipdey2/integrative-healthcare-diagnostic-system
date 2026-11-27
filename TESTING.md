@@ -148,6 +148,8 @@ Full commands and results are in [`docs/MLOPS.md`](docs/MLOPS.md).
 |---|---|---|
 | Runtime (`requirements.txt` + dev deps, now with chromadb/onnxruntime/langsmith/sqlalchemy/psycopg) | `pytest -q -rs` | After the grounding/tracing change: **80 passed, 15 skipped** with no LangSmith or OpenAI key; **86 passed, 9 skipped** with both keys (skips: MLOps tools not installed, promtool, live Grafana). The audit log adds **7 SQLite tests** in `tests/test_audit_log.py` plus 1 live Postgres test skipped unless `DATABASE_URL` is set (and skipped if this host cannot reach Postgres). Measured on this box after the rebase: **88 passed, 15 skipped** without running the live Vocareum, live Postgres, or live LangSmith+LLM tests (10 other skips + 4 vocareum + 1 postgres). After the hot-reload, LangSmith-fallback and audit-count changes, with no LangSmith, OpenAI or Postgres settings at all: **89 passed, 16 skipped** (the one extra skip is the live LangSmith tracing test). The original 56 tests all still pass. Run with the new test files ignored (`test_metrics_agent.py`, `test_metrics_push.py`, `test_retrieval.py`, `test_tracing.py`, `test_embedded_api.py`, `test_audit_log.py`), the subset gives 57 passed, 11 skipped: the 56 plus the new grounding test in `test_workflow.py`. `test_e2e.py`'s AppTest goes through the embedded API. Since the grounding/tracing change: 1 grounding test in `test_workflow.py`, 4 tracing tests in `test_tracing.py` (1 of them live) and 1 LangSmith-link test in `test_embedded_api.py`. |
 | Runtime, final readiness pass (2026-11-25, HEAD c20199d) | `pytest -q -rs` | **89 passed, 16 skipped** with no keys and no `DATABASE_URL`; **95 passed, 10 skipped** with the Vocareum and LangSmith keys (skips: 7 MLOps tools not installed, promtool, live Grafana, live Postgres) |
+| App venv, after the Prefect deployment (2026-11-27) | `pytest -q -rs` | **89 passed, 21 skipped** with no keys (the 5 new Prefect deployment tests skip because Prefect is not in this venv) |
+| MLOps venv, after the Prefect deployment (2026-11-27) | `.venv-mlops/bin/python -m pytest tests/test_mlops.py -q` | **15 passed** (10 before; 5 new Prefect deployment/retry tests). The whole `tests/` folder is not collected in that venv (no langchain) |
 | MLOps (`requirements-mlops.txt`, separate venv) | `pytest -q tests/test_mlops.py tests/test_metrics_agent.py tests/test_metrics_push.py` | **17 passed, 2 skipped** (promtool not on PATH; live Grafana test without creds) |
 | MLOps | `pip install -r requirements-mlops.txt` in a fresh venv, then `pip check` | installs with pip; "No broken requirements found" |
 | Both | `ruff check .` (`ruff.toml`: E, F, W; E501/E702 ignored) | All checks passed. Fixing it removed 9 unused imports and invalid escapes from existing files; there were no behaviour changes |
@@ -169,7 +171,7 @@ What `tests/test_mlops.py` checks:
 - **SHAP:** Glucose ranks first, and base + ΣSHAP = log-odds.
 - **Fairlearn:** the group counts sum to n, and DP diff = max − min selection rate.
 - **Feast:** apply, materialize and online fetch in a temp repo; raw 0 Insulin comes back as missing.
-- **Prefect:** the flow completes in task order, and a failed GX result stops it at `validate` (`Failed`).
+- **Prefect:** the flow completes in task order, and a failed GX result stops it at `validate` (`Failed`). Deployment tests: the deployment object (name, cron `0 6 * * 1`, timezone, parameters, tags), task retries that skip `QualityGateError` (a flaky stage is retried; a failed validation runs once and fails fast), and a deployment registered on a throwaway API whose triggered run completes in-process with fake stages. The real `serve()` subprocess path is checked by hand only.
 
 What `tests/test_retrieval.py` checks:
 
@@ -250,6 +252,7 @@ End-to-end runs on the box:
 |---|---|---|
 | DVC | `dvc repro -f`, `dvc status`, `dvc push` (local folder remote) | 7/7 stages ran; "Data and pipelines are up to date"; cached outputs pushed |
 | Prefect | `python -m ihds.mlops.flow` | flow `Completed`, 7/7 tasks `Completed`, 37 s |
+| Prefect deployment (local `serve()`, 2026-11-27) | `prefect server start`; `python -m ihds.mlops.deploy --run-now`; `prefect deployment run 'ihds-mlops-pipeline/weekly-local'` | run `f4aa95d0-936f-40c3-88eb-929a4d51f717` `Completed` 7/7, 21.9 s; run `fe2ae45e-0868-4b2d-a121-33ff5abe9ae1` `Completed` 7/7, 19.5 s. Scheduled runs were created (next: 2026-11-30 14:00 UTC) but not waited for |
 | MLflow | DVC train stage | run `8b95d9818eae4b4d94177879cdde1f3c`: ROC-AUC 0.8126, CV 0.8444 ± 0.0161 |
 | GX | validate stage | 30/30 passed |
 | Deepchecks | evaluate stage | gate passed, 0 critical failures (non-critical: Feature Label Correlation Change, Simple Model Comparison) |
